@@ -23,34 +23,32 @@ packager/
 └── output/          # 输出目录（自动创建）
     ├── package.md   # 生成的 Markdown 文件
     ├── package.html # 生成的 HTML 文件
-    └── package.png  # 生成的截图（需要安装 Playwright 浏览器）
+    └── screenshots/ # 截图目录
+        ├── package.png    # 完整截图（页面较短时）
+        └── segments/      # 分段截图目录（页面较长时）
+            ├── segment_0.png
+            ├── segment_1.png
+            └── segments.txt  # 分段信息文件
 ```
 
 ## 3. 核心功能详解
 
-### 3.1 文件收集和过滤
+### 3.1 文件收集和目录树生成
 
-`main.py` 中的 `collect_files` 函数负责收集目录下的所有文件，并过滤掉不需要的目录和文件：
+`collect_files_and_generate_tree` 函数负责收集目录下的所有文件，并生成目录树结构：
 
-- **排除目录**：`venv`, `.venv`, `__pycache__`, `.git`, `.idea`, `node_modules` 等
+- **排除目录**：`venv`, `.venv`, `__pycache__`, `.git`, `.idea`, `node_modules`, `packager` 等
 - **排除文件**：`.DS_Store`, `Thumbs.db`, `.gitignore`, `.env` 等
 - **排序**：按相对路径排序，确保输出顺序一致
+- **目录树**：生成带图标的目录树结构，根据文件类型显示不同的图标
 
-### 3.2 目录树生成
-
-`generate_directory_tree` 函数生成带图标的目录树结构：
-
-- **图标**：根据文件类型显示不同的图标（如 🐍 代表 Python 文件，📝 代表 Markdown 文件）
-- **缩进**：根据目录层级显示不同的缩进
-- **排序**：文件按名称排序，确保输出美观
-
-### 3.3 目录文件数统计
+### 3.2 目录文件数统计
 
 `count_files_by_directory` 函数统计各目录下的文件数量：
 - 按目录路径分组
 - 生成表格形式的统计结果
 
-### 3.4 Markdown 生成
+### 3.3 Markdown 生成
 
 `generate_markdown` 函数生成完整的 Markdown 内容，包括：
 
@@ -61,8 +59,9 @@ packager/
    - 文件路径
    - 文件内容（使用代码块，自动识别语言）
    - 错误处理（无法读取的文件显示错误信息）
+   - 大文件处理：超过 10MB 的文件会显示警告信息
 
-### 3.5 HTML 转换
+### 3.4 HTML 转换
 
 `convert_to_html` 函数将 Markdown 转换为带样式的 HTML：
 
@@ -71,14 +70,33 @@ packager/
 - 添加响应式样式，适配不同屏幕尺寸
 - 美观的界面设计，包括标题、代码、表格样式
 
-### 3.6 截图生成
+### 3.5 智能分段截图
 
-`generate_screenshot` 函数使用 Playwright 生成 HTML 页面的完整截图：
+`generate_screenshot` 函数使用 Playwright 生成 HTML 页面的截图，支持智能分段：
 
-- 启动无头 Chrome 浏览器
-- 加载 HTML 内容
-- 等待页面加载完成
-- 截取整个页面
+- **短页面**：直接截取整个页面
+- **长页面**：自动分段截图，避免内存不足问题
+- **分段逻辑**：
+  1. 检测页面高度
+  2. 超过 3 个视口高度时自动分段
+  3. 滚动页面到指定位置
+  4. 截取当前视口
+  5. 保存分段截图到 `screenshots/segments/` 目录
+
+### 3.6 执行流程
+
+```mermaid
+graph TD
+    Start["开始"] --> Collect["收集文件和生成目录树"]
+    Collect --> GenerateMD["生成 Markdown 文件"]
+    GenerateMD --> ConvertHTML["转换为 HTML 文件"]
+    ConvertHTML --> Screenshot["生成截图"]
+    Screenshot --> CheckLength{"页面长度?"}
+    CheckLength -->|短页面| FullScreenshot["完整截图"]
+    CheckLength -->|长页面| SegmentScreenshot["分段截图"]
+    FullScreenshot --> End["结束"]
+    SegmentScreenshot --> End
+```
 
 ## 4. 一键执行脚本
 
@@ -86,9 +104,10 @@ packager/
 
 1. **自动创建虚拟环境**：如果 `.venv` 目录不存在，自动创建
 2. **激活虚拟环境**：确保在虚拟环境中执行命令
-3. **安装依赖**：自动安装 `requirements.txt` 中的依赖
-4. **执行打包**：调用 `main.py` 执行打包功能
-5. **默认配置**：默认打包 soulmark 项目根目录，输出到 `output` 目录
+3. **安装依赖**：自动安装 `requirements.txt` 中的依赖，使用清华镜像源加速
+4. **安装 Playwright 浏览器**：自动安装 Chromium 浏览器，用于截图功能
+5. **执行打包**：调用 `main.py` 执行打包功能
+6. **默认配置**：默认打包 soulmark 项目根目录，输出到 `output` 目录
 
 ## 5. 使用方法
 
@@ -115,18 +134,9 @@ cd packager
 ./run.sh -h
 ```
 
-### 5.3 安装 Playwright 浏览器（用于截图）
+### 5.3 自动浏览器安装
 
-```bash
-# 进入 packager 目录
-cd packager
-
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 安装 Playwright 浏览器
-playwright install chromium
-```
+`run.sh` 脚本会自动安装 Playwright 浏览器，无需手动操作。如果浏览器安装失败，脚本会继续执行，但截图功能会被跳过。
 
 ## 6. 技术实现细节
 
@@ -146,12 +156,11 @@ playwright install chromium
 
 | 函数名 | 功能 | 参数 | 返回值 |
 |-------|------|------|-------|
-| `collect_files` | 收集目录下的所有文件 | `input_dir` (输入目录路径) | `list` (文件列表) |
-| `generate_directory_tree` | 生成目录树结构 | `input_dir` (输入目录路径) | `str` (目录树字符串) |
+| `collect_files_and_generate_tree` | 收集文件并生成目录树 | `input_dir` (输入目录路径) | `tuple` (文件列表, 目录树行, 目录文件数) |
 | `count_files_by_directory` | 统计各目录下的文件数 | `files` (文件列表), `input_dir` (输入目录路径) | `dict` (目录到文件数的映射) |
-| `generate_markdown` | 生成 Markdown 内容 | `files` (文件列表), `input_dir` (输入目录路径) | `str` (Markdown 内容) |
+| `generate_markdown` | 生成 Markdown 内容 | `files` (文件列表), `input_dir` (输入目录路径), `tree_lines` (目录树行), `dir_counts` (目录文件数) | `str` (Markdown 内容) |
 | `convert_to_html` | 转换 Markdown 为 HTML | `md_content` (Markdown 内容) | `str` (HTML 内容) |
-| `generate_screenshot` | 生成 HTML 截图 | `html_content` (HTML 内容), `output_path` (输出路径) | `bool` (是否成功) |
+| `generate_screenshot` | 生成 HTML 截图（支持分段） | `html_content` (HTML 内容), `output_path` (输出路径) | `bool` (是否成功) |
 
 ### 6.3 依赖说明
 
@@ -227,10 +236,12 @@ playwright install chromium
 
 ## 8. 注意事项
 
-1. **截图功能**：需要安装 Playwright 浏览器，否则会跳过截图步骤
-2. **性能考虑**：对于大型项目，生成的文件可能会比较大，建议只打包必要的文件
-3. **编码问题**：默认使用 UTF-8 编码读取文件，对于其他编码的文件可能会有问题
-4. **权限问题**：确保对输入目录有读取权限，对输出目录有写入权限
+1. **截图功能**：`run.sh` 脚本会自动安装 Playwright 浏览器，否则会跳过截图步骤
+2. **分段截图**：对于长页面，会自动进行分段截图，保存到 `screenshots/segments/` 目录
+3. **性能考虑**：对于大型项目，生成的文件可能会比较大，建议只打包必要的文件
+4. **编码问题**：默认使用 UTF-8 编码读取文件，对于其他编码的文件可能会有问题
+5. **权限问题**：确保对输入目录有读取权限，对输出目录有写入权限
+6. **网络问题**：浏览器安装需要网络连接，如果网络不稳定可能会导致安装失败
 
 ## 9. 扩展建议
 
