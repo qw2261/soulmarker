@@ -11,6 +11,8 @@
 soulmark/
 ├── claude_code/          # Claude Code 研究笔记
 │   └── claude_code_research.md  # Claude Code 源码深度分析
+├── event_go/             # 亦闻活动管理平台（想法阶段）
+│   └── README.md         # 项目想法说明
 ├── packager/             # 项目打包工具
 │   ├── main.py           # 主脚本
 │   ├── run.sh           # 一键执行脚本
@@ -38,6 +40,12 @@ soulmark/
   - 智能分段截图，处理长页面
   - 自动安装依赖和浏览器
   - 美观的输出格式
+
+### 3. 亦闻 event-go 活动管理平台
+- **目录**：`event_go/`
+- **阶段**：想法阶段，正在规划核心流程
+- **思路**：把每个活动想象成一个"线上门店"，跑通创建 → 展示 → 报名的基础闭环
+- **文档**：[项目想法说明](event_go/README.md)
 
 ## 学习计划
 

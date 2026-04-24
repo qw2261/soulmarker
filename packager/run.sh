@@ -34,26 +34,33 @@ VENV_DIR=".venv"
 
 INPUT_DIR=""
 OUTPUT_DIR=""
+SCREENSHOT_MODE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -i|--input)
             INPUT_DIR="$2"
-            shift  # 跳过参数值
-            shift  # 跳过参数名
+            shift
+            shift
             ;;
         -o|--output)
             OUTPUT_DIR="$2"
-            shift  # 跳过参数值
-            shift  # 跳过参数名
+            shift
+            shift
+            ;;
+        -m|--screenshot-mode)
+            SCREENSHOT_MODE="$2"
+            shift
+            shift
             ;;
         -h|--help)
             echo "使用方法: ./run.sh [选项]"
             echo ""
             echo "选项:"
-            echo "  -i, --input <目录>   输入目录路径（默认为 soulmark 项目根目录）"
-            echo "  -o, --output <目录>  输出目录路径（默认为 output）"
-            echo "  -h, --help           显示帮助信息"
+            echo "  -i, --input <目录>          输入目录路径"
+            echo "  -o, --output <目录>         输出目录路径"
+            echo "  -m, --screenshot-mode <模式> 截图模式: auto(默认), full, segment, both"
+            echo "  -h, --help                  显示帮助信息"
             exit 0
             ;;
         *)
@@ -63,12 +70,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 如果没有指定输入目录，使用默认值
 if [ -z "$INPUT_DIR" ]; then
     INPUT_DIR="$DEFAULT_INPUT_DIR"
 fi
 
-# 如果没有指定输出目录，使用默认值
 if [ -z "$OUTPUT_DIR" ]; then
     OUTPUT_DIR="$DEFAULT_OUTPUT_DIR"
 fi
@@ -83,7 +88,7 @@ echo "============================================================"
 echo ""
 
 # 步骤 1: 检查虚拟环境是否存在
-echo "🔍 步骤 1/4: 检查虚拟环境..."
+echo "🔍 步骤 1/5: 检查虚拟环境..."
 if [ -d "$VENV_DIR" ]; then
     echo "   ✅ 虚拟环境已存在: $VENV_DIR"
 else
@@ -99,7 +104,7 @@ fi
 
 # 步骤 2: 激活虚拟环境
 echo ""
-echo "🔌 步骤 2/4: 激活虚拟环境..."
+echo "🔌 步骤 2/5: 激活虚拟环境..."
 source "$VENV_DIR/bin/activate"
 if [ $? -eq 0 ]; then
     echo "   ✅ 虚拟环境已激活"
@@ -110,7 +115,7 @@ fi
 
 # 步骤 3: 安装依赖
 echo ""
-echo "📥 步骤 3/4: 安装依赖..."
+echo "📥 步骤 3/5: 安装依赖..."
 pip install -q -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 if [ $? -eq 0 ]; then
     echo "   ✅ 依赖安装成功"
@@ -134,9 +139,15 @@ echo ""
 echo "🚀 步骤 5/5: 执行打包脚本..."
 echo "   📂 输入目录: $INPUT_DIR"
 echo "   📂 输出目录: $OUTPUT_DIR"
+
+SCREENSHOT_ARGS=""
+if [ -n "$SCREENSHOT_MODE" ]; then
+    SCREENSHOT_ARGS="--screenshot-mode $SCREENSHOT_MODE"
+    echo "   📸 截图模式: $SCREENSHOT_MODE"
+fi
 echo ""
 
-python main.py --input "$INPUT_DIR" --output "$OUTPUT_DIR"
+python main.py --input "$INPUT_DIR" --output "$OUTPUT_DIR" $SCREENSHOT_ARGS
 
 # 检查执行结果
 if [ $? -eq 0 ]; then

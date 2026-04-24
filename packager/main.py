@@ -194,24 +194,6 @@ def generate_directory_tree(tree_lines: list) -> str:
     return '\n'.join(tree_lines)
 
 
-def count_files_by_directory(dir_counts: dict) -> dict:
-    """
-    返回目录文件数统计
-    
-    Args:
-        dir_counts: 目录路径到文件数量的映射
-        
-    Returns:
-        dict: 目录路径到文件数量的映射
-    """
-    return dir_counts
-
-
-# ============================================================================
-# 目录统计功能
-# ============================================================================
-
-
 # ============================================================================
 # Markdown 生成功能
 # ============================================================================
@@ -522,88 +504,117 @@ def convert_to_html(md_content: str) -> str:
 # 截图生成功能
 # ============================================================================
 
-def generate_screenshot(html_content: str, output_path: str) -> bool:
+def screenshot_full_page(page, output_path: str):
+    """
+    截取完整页面（长截图）
+    
+    Args:
+        page: Playwright 页面对象
+        output_path: 输出图片路径
+    """
+    page.screenshot(path=output_path, full_page=True)
+    print(f"   ✅ 完整截图已保存: {output_path}")
+
+
+def screenshot_segments(page, output_path: str) -> str:
+    """
+    分段截图，每段一个视口高度
+    
+    Args:
+        page: Playwright 页面对象
+        output_path: 输出图片路径（用于推导 segments 目录）
+        
+    Returns:
+        str: 分段截图目录路径
+    """
+    total_height = page.evaluate('() => document.body.scrollHeight')
+    viewport_height = page.viewport_size['height'] if page.viewport_size else 1080
+
+    print(f"   ℹ️ 页面长度 {total_height}px，开始分段截图...")
+
+    base_dir = os.path.dirname(output_path)
+    segment_dir = os.path.join(base_dir, 'segments')
+    os.makedirs(segment_dir, exist_ok=True)
+
+    segments = []
+    current_position = 0
+    segment_index = 0
+
+    while current_position < total_height:
+        page.evaluate(f'window.scrollTo(0, {current_position})')
+        page.wait_for_timeout(500)
+
+        segment_path = os.path.join(segment_dir, f'segment_{segment_index}.png')
+        page.screenshot(path=segment_path)
+        segments.append(segment_path)
+
+        current_position += viewport_height
+        segment_index += 1
+
+    segments_info = os.path.join(segment_dir, 'segments.txt')
+    with open(segments_info, 'w') as f:
+        f.write('\n'.join(segments))
+
+    print(f"   ✅ 分段截图完成，共 {len(segments)} 段")
+    print(f"   📁 分段截图保存在: {segment_dir}")
+
+    return segment_dir
+
+
+def generate_screenshot(html_content: str, output_path: str, mode: str = 'auto') -> list:
     """
     使用 Playwright 生成 HTML 页面的截图
-    支持分段截图，处理长页面
     
     Args:
         html_content: HTML 内容
         output_path: 输出图片路径
+        mode: 截图模式
+            - 'auto':   页面 ≤3 视口高则截长图，否则分段
+            - 'full':   强制截取完整长截图
+            - 'segment': 强制分段截图
+            - 'both':   同时生成长截图和分段截图
         
     Returns:
-        bool: 是否成功生成截图
+        list: 生成的截图路径列表
     """
+    result_paths = []
     try:
         with sync_playwright() as p:
-            # 启动浏览器
             browser = p.chromium.launch(headless=True)
-            
-            # 创建新页面
             page = browser.new_page()
-            
-            # 设置页面内容
             page.set_content(html_content)
-            
-            # 等待页面加载完成
             page.wait_for_load_state('networkidle')
-            
-            # 获取页面总高度
+
             total_height = page.evaluate('() => document.body.scrollHeight')
             viewport_height = page.viewport_size['height'] if page.viewport_size else 1080
-            
-            # 判断是否需要分段截图
-            if total_height > viewport_height * 3:  # 超过3个视口高度则分段
-                print(f"   ℹ️ 页面较长 ({total_height}px)，开始分段截图...")
-                
-                # 创建分段截图目录
-                base_dir = os.path.dirname(output_path)
-                segment_dir = os.path.join(base_dir, 'segments')
-                os.makedirs(segment_dir, exist_ok=True)
-                
-                # 分段截图
-                segments = []
-                current_position = 0
-                segment_index = 0
-                
-                while current_position < total_height:
-                    # 滚动到指定位置
-                    page.evaluate(f'window.scrollTo(0, {current_position})')
-                    
-                    # 等待滚动完成
-                    page.wait_for_timeout(500)
-                    
-                    # 截取当前视口
-                    segment_path = os.path.join(segment_dir, f'segment_{segment_index}.png')
-                    page.screenshot(path=segment_path)
-                    segments.append(segment_path)
-                    
-                    # 移动到下一段
-                    current_position += viewport_height
-                    segment_index += 1
-                
-                # 保存分段信息
-                segments_info = os.path.join(segment_dir, 'segments.txt')
-                with open(segments_info, 'w') as f:
-                    f.write('\n'.join(segments))
-                
-                print(f"   ✅ 分段截图完成，共 {len(segments)} 段")
-                print(f"   📁 分段截图保存在: {segment_dir}")
-                
-            else:
-                # 页面较短，直接截取整个页面
-                page.screenshot(path=output_path, full_page=True)
-                print(f"   ✅ 完整截图已保存: {output_path}")
-            
-            # 关闭浏览器
+            is_long = total_height > viewport_height * 3
+
+            if mode == 'auto':
+                if is_long:
+                    screenshot_segments(page, output_path)
+                else:
+                    screenshot_full_page(page, output_path)
+
+            elif mode == 'full':
+                screenshot_full_page(page, output_path)
+                result_paths.append(output_path)
+
+            elif mode == 'segment':
+                screenshot_segments(page, output_path)
+
+            elif mode == 'both':
+                screenshot_full_page(page, output_path)
+                result_paths.append(output_path)
+                screenshot_segments(page, output_path)
+
             browser.close()
-            
-        return True
-    
+
+        return result_paths
+
     except Exception as e:
         print(f"⚠️ 生成截图失败: {str(e)}")
         print("   提示: 请确保已安装 Playwright 浏览器，运行: playwright install chromium")
-        return False
+        return result_paths
 
 
 # ============================================================================
@@ -620,9 +631,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-    python main.py                              # 打包当前目录，输出到 output
-    python main.py -i ../myproject              # 打包 ../myproject 目录
-    python main.py -i ../myproject -o results   # 打包并输出到 results 目录
+    python main.py                                          # 打包当前目录
+    python main.py -i ../myproject                          # 打包指定目录
+    python main.py -i ../myproject -o results               # 指定输出目录
+    python main.py -m both                                  # 同时生成完整截图和分段截图
+    python main.py -m full                                  # 只生成完整长截图
+    python main.py -m segment                               # 只生成分段截图
         """
     )
     
@@ -636,6 +650,13 @@ def main():
         '--output', '-o',
         default='output',
         help='输出目录路径（默认为 output）'
+    )
+    
+    parser.add_argument(
+        '--screenshot-mode', '-m',
+        default='auto',
+        choices=['auto', 'full', 'segment', 'both'],
+        help='截图模式: auto=自动选择(默认), full=完整长图, segment=分段截图, both=同时生成'
     )
     
     args = parser.parse_args()
@@ -685,20 +706,14 @@ def main():
     print(f"   ✅ HTML 文件已保存: {html_path}")
     
     # 步骤 4: 生成截图
-    print("\n📸 步骤 4/4: 生成截图...")
-    # 创建 screenshots 目录
+    mode = args.screenshot_mode
+    mode_labels = {'auto': '自动', 'full': '完整长图', 'segment': '分段截图', 'both': '完整+分段'}
+    print(f"\n📸 步骤 4/4: 生成截图（模式: {mode_labels[mode]}）...")
     screenshots_dir = os.path.join(output_dir, 'screenshots')
     os.makedirs(screenshots_dir, exist_ok=True)
     screenshot_path = os.path.join(screenshots_dir, 'package.png')
     
-    # 生成截图（支持分段）
-    if generate_screenshot(html_content, screenshot_path):
-        # 检查是否有分段截图
-        segment_dir = os.path.join(screenshots_dir, 'segments')
-        if os.path.exists(segment_dir) and len(os.listdir(segment_dir)) > 0:
-            print(f"   ℹ️ 分段截图目录: {segment_dir}")
-    else:
-        print("   ⚠️ 截图生成跳过")
+    result_paths = generate_screenshot(html_content, screenshot_path, mode=mode)
     
     # 完成
     print("\n" + "=" * 60)
@@ -710,8 +725,6 @@ def main():
     # 显示截图信息
     if os.path.exists(screenshot_path):
         print(f"📸 完整截图: {screenshot_path}")
-    
-    # 显示分段截图信息
     segment_dir = os.path.join(screenshots_dir, 'segments')
     if os.path.exists(segment_dir) and len(os.listdir(segment_dir)) > 0:
         print(f"📸 分段截图: {segment_dir}")

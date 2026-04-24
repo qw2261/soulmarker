@@ -42,13 +42,7 @@ packager/
 - **排序**：按相对路径排序，确保输出顺序一致
 - **目录树**：生成带图标的目录树结构，根据文件类型显示不同的图标
 
-### 3.2 目录文件数统计
-
-`count_files_by_directory` 函数统计各目录下的文件数量：
-- 按目录路径分组
-- 生成表格形式的统计结果
-
-### 3.3 Markdown 生成
+### 3.2 Markdown 生成
 
 `generate_markdown` 函数生成完整的 Markdown 内容，包括：
 
@@ -61,7 +55,7 @@ packager/
    - 错误处理（无法读取的文件显示错误信息）
    - 大文件处理：超过 10MB 的文件会显示警告信息
 
-### 3.4 HTML 转换
+### 3.3 HTML 转换
 
 `convert_to_html` 函数将 Markdown 转换为带样式的 HTML：
 
@@ -70,32 +64,41 @@ packager/
 - 添加响应式样式，适配不同屏幕尺寸
 - 美观的界面设计，包括标题、代码、表格样式
 
-### 3.5 智能分段截图
+### 3.4 灵活的截图模式
 
-`generate_screenshot` 函数使用 Playwright 生成 HTML 页面的截图，支持智能分段：
+`generate_screenshot` 函数使用 Playwright 生成 HTML 页面的截图，支持 4 种截图模式：
 
-- **短页面**：直接截取整个页面
-- **长页面**：自动分段截图，避免内存不足问题
-- **分段逻辑**：
-  1. 检测页面高度
-  2. 超过 3 个视口高度时自动分段
-  3. 滚动页面到指定位置
-  4. 截取当前视口
-  5. 保存分段截图到 `screenshots/segments/` 目录
+- **`auto`（自动模式，默认）**：
+  - 短页面（≤ 3 个视口高度）→ 截取完整长图
+  - 长页面（> 3 个视口高度）→ 自动分段截图
+- **`full`（完整长图模式）**：始终截取完整长截图，适用于页面不太长时
+- **`segment`（分段截图模式）**：始终按视口分段截图，每段一张图片
+- **`both`（全都要模式）**：同时生成长截图和分段截图
 
-### 3.6 执行流程
+**分段逻辑**：
+1. 检测页面高度
+2. 滚动到指定位置
+3. 截取当前视口
+4. 分段截图保存到 `screenshots/segments/` 目录
+5. 附带 `segments.txt` 记录所有分段路径
+
+### 3.5 执行流程
 
 ```mermaid
 graph TD
     Start["开始"] --> Collect["收集文件和生成目录树"]
     Collect --> GenerateMD["生成 Markdown 文件"]
     GenerateMD --> ConvertHTML["转换为 HTML 文件"]
-    ConvertHTML --> Screenshot["生成截图"]
-    Screenshot --> CheckLength{"页面长度?"}
-    CheckLength -->|短页面| FullScreenshot["完整截图"]
-    CheckLength -->|长页面| SegmentScreenshot["分段截图"]
-    FullScreenshot --> End["结束"]
-    SegmentScreenshot --> End
+    ConvertHTML --> ChooseMode{"选择截图模式"}
+    ChooseMode -->|auto| AutoJudge{"页面高度 > 3 视口?"}
+    AutoJudge -->|否| Full["完整长截图"]
+    AutoJudge -->|是| Segment["分段截图"]
+    ChooseMode -->|full| Full
+    ChooseMode -->|segment| Segment
+    ChooseMode -->|both| Both["完整 + 分段截图"]
+    Full --> End["结束"]
+    Segment --> End
+    Both --> End
 ```
 
 ## 4. 一键执行脚本
@@ -130,6 +133,14 @@ cd packager
 # 指定输出目录
 ./run.sh -i /path/to/project -o /path/to/output
 
+# 截图模式选择
+./run.sh -m full                      # 只生成长截图
+./run.sh -m segment                   # 只生成分段截图
+./run.sh -m both                      # 同时生成完整和分段截图
+
+# 组合使用
+./run.sh -i ../event_go -m both       # 打包 event_go，两种截图都生成
+
 # 显示帮助信息
 ./run.sh -h
 ```
@@ -157,10 +168,11 @@ cd packager
 | 函数名 | 功能 | 参数 | 返回值 |
 |-------|------|------|-------|
 | `collect_files_and_generate_tree` | 收集文件并生成目录树 | `input_dir` (输入目录路径) | `tuple` (文件列表, 目录树行, 目录文件数) |
-| `count_files_by_directory` | 统计各目录下的文件数 | `files` (文件列表), `input_dir` (输入目录路径) | `dict` (目录到文件数的映射) |
-| `generate_markdown` | 生成 Markdown 内容 | `files` (文件列表), `input_dir` (输入目录路径), `tree_lines` (目录树行), `dir_counts` (目录文件数) | `str` (Markdown 内容) |
+| `generate_markdown` | 生成 Markdown 内容 | `files`, `input_dir`, `tree_lines`, `dir_counts` | `str` (Markdown 内容) |
 | `convert_to_html` | 转换 Markdown 为 HTML | `md_content` (Markdown 内容) | `str` (HTML 内容) |
-| `generate_screenshot` | 生成 HTML 截图（支持分段） | `html_content` (HTML 内容), `output_path` (输出路径) | `bool` (是否成功) |
+| `generate_screenshot` | 生成 HTML 截图 | `html_content`, `output_path`, `mode` (auto/full/segment/both) | `list` (截图路径列表) |
+| `screenshot_full_page` | 截取完整长图 | `page`, `output_path` | `None` |
+| `screenshot_segments` | 分段截图 | `page`, `output_path` | `str` (segments 目录路径) |
 
 ### 6.3 依赖说明
 
@@ -179,7 +191,7 @@ cd packager
 # 📦 项目打包内容
 **生成时间**: 2026-04-12 15:38:28
 **源目录**: `/Users/qi/Documents/trae_projects/soulmark`
-**文件总数**: 7
+**文件总数**: 5
 
 ---
 ## 📂 目录树总览
@@ -192,9 +204,6 @@ cd packager
     🐍 main.py
     📄 requirements.txt
     📄 run.sh
-    📁 output/
-      🌐 package.html
-      📝 package.md
 ```
 
 ---
@@ -205,7 +214,6 @@ cd packager
 | `[根目录]` | 1 |
 | `claude_code` | 1 |
 | `packager` | 3 |
-| `packager/output` | 2 |
 
 ---
 ## 📄 文件内容详情
@@ -222,7 +230,6 @@ cd packager
 3. 建立个人知识体系：按领域维护索引，输出模板、清单与最佳实践
 4. 形成反思闭环：对关键项目/决策做复盘，提炼行动项并跟踪关闭
 5. 打造技术深度主线：选择长期方向持续专项学习与实践，稳定产出高质量内容
-```
 ```
 
 ### 7.2 HTML 输出

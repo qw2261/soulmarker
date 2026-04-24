@@ -1,8 +1,18 @@
-# 忽略生成的文件
+# Packaging generated files
 output/
 packager/output/
 packager/.venv/
+
+# Python
 *.pyc
 __pycache__/
 .DS_Store
 
+# Agents
+AGENTS.md
+
+# Go build
+event_go/event-go
+
+# Test reports (archived)
+event_go/test_reports/
