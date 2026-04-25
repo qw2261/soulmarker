@@ -112,6 +112,7 @@
 | **十三、门票管理** | ✅ 已完成 | 门票 CRUD + 报名关联 + 库存扣减 |
 | **十四、管理员认证** | ✅ 已完成 | API Token 保护管理端接口 |
 | **十五、活动分类与搜索** | ✅ 已完成 | 状态筛选 + 价格类型 + 关键词搜索 |
+| **十六、自动化测试** | ✅ 已完成 | 66 个测试用例，覆盖率 67%，go vet 无警告 |
 
 ---
 
@@ -158,6 +159,15 @@ docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go
 ### 测试命令速查
 
 ```bash
+# 运行所有测试
+cd event_go && go test -v -count=1 ./...
+
+# 测试覆盖率
+cd event_go && go test -cover -count=1 ./...
+
+# 静态检查
+cd event_go && go vet ./...
+
 # 创建活动
 curl -s -X POST http://localhost:8080/api/events \
   -H "Content-Type: application/json" \
@@ -313,6 +323,22 @@ curl -s -X DELETE http://localhost:8080/api/events/1
 
 ---
 
+## 第十六阶段：自动化测试 ✅
+
+- [x] 编写 Store 层单元测试（CRUD + 事务 + 边界条件）
+- [x] 编写 Handler 层集成测试（API 端点 + 校验 + 权限）
+- [x] 测试注册 ID 缺失 Bug 修复（`store.go` 增加 `LastInsertId` 调用）
+- [x] 覆盖全部 17 个 API 端点的请求/响应验证
+- [x] 测试覆盖场景：正常流程、参数错误、权限拒绝、资源不存在、重复操作、库存溢出
+- [x] 测试文件：`store_test.go` + `handler_test.go`
+
+### 验证结果
+- [x] `go test -v` → 66 个测试全部通过 ✅
+- [x] `go test -cover` → 代码覆盖率 67.0% ✅
+- [x] `go vet ./...` → 无警告 ✅
+
+---
+
 ## 后续思考 / 待讨论
 
 ### 待实现功能（优先级排序）
@@ -320,7 +346,7 @@ curl -s -X DELETE http://localhost:8080/api/events/1
 | 优先级 | 方向 | 说明 |
 |--------|------|------|
 | **D** | 🖥️ **前端界面** | Web / 小程序，等后端功能稳定后再投入 |
-| **E** | 🧪 **自动化测试** | 单元测试 + 集成测试，使用 go test 框架 |
+| **E** | 🧪 **自动化测试** | ✅ 已完成 — 66 个测试用例，覆盖率 67% |
 | **F** | 🚀 **CI/CD** | 配置 GitHub Actions，实现自动化构建和部署 |
 | **G** | 📊 **监控** | 添加健康检查端点 + 日志中间件 |
 | **H** | 📝 **文档** | 使用 Swagger 生成 API 文档 |
@@ -333,9 +359,9 @@ curl -s -X DELETE http://localhost:8080/api/events/1
 - 可考虑 Web / 小程序
 
 #### 🧪 E. 自动化测试
-- 为核心函数编写单元测试（Store CRUD、Handler 参数校验）
-- 测试 API 端点和数据库交互（集成测试）
-- 使用 `go test -cover` 监控测试覆盖率
+- ✅ 已完成 — 66 个测试用例（store_test.go + handler_test.go）
+- 核心函数单元测试 + API 端点集成测试
+- 使用 `go test -cover` 监控测试覆盖率（当前 67%）
 
 #### 🚀 F. CI/CD
 - 配置 GitHub Actions 工作流

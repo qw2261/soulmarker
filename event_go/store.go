@@ -376,7 +376,7 @@ func (s *Store) Register(r *Registration) error {
 	}
 
 	now := time.Now().UTC().Format(timeFormat)
-	_, err = tx.Exec(
+	result, err := tx.Exec(
 		`INSERT INTO registrations (event_id, name, contact, ticket_id, ticket_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		r.EventID, r.Name, r.Contact, r.TicketID, ticketName, now,
 	)
@@ -387,10 +387,16 @@ func (s *Store) Register(r *Registration) error {
 		return fmt.Errorf("报名失败: %w", err)
 	}
 
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("获取报名 ID 失败: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 
+	r.ID = id
 	r.TicketName = ticketName
 	createdAt, _ := time.Parse(timeFormat, now)
 	r.CreatedAt = createdAt
