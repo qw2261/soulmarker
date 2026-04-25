@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"database/sql"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 type Store struct {
@@ -124,8 +126,8 @@ func (s *Store) migrate() {
 	}
 }
 
-func (s *Store) CreateEvent(e *Event) error {
-	now := time.Now().UTC().Format(timeFormat)
+func (s *Store) CreateEvent(e *model.Event) error {
+	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
 		`INSERT INTO events (title, description, event_time, location, capacity, price, status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
@@ -141,12 +143,12 @@ func (s *Store) CreateEvent(e *Event) error {
 	}
 	e.ID = id
 	e.Status = "published"
-	e.CreatedAt, _ = time.Parse(timeFormat, now)
+	e.CreatedAt, _ = time.Parse(model.TimeFormat, now)
 	e.UpdatedAt = e.CreatedAt
 	return nil
 }
 
-func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*Event, error) {
+func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*model.Event, error) {
 	query := `SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
 			FROM events WHERE 1=1`
 	var args []interface{}
@@ -175,20 +177,20 @@ func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*
 	}
 	defer rows.Close()
 
-	var events []*Event
+	var events []*model.Event
 	for rows.Next() {
-		e := &Event{}
+		e := &model.Event{}
 		var createdAt, updatedAt string
 		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.EventTime, &e.Location,
 			&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("读取活动记录失败: %w", err)
 		}
-		createdAtTime, err := time.Parse(timeFormat, createdAt)
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析活动创建时间失败: %w", err)
 		}
 		e.CreatedAt = createdAtTime
-		updatedAtTime, err := time.Parse(timeFormat, updatedAt)
+		updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析活动更新时间失败: %w", err)
 		}
@@ -197,13 +199,13 @@ func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*
 	}
 
 	if events == nil {
-		events = []*Event{}
+		events = []*model.Event{}
 	}
 	return events, nil
 }
 
-func (s *Store) GetEvent(id int64) (*Event, error) {
-	e := &Event{}
+func (s *Store) GetEvent(id int64) (*model.Event, error) {
+	e := &model.Event{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
 		`SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
@@ -216,12 +218,12 @@ func (s *Store) GetEvent(id int64) (*Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("查询活动失败: %w", err)
 	}
-	createdAtTime, err := time.Parse(timeFormat, createdAt)
+	createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("解析活动创建时间失败: %w", err)
 	}
 	e.CreatedAt = createdAtTime
-	updatedAtTime, err := time.Parse(timeFormat, updatedAt)
+	updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("解析活动更新时间失败: %w", err)
 	}
@@ -229,13 +231,13 @@ func (s *Store) GetEvent(id int64) (*Event, error) {
 	return e, nil
 }
 
-func (s *Store) UpdateEvent(id int64, req UpdateEventReq) (*Event, error) {
+func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, error) {
 	event, err := s.GetEvent(id)
 	if err != nil {
 		return nil, err
 	}
 	if event == nil {
-		return nil, ErrNotFound
+		return nil, model.ErrNotFound
 	}
 
 	if req.Title != nil {
@@ -260,7 +262,7 @@ func (s *Store) UpdateEvent(id int64, req UpdateEventReq) (*Event, error) {
 		event.Status = *req.Status
 	}
 
-	now := time.Now().UTC().Format(timeFormat)
+	now := time.Now().UTC().Format(model.TimeFormat)
 	_, err = s.db.Exec(
 		`UPDATE events SET title=?, description=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
 		 WHERE id=?`,
@@ -271,7 +273,7 @@ func (s *Store) UpdateEvent(id int64, req UpdateEventReq) (*Event, error) {
 		return nil, fmt.Errorf("更新活动失败: %w", err)
 	}
 
-	event.UpdatedAt, _ = time.Parse(timeFormat, now)
+	event.UpdatedAt, _ = time.Parse(model.TimeFormat, now)
 	return event, nil
 }
 
@@ -312,7 +314,7 @@ func (s *Store) DeleteEvent(id int64) error {
 		return fmt.Errorf("获取删除影响行数失败: %w", err)
 	}
 	if n == 0 {
-		return ErrNotFound
+		return model.ErrNotFound
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -321,13 +323,13 @@ func (s *Store) DeleteEvent(id int64) error {
 	return nil
 }
 
-func (s *Store) Register(r *Registration) error {
+func (s *Store) Register(r *model.Registration) error {
 	event, err := s.GetEvent(r.EventID)
 	if err != nil {
 		return err
 	}
 	if event == nil {
-		return ErrNotFound
+		return model.ErrNotFound
 	}
 
 	tx, err := s.db.Begin()
@@ -341,7 +343,7 @@ func (s *Store) Register(r *Registration) error {
 		return fmt.Errorf("查询报名人数失败: %w", err)
 	}
 	if count >= event.Capacity {
-		return ErrFull
+		return model.ErrFull
 	}
 
 	ticketName := ""
@@ -353,36 +355,36 @@ func (s *Store) Register(r *Registration) error {
 			*r.TicketID, r.EventID,
 		).Scan(&name, &stock)
 		if err == sql.ErrNoRows {
-			return ErrTicketNotFound
+			return model.ErrTicketNotFound
 		}
 		if err != nil {
 			return fmt.Errorf("查询门票失败: %w", err)
 		}
 		if stock <= 0 {
-			return ErrTicketSoldOut
+			return model.ErrTicketSoldOut
 		}
 		result, err := tx.Exec(
 			`UPDATE tickets SET stock = stock - 1, updated_at = ? WHERE id = ? AND stock > 0`,
-			time.Now().UTC().Format(timeFormat), *r.TicketID,
+			time.Now().UTC().Format(model.TimeFormat), *r.TicketID,
 		)
 		if err != nil {
 			return fmt.Errorf("扣减门票库存失败: %w", err)
 		}
 		n, _ := result.RowsAffected()
 		if n == 0 {
-			return ErrTicketSoldOut
+			return model.ErrTicketSoldOut
 		}
 		ticketName = name
 	}
 
-	now := time.Now().UTC().Format(timeFormat)
+	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := tx.Exec(
 		`INSERT INTO registrations (event_id, name, contact, ticket_id, ticket_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		r.EventID, r.Name, r.Contact, r.TicketID, ticketName, now,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
-			return ErrDuplicate
+			return model.ErrDuplicate
 		}
 		return fmt.Errorf("报名失败: %w", err)
 	}
@@ -398,12 +400,12 @@ func (s *Store) Register(r *Registration) error {
 
 	r.ID = id
 	r.TicketName = ticketName
-	createdAt, _ := time.Parse(timeFormat, now)
+	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
 	return nil
 }
 
-func (s *Store) ListRegistrations(eventID int64) ([]*Registration, error) {
+func (s *Store) ListRegistrations(eventID int64) ([]*model.Registration, error) {
 	rows, err := s.db.Query(
 		`SELECT id, event_id, name, contact, created_at
 		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`, eventID,
@@ -413,14 +415,14 @@ func (s *Store) ListRegistrations(eventID int64) ([]*Registration, error) {
 	}
 	defer rows.Close()
 
-	var registrations []*Registration
+	var registrations []*model.Registration
 	for rows.Next() {
-		r := &Registration{}
+		r := &model.Registration{}
 		var createdAt string
 		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Contact, &createdAt); err != nil {
 			return nil, fmt.Errorf("读取报名记录失败: %w", err)
 		}
-		createdAtTime, err := time.Parse(timeFormat, createdAt)
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析报名时间失败: %w", err)
 		}
@@ -429,7 +431,7 @@ func (s *Store) ListRegistrations(eventID int64) ([]*Registration, error) {
 	}
 
 	if registrations == nil {
-		registrations = []*Registration{}
+		registrations = []*model.Registration{}
 	}
 	return registrations, nil
 }
@@ -450,8 +452,8 @@ func (s *Store) IsRegistered(eventID int64, contact string) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Store) CreatePost(p *Post) error {
-	now := time.Now().UTC().Format(timeFormat)
+func (s *Store) CreatePost(p *model.Post) error {
+	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
 		`INSERT INTO posts (event_id, author_name, author_contact, title, content, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -466,12 +468,12 @@ func (s *Store) CreatePost(p *Post) error {
 	}
 	p.ID = id
 	p.ReplyCount = 0
-	createdAt, _ := time.Parse(timeFormat, now)
+	createdAt, _ := time.Parse(model.TimeFormat, now)
 	p.CreatedAt = createdAt
 	return nil
 }
 
-func (s *Store) ListPosts(eventID int64) ([]*Post, error) {
+func (s *Store) ListPosts(eventID int64) ([]*model.Post, error) {
 	rows, err := s.db.Query(
 		`SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
 		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
@@ -482,15 +484,15 @@ func (s *Store) ListPosts(eventID int64) ([]*Post, error) {
 	}
 	defer rows.Close()
 
-	var posts []*Post
+	var posts []*model.Post
 	for rows.Next() {
-		p := &Post{}
+		p := &model.Post{}
 		var createdAt string
 		if err := rows.Scan(&p.ID, &p.EventID, &p.AuthorName, &p.Title, &p.Content,
 			&createdAt, &p.ReplyCount); err != nil {
 			return nil, fmt.Errorf("读取帖子记录失败: %w", err)
 		}
-		createdAtTime, err := time.Parse(timeFormat, createdAt)
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析帖子创建时间失败: %w", err)
 		}
@@ -499,13 +501,13 @@ func (s *Store) ListPosts(eventID int64) ([]*Post, error) {
 	}
 
 	if posts == nil {
-		posts = []*Post{}
+		posts = []*model.Post{}
 	}
 	return posts, nil
 }
 
-func (s *Store) GetPost(postID int64) (*Post, error) {
-	p := &Post{}
+func (s *Store) GetPost(postID int64) (*model.Post, error) {
+	p := &model.Post{}
 	var createdAt string
 	err := s.db.QueryRow(
 		`SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
@@ -518,7 +520,7 @@ func (s *Store) GetPost(postID int64) (*Post, error) {
 	if err != nil {
 		return nil, fmt.Errorf("查询帖子失败: %w", err)
 	}
-	createdAtTime, err := time.Parse(timeFormat, createdAt)
+	createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("解析帖子创建时间失败: %w", err)
 	}
@@ -526,8 +528,8 @@ func (s *Store) GetPost(postID int64) (*Post, error) {
 	return p, nil
 }
 
-func (s *Store) CreateReply(r *Reply) error {
-	now := time.Now().UTC().Format(timeFormat)
+func (s *Store) CreateReply(r *model.Reply) error {
+	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
 		`INSERT INTO replies (post_id, author_name, author_contact, content, created_at)
 		 VALUES (?, ?, ?, ?, ?)`,
@@ -541,12 +543,12 @@ func (s *Store) CreateReply(r *Reply) error {
 		return fmt.Errorf("获取回复 ID 失败: %w", err)
 	}
 	r.ID = id
-	createdAt, _ := time.Parse(timeFormat, now)
+	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
 	return nil
 }
 
-func (s *Store) ListReplies(postID int64) ([]*Reply, error) {
+func (s *Store) ListReplies(postID int64) ([]*model.Reply, error) {
 	rows, err := s.db.Query(
 		`SELECT id, post_id, author_name, content, created_at
 		 FROM replies WHERE post_id = ? ORDER BY created_at ASC`, postID,
@@ -556,14 +558,14 @@ func (s *Store) ListReplies(postID int64) ([]*Reply, error) {
 	}
 	defer rows.Close()
 
-	var replies []*Reply
+	var replies []*model.Reply
 	for rows.Next() {
-		r := &Reply{}
+		r := &model.Reply{}
 		var createdAt string
 		if err := rows.Scan(&r.ID, &r.PostID, &r.AuthorName, &r.Content, &createdAt); err != nil {
 			return nil, fmt.Errorf("读取回复记录失败: %w", err)
 		}
-		createdAtTime, err := time.Parse(timeFormat, createdAt)
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析回复创建时间失败: %w", err)
 		}
@@ -572,13 +574,13 @@ func (s *Store) ListReplies(postID int64) ([]*Reply, error) {
 	}
 
 	if replies == nil {
-		replies = []*Reply{}
+		replies = []*model.Reply{}
 	}
 	return replies, nil
 }
 
-func (s *Store) CreateTicket(t *Ticket) error {
-	now := time.Now().UTC().Format(timeFormat)
+func (s *Store) CreateTicket(t *model.Ticket) error {
+	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
 		`INSERT INTO tickets (event_id, name, price, stock, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -592,12 +594,12 @@ func (s *Store) CreateTicket(t *Ticket) error {
 		return fmt.Errorf("获取门票 ID 失败: %w", err)
 	}
 	t.ID = id
-	t.CreatedAt, _ = time.Parse(timeFormat, now)
+	t.CreatedAt, _ = time.Parse(model.TimeFormat, now)
 	t.UpdatedAt = t.CreatedAt
 	return nil
 }
 
-func (s *Store) ListTickets(eventID int64) ([]*Ticket, error) {
+func (s *Store) ListTickets(eventID int64) ([]*model.Ticket, error) {
 	rows, err := s.db.Query(
 		`SELECT id, event_id, name, price, stock, created_at, updated_at
 		 FROM tickets WHERE event_id = ? ORDER BY created_at ASC`, eventID,
@@ -607,19 +609,19 @@ func (s *Store) ListTickets(eventID int64) ([]*Ticket, error) {
 	}
 	defer rows.Close()
 
-	var tickets []*Ticket
+	var tickets []*model.Ticket
 	for rows.Next() {
-		t := &Ticket{}
+		t := &model.Ticket{}
 		var createdAt, updatedAt string
 		if err := rows.Scan(&t.ID, &t.EventID, &t.Name, &t.Price, &t.Stock, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("读取门票记录失败: %w", err)
 		}
-		createdAtTime, err := time.Parse(timeFormat, createdAt)
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析门票创建时间失败: %w", err)
 		}
 		t.CreatedAt = createdAtTime
-		updatedAtTime, err := time.Parse(timeFormat, updatedAt)
+		updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("解析门票更新时间失败: %w", err)
 		}
@@ -628,13 +630,13 @@ func (s *Store) ListTickets(eventID int64) ([]*Ticket, error) {
 	}
 
 	if tickets == nil {
-		tickets = []*Ticket{}
+		tickets = []*model.Ticket{}
 	}
 	return tickets, nil
 }
 
-func (s *Store) GetTicket(ticketID int64) (*Ticket, error) {
-	t := &Ticket{}
+func (s *Store) GetTicket(ticketID int64) (*model.Ticket, error) {
+	t := &model.Ticket{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
 		`SELECT id, event_id, name, price, stock, created_at, updated_at
@@ -646,12 +648,12 @@ func (s *Store) GetTicket(ticketID int64) (*Ticket, error) {
 	if err != nil {
 		return nil, fmt.Errorf("查询门票失败: %w", err)
 	}
-	createdAtTime, err := time.Parse(timeFormat, createdAt)
+	createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("解析门票创建时间失败: %w", err)
 	}
 	t.CreatedAt = createdAtTime
-	updatedAtTime, err := time.Parse(timeFormat, updatedAt)
+	updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("解析门票更新时间失败: %w", err)
 	}
@@ -659,13 +661,13 @@ func (s *Store) GetTicket(ticketID int64) (*Ticket, error) {
 	return t, nil
 }
 
-func (s *Store) UpdateTicket(id int64, req UpdateTicketReq) (*Ticket, error) {
+func (s *Store) UpdateTicket(id int64, req model.UpdateTicketReq) (*model.Ticket, error) {
 	ticket, err := s.GetTicket(id)
 	if err != nil {
 		return nil, err
 	}
 	if ticket == nil {
-		return nil, ErrTicketNotFound
+		return nil, model.ErrTicketNotFound
 	}
 
 	if req.Name != nil {
@@ -678,7 +680,7 @@ func (s *Store) UpdateTicket(id int64, req UpdateTicketReq) (*Ticket, error) {
 		ticket.Stock = *req.Stock
 	}
 
-	now := time.Now().UTC().Format(timeFormat)
+	now := time.Now().UTC().Format(model.TimeFormat)
 	_, err = s.db.Exec(
 		`UPDATE tickets SET name=?, price=?, stock=?, updated_at=? WHERE id=?`,
 		ticket.Name, ticket.Price, ticket.Stock, now, id,
@@ -687,7 +689,7 @@ func (s *Store) UpdateTicket(id int64, req UpdateTicketReq) (*Ticket, error) {
 		return nil, fmt.Errorf("更新门票失败: %w", err)
 	}
 
-	ticket.UpdatedAt, _ = time.Parse(timeFormat, now)
+	ticket.UpdatedAt, _ = time.Parse(model.TimeFormat, now)
 	return ticket, nil
 }
 
@@ -701,7 +703,7 @@ func (s *Store) DeleteTicket(id int64) error {
 		return fmt.Errorf("获取删除影响行数失败: %w", err)
 	}
 	if n == 0 {
-		return ErrTicketNotFound
+		return model.ErrTicketNotFound
 	}
 	return nil
 }

@@ -1,24 +1,11 @@
-package main
+package model
 
 import (
 	"errors"
-	"os"
 	"time"
 )
 
-const (
-	defaultPort  = "8080"
-	timeFormat   = time.RFC3339
-	timeParseMsg = "格式错误，请使用 RFC3339 格式，例如：2026-12-31T18:00:00+08:00"
-	defaultDB    = "data/event_go.db"
-)
-
-func getPort() string {
-	if p := os.Getenv("PORT"); p != "" {
-		return p
-	}
-	return defaultPort
-}
+const TimeFormat = time.RFC3339
 
 var (
 	ErrNotFound       = errors.New("活动不存在")
@@ -30,10 +17,6 @@ var (
 	ErrTicketSoldOut  = errors.New("门票已售罄")
 	ErrUnauthorized   = errors.New("认证失败，请提供有效的管理员令牌")
 )
-
-func getAdminToken() string {
-	return os.Getenv("ADMIN_TOKEN")
-}
 
 type Event struct {
 	ID          int64     `json:"id"`

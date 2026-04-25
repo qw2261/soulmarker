@@ -8,7 +8,22 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/qw2261/soulmarker/event_go/internal/handler"
+	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
+
+const (
+	defaultPort = "8080"
+	defaultDB   = "data/event_go.db"
+)
+
+func getPort() string {
+	if p := os.Getenv("PORT"); p != "" {
+		return p
+	}
+	return defaultPort
+}
 
 func main() {
 	dbPath := os.Getenv("DB_PATH")
@@ -16,18 +31,18 @@ func main() {
 		dbPath = defaultDB
 	}
 
-	store := NewStore(dbPath)
-	defer store.Close()
+	s := store.NewStore(dbPath)
+	defer s.Close()
 	log.Printf("📦 数据库已初始化: %s", dbPath)
 
-	h := NewHandler(store)
+	h := handler.NewHandler(s)
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /api/events", adminAuth(http.HandlerFunc(h.CreateEvent)).ServeHTTP)
+	mux.HandleFunc("POST /api/events", handler.AdminAuth(http.HandlerFunc(h.CreateEvent)).ServeHTTP)
 	mux.HandleFunc("GET /api/events", h.ListEvents)
 	mux.HandleFunc("GET /api/events/{id}", h.GetEvent)
-	mux.HandleFunc("PUT /api/events/{id}", adminAuth(http.HandlerFunc(h.UpdateEvent)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}", adminAuth(http.HandlerFunc(h.DeleteEvent)).ServeHTTP)
+	mux.HandleFunc("PUT /api/events/{id}", handler.AdminAuth(http.HandlerFunc(h.UpdateEvent)).ServeHTTP)
+	mux.HandleFunc("DELETE /api/events/{id}", handler.AdminAuth(http.HandlerFunc(h.DeleteEvent)).ServeHTTP)
 	mux.HandleFunc("POST /api/events/{id}/register", h.Register)
 	mux.HandleFunc("GET /api/events/{id}/registrations", h.ListRegistrations)
 	mux.HandleFunc("POST /api/events/{id}/posts", h.CreatePost)
@@ -35,17 +50,17 @@ func main() {
 	mux.HandleFunc("GET /api/events/{id}/posts/{postId}", h.GetPost)
 	mux.HandleFunc("POST /api/events/{id}/posts/{postId}/replies", h.CreateReply)
 
-	mux.HandleFunc("POST /api/events/{id}/tickets", adminAuth(http.HandlerFunc(h.CreateTicket)).ServeHTTP)
+	mux.HandleFunc("POST /api/events/{id}/tickets", handler.AdminAuth(http.HandlerFunc(h.CreateTicket)).ServeHTTP)
 	mux.HandleFunc("GET /api/events/{id}/tickets", h.ListTickets)
 	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
-	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", adminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", adminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
+	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
+	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
 
 	port := getPort()
 	addr := ":" + port
 	server := &http.Server{
 		Addr:    addr,
-		Handler: cors(mux),
+		Handler: handler.CORS(mux),
 	}
 
 	log.Printf("亦闻 event-go 服务启动，监听端口 %s", port)

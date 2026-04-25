@@ -53,7 +53,7 @@
 **第四步 — 生态**
 支持系列化活动、主办方主页、活动推荐等，形成一个活动生态。
 
----
+***
 
 ## 数据模型
 
@@ -70,46 +70,46 @@ Event (活动)
 
 ### Event — 活动
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | int64 | 主键 |
-| title | string | 活动标题 |
-| description | string | 活动描述 |
-| event_time | string | 活动时间（RFC3339） |
-| location | string | 活动地点 |
-| capacity | int | 报名容量上限 |
-| price | float64 | 活动基础价格 |
-| status | string | 状态：draft / published / cancelled / ended |
+| 字段          | 类型      | 说明                                       |
+| ----------- | ------- | ---------------------------------------- |
+| id          | int64   | 主键                                       |
+| title       | string  | 活动标题                                     |
+| description | string  | 活动描述                                     |
+| event\_time | string  | 活动时间（RFC3339）                            |
+| location    | string  | 活动地点                                     |
+| capacity    | int     | 报名容量上限                                   |
+| price       | float64 | 活动基础价格                                   |
+| status      | string  | 状态：draft / published / cancelled / ended |
 
 ### Ticket — 门票
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | int64 | 主键 |
-| event_id | int64 | 所属活动 |
-| name | string | 门票名称（如"普通票""VIP票"） |
-| price | float64 | 门票价格 |
-| stock | int | 当前库存 |
+| 字段        | 类型      | 说明                 |
+| --------- | ------- | ------------------ |
+| id        | int64   | 主键                 |
+| event\_id | int64   | 所属活动               |
+| name      | string  | 门票名称（如"普通票""VIP票"） |
+| price     | float64 | 门票价格               |
+| stock     | int     | 当前库存               |
 
 ### Registration — 报名记录
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | int64 | 主键 |
-| event_id | int64 | 关联活动 |
-| name | string | 报名者姓名 |
-| contact | string | 联系方式（手机/邮箱） |
-| ticket_id | *int64 | 可选，关联的门票 |
-| ticket_name | string | 报名时的门票名称快照 |
+| 字段           | 类型      | 说明          |
+| ------------ | ------- | ----------- |
+| id           | int64   | 主键          |
+| event\_id    | int64   | 关联活动        |
+| name         | string  | 报名者姓名       |
+| contact      | string  | 联系方式（手机/邮箱） |
+| ticket\_id   | \*int64 | 可选，关联的门票    |
+| ticket\_name | string  | 报名时的门票名称快照  |
 
 ### Post & Reply — 讨论区
 
-| 实体 | 说明 |
-|------|------|
-| Post | 帖子，关联 event_id，仅已报名者可创建 |
-| Reply | 回复，关联 post_id，仅已报名者可创建 |
+| 实体    | 说明                       |
+| ----- | ------------------------ |
+| Post  | 帖子，关联 event\_id，仅已报名者可创建 |
+| Reply | 回复，关联 post\_id，仅已报名者可创建  |
 
----
+***
 
 ## 当前进度
 
@@ -136,15 +136,15 @@ DELETE /api/events/{id}/tickets/{ticketId}  删除门票
 
 **活动列表筛选参数**：
 
-| 参数 | 类型 | 说明 | 示例 |
-|------|------|------|------|
-| `status` | string | 按状态筛选 | `draft` / `published` / `cancelled` / `ended` |
-| `price_type` | string | 按价格类型筛选 | `free`（免费） / `paid`（付费） |
-| `q` | string | 关键词搜索（标题+描述） | `Go`、`Docker` |
+| 参数           | 类型     | 说明           | 示例                                            |
+| ------------ | ------ | ------------ | --------------------------------------------- |
+| `status`     | string | 按状态筛选        | `draft` / `published` / `cancelled` / `ended` |
+| `price_type` | string | 按价格类型筛选      | `free`（免费） / `paid`（付费）                       |
+| `q`          | string | 关键词搜索（标题+描述） | `Go`、`Docker`                                 |
 
-详细任务跟踪见 [mvp_task.md](mvp_task.md)。
+详细任务跟踪见 [mvp\_task.md](mvp_task.md)。
 
----
+***
 
 ## 核心流程
 
@@ -181,7 +181,7 @@ DELETE /api/events/{id}/tickets/{ticketId}  删除门票
   回复 → 帖子 → 门票 → 报名 → 活动
 ```
 
----
+***
 
 ## 技术架构
 
@@ -189,22 +189,46 @@ DELETE /api/events/{id}/tickets/{ticketId}  删除门票
 
 ```
 event_go/
-├── main.go            # 入口：组装依赖、注册路由、启动服务、优雅关闭
-├── types.go           # 数据模型：结构体定义、哨兵错误、常量
-├── store.go           # 数据层：SQLite 建表迁移、所有 CRUD 方法
-├── handlers.go        # HTTP 层：请求处理、参数校验、权限检查、中间件
-├── go.mod             # Go 模块定义
-├── go.sum             # 依赖锁文件
-├── Dockerfile         # 多阶段构建（Go 1.25 → Alpine 3.19）
-├── .gitignore         # 忽略编译产物和数据库文件
-├── README.md          # 项目文档
-├── mvp_task.md        # 任务跟踪
-└── test_reports/      # 阶段测试报告存档
-    ├── v2.0_sqlite_2026-04-25.md
-    ├── v2.1_discussion_2026-04-25.md
-    ├── v3.0_tickets_2026-04-25.md
-    └── observation_report_2026-04-25.md
+├── cmd/
+│   └── event-go/
+│       └── main.go              # 入口：组装依赖、注册路由、启动服务、优雅关闭
+├── internal/
+│   ├── handler/
+│   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查、中间件
+│   │   └── handler_test.go      # Handler 集成测试
+│   ├── store/
+│   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法
+│   │   └── store_test.go        # Store 单元测试
+│   └── model/
+│       └── types.go             # 数据模型：结构体定义、哨兵错误、常量
+├── data/                        # 数据库文件（运行时生成）
+├── docs/
+│   └── mvp_task.md              # 任务跟踪文档
+├── test_reports/                # 阶段性测试报告
+├── Dockerfile                   # 多阶段构建（Go 1.25 → Alpine 3.19）
+├── go.mod                       # Go 模块定义
+├── go.sum                       # 依赖锁文件
+└── README.md                    # 项目文档
 ```
+
+### 架构分层
+
+```
+cmd/event-go/main.go         入口层：组装依赖、启动服务
+         │
+         v
+internal/handler/handler.go  HTTP 层：路由、参数校验、权限检查
+         │
+         v
+internal/store/store.go      数据层：SQLite CRUD、事务管理
+         │
+         v
+internal/model/types.go      模型层：类型定义、哨兵错误、常量
+```
+
+- 单向依赖：`main → handler → store → model`
+- 无循环依赖，各层职责清晰
+- `internal` 包防止外部导入，强制封装
 
 ### 依赖注入设计
 
@@ -229,17 +253,18 @@ main.go
 
 ### 技术选型
 
-| 选择 | 原因 |
-|------|------|
-| Go 标准库路由 | Go 1.25 路由语法（`"POST /api/events/{id}/register"`），零外部依赖 |
-| SQLite（modernc.org/sqlite） | 纯 Go 实现，零 CGO，嵌入式，单文件数据库 |
-| 多阶段 Docker 构建 | 最终镜像 23.7MB，Go 1.25 → Alpine 3.19 |
+| 选择                         | 原因                                                     |
+| -------------------------- | ------------------------------------------------------ |
+| Go 标准库路由                   | Go 1.25 路由语法（`"POST /api/events/{id}/register"`），零外部依赖 |
+| SQLite（modernc.org/sqlite） | 纯 Go 实现，零 CGO，嵌入式，单文件数据库                               |
+| 多阶段 Docker 构建              | 最终镜像 23.7MB，Go 1.25 → Alpine 3.19                      |
 
 ### 数据一致性保障
 
-| 场景 | 机制 |
-|------|------|
-| 并发报名超卖 | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作 |
-| 门票库存超卖 | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected` |
+| 场景       | 机制                                                        |
+| -------- | --------------------------------------------------------- |
+| 并发报名超卖   | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作                       |
+| 门票库存超卖   | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected`          |
 | 删除活动数据残留 | 事务级联删除：replies → posts → tickets → registrations → events |
-| 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |
+| 数据库连接泄漏  | `Store.Close()` + `defer` + 信号监听优雅关闭                      |
+

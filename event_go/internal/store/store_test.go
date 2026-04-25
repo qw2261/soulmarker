@@ -1,8 +1,10 @@
-package main
+package store
 
 import (
 	"fmt"
 	"testing"
+
+	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 func setupTestStore(t *testing.T) *Store {
@@ -14,8 +16,8 @@ func setupTestStore(t *testing.T) *Store {
 	return store
 }
 
-func newTestEvent(title string) *Event {
-	return &Event{
+func newTestEvent(title string) *model.Event {
+	return &model.Event{
 		Title:       title,
 		Description: "测试描述",
 		EventTime:   "2026-12-31T18:00:00+08:00",
@@ -142,7 +144,7 @@ func TestUpdateEvent(t *testing.T) {
 	}
 
 	newTitle := "更新后的标题"
-	req := UpdateEventReq{Title: &newTitle}
+	req := model.UpdateEventReq{Title: &newTitle}
 	updated, err := store.UpdateEvent(e.ID, req)
 	if err != nil {
 		t.Fatalf("UpdateEvent failed: %v", err)
@@ -161,7 +163,7 @@ func TestUpdateEventPartial(t *testing.T) {
 	}
 
 	newPrice := 99.9
-	req := UpdateEventReq{Price: &newPrice}
+	req := model.UpdateEventReq{Price: &newPrice}
 	updated, err := store.UpdateEvent(e.ID, req)
 	if err != nil {
 		t.Fatalf("UpdateEvent failed: %v", err)
@@ -183,7 +185,7 @@ func TestUpdateEventStatus(t *testing.T) {
 	}
 
 	status := "cancelled"
-	req := UpdateEventReq{Status: &status}
+	req := model.UpdateEventReq{Status: &status}
 	updated, err := store.UpdateEvent(e.ID, req)
 	if err != nil {
 		t.Fatalf("UpdateEvent failed: %v", err)
@@ -197,9 +199,9 @@ func TestUpdateEventNotFound(t *testing.T) {
 	store := setupTestStore(t)
 
 	title := "不存在"
-	req := UpdateEventReq{Title: &title}
+	req := model.UpdateEventReq{Title: &title}
 	_, err := store.UpdateEvent(999, req)
-	if err != ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -226,7 +228,7 @@ func TestDeleteEventNotFound(t *testing.T) {
 	store := setupTestStore(t)
 
 	err := store.DeleteEvent(999)
-	if err != ErrNotFound {
+	if err != model.ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -238,7 +240,7 @@ func TestDeleteEventCascadeRegistration(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	reg := &Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
+	reg := &model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
 	if err := store.Register(reg); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -260,14 +262,14 @@ func TestDeleteEventCascadePostsAndReplies(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "李四", Contact: "ls@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "李四", Contact: "ls@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	post := &Post{EventID: e.ID, AuthorName: "李四", AuthorContact: "ls@email.com", Title: "好活动", Content: "赞"}
+	post := &model.Post{EventID: e.ID, AuthorName: "李四", AuthorContact: "ls@email.com", Title: "好活动", Content: "赞"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
-	if err := store.CreateReply(&Reply{PostID: post.ID, AuthorName: "李四", AuthorContact: "ls@email.com", Content: "回复"}); err != nil {
+	if err := store.CreateReply(&model.Reply{PostID: post.ID, AuthorName: "李四", AuthorContact: "ls@email.com", Content: "回复"}); err != nil {
 		t.Fatalf("CreateReply failed: %v", err)
 	}
 
@@ -293,7 +295,7 @@ func TestRegister(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	reg := &Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
+	reg := &model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
 	if err := store.Register(reg); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -310,13 +312,13 @@ func TestRegisterDuplicate(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	reg := &Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
+	reg := &model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}
 	if err := store.Register(reg); err != nil {
 		t.Fatalf("first Register failed: %v", err)
 	}
 
-	err := store.Register(&Registration{EventID: e.ID, Name: "张三2", Contact: "zs@email.com"})
-	if err != ErrDuplicate {
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "张三2", Contact: "zs@email.com"})
+	if err != model.ErrDuplicate {
 		t.Fatalf("expected ErrDuplicate, got %v", err)
 	}
 }
@@ -331,14 +333,14 @@ func TestRegisterFull(t *testing.T) {
 	}
 
 	for i, name := range []string{"张三", "李四"} {
-		err := store.Register(&Registration{EventID: e.ID, Name: name, Contact: name + "@email.com"})
+		err := store.Register(&model.Registration{EventID: e.ID, Name: name, Contact: name + "@email.com"})
 		if err != nil {
 			t.Fatalf("registration %d failed: %v", i, err)
 		}
 	}
 
-	err := store.Register(&Registration{EventID: e.ID, Name: "王五", Contact: "ww@email.com"})
-	if err != ErrFull {
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "王五", Contact: "ww@email.com"})
+	if err != model.ErrFull {
 		t.Fatalf("expected ErrFull, got %v", err)
 	}
 }
@@ -346,8 +348,8 @@ func TestRegisterFull(t *testing.T) {
 func TestRegisterNotFound(t *testing.T) {
 	store := setupTestStore(t)
 
-	err := store.Register(&Registration{EventID: 999, Name: "张三", Contact: "zs@email.com"})
-	if err != ErrNotFound {
+	err := store.Register(&model.Registration{EventID: 999, Name: "张三", Contact: "zs@email.com"})
+	if err != model.ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -359,13 +361,13 @@ func TestRegisterWithTicket(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "普通票", Price: 0, Stock: 5}
+	ticket := &model.Ticket{EventID: e.ID, Name: "普通票", Price: 0, Stock: 5}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	ticketID := ticket.ID
-	reg := &Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID}
+	reg := &model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID}
 	if err := store.Register(reg); err != nil {
 		t.Fatalf("Register with ticket failed: %v", err)
 	}
@@ -386,18 +388,18 @@ func TestRegisterTicketSoldOut(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "VIP票", Price: 100, Stock: 1}
+	ticket := &model.Ticket{EventID: e.ID, Name: "VIP票", Price: 100, Stock: 1}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
 
 	ticketID := ticket.ID
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID}); err != nil {
 		t.Fatalf("first Register failed: %v", err)
 	}
 
-	err := store.Register(&Registration{EventID: e.ID, Name: "李四", Contact: "ls@email.com", TicketID: &ticketID})
-	if err != ErrTicketSoldOut {
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "李四", Contact: "ls@email.com", TicketID: &ticketID})
+	if err != model.ErrTicketSoldOut {
 		t.Fatalf("expected ErrTicketSoldOut, got %v", err)
 	}
 }
@@ -411,8 +413,8 @@ func TestRegisterTicketNotFound(t *testing.T) {
 	}
 
 	ticketID := int64(999)
-	err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID})
-	if err != ErrTicketNotFound {
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com", TicketID: &ticketID})
+	if err != model.ErrTicketNotFound {
 		t.Fatalf("expected ErrTicketNotFound, got %v", err)
 	}
 }
@@ -427,7 +429,7 @@ func TestListRegistrations(t *testing.T) {
 
 	names := []string{"张三", "李四", "王五"}
 	for _, name := range names {
-		reg := &Registration{EventID: e.ID, Name: name, Contact: name + "@email.com"}
+		reg := &model.Registration{EventID: e.ID, Name: name, Contact: name + "@email.com"}
 		if err := store.Register(reg); err != nil {
 			t.Fatalf("Register(%q) failed: %v", name, err)
 		}
@@ -463,7 +465,7 @@ func TestIsRegistered(t *testing.T) {
 	}
 
 	contact := "test@email.com"
-	reg := &Registration{EventID: e.ID, Name: "测试", Contact: contact}
+	reg := &model.Registration{EventID: e.ID, Name: "测试", Contact: contact}
 	if err := store.Register(reg); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -489,11 +491,11 @@ func TestCreatePost(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "好活动", Content: "推荐给大家"}
+	post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "好活动", Content: "推荐给大家"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
@@ -512,13 +514,13 @@ func TestListPosts(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
 	titles := []string{"帖子A", "帖子B", "帖子C"}
 	for i, title := range titles {
-		post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: title, Content: "内容"}
+		post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: title, Content: "内容"}
 		if err := store.CreatePost(post); err != nil {
 			t.Fatalf("CreatePost %d failed: %v", i, err)
 		}
@@ -562,11 +564,11 @@ func TestGetPost(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "详情测试", Content: "内容"}
+	post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "详情测试", Content: "内容"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
@@ -602,15 +604,15 @@ func TestCreateReply(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
+	post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
 
-	reply := &Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: "回复内容"}
+	reply := &model.Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: "回复内容"}
 	if err := store.CreateReply(reply); err != nil {
 		t.Fatalf("CreateReply failed: %v", err)
 	}
@@ -626,17 +628,17 @@ func TestListReplies(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
+	post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
 
 	contents := []string{"回复1", "回复2", "回复3"}
 	for _, c := range contents {
-		reply := &Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: c}
+		reply := &model.Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: c}
 		if err := store.CreateReply(reply); err != nil {
 			t.Fatalf("CreateReply(%q) failed: %v", c, err)
 		}
@@ -670,16 +672,16 @@ func TestGetPostIncludesReplyCount(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	if err := store.Register(&Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@email.com"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	post := &Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
+	post := &model.Post{EventID: e.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Title: "帖子", Content: "内容"}
 	if err := store.CreatePost(post); err != nil {
 		t.Fatalf("CreatePost failed: %v", err)
 	}
 
 	for i := 0; i < 3; i++ {
-		reply := &Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: "回复"}
+		reply := &model.Reply{PostID: post.ID, AuthorName: "张三", AuthorContact: "zs@email.com", Content: "回复"}
 		if err := store.CreateReply(reply); err != nil {
 			t.Fatalf("CreateReply %d failed: %v", i, err)
 		}
@@ -704,7 +706,7 @@ func TestCreateTicket(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	ticket := &Ticket{EventID: e.ID, Name: "普通票", Price: 0, Stock: 100}
+	ticket := &model.Ticket{EventID: e.ID, Name: "普通票", Price: 0, Stock: 100}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -722,7 +724,7 @@ func TestListTickets(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		ticket := &Ticket{EventID: e.ID, Name: fmt.Sprintf("票%d", i), Price: float64(i * 10), Stock: 10}
+		ticket := &model.Ticket{EventID: e.ID, Name: fmt.Sprintf("票%d", i), Price: float64(i * 10), Stock: 10}
 		if err := store.CreateTicket(ticket); err != nil {
 			t.Fatalf("CreateTicket %d failed: %v", i, err)
 		}
@@ -756,7 +758,7 @@ func TestGetTicket(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "VIP票", Price: 100, Stock: 5}
+	ticket := &model.Ticket{EventID: e.ID, Name: "VIP票", Price: 100, Stock: 5}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -788,11 +790,11 @@ func TestGetTicketNotFound(t *testing.T) {
 func TestUpdateTicket(t *testing.T) {
 	store := setupTestStore(t)
 
-	e := newTestEvent("门票更新")
+	e := newTestEvent("更新门票")
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "原名称", Price: 50, Stock: 10}
+	ticket := &model.Ticket{EventID: e.ID, Name: "原始名称", Price: 0, Stock: 1}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -800,7 +802,7 @@ func TestUpdateTicket(t *testing.T) {
 	newName := "新名称"
 	newPrice := 99.9
 	newStock := 5
-	req := UpdateTicketReq{Name: &newName, Price: &newPrice, Stock: &newStock}
+	req := model.UpdateTicketReq{Name: &newName, Price: &newPrice, Stock: &newStock}
 	updated, err := store.UpdateTicket(ticket.ID, req)
 	if err != nil {
 		t.Fatalf("UpdateTicket failed: %v", err)
@@ -814,9 +816,9 @@ func TestUpdateTicketNotFound(t *testing.T) {
 	store := setupTestStore(t)
 
 	name := "不存在"
-	req := UpdateTicketReq{Name: &name}
+	req := model.UpdateTicketReq{Name: &name}
 	_, err := store.UpdateTicket(999, req)
-	if err != ErrTicketNotFound {
+	if err != model.ErrTicketNotFound {
 		t.Fatalf("expected ErrTicketNotFound, got %v", err)
 	}
 }
@@ -828,7 +830,7 @@ func TestDeleteTicket(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "待删除", Price: 0, Stock: 1}
+	ticket := &model.Ticket{EventID: e.ID, Name: "待删除", Price: 0, Stock: 1}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
@@ -847,7 +849,7 @@ func TestDeleteTicketNotFound(t *testing.T) {
 	store := setupTestStore(t)
 
 	err := store.DeleteTicket(999)
-	if err != ErrTicketNotFound {
+	if err != model.ErrTicketNotFound {
 		t.Fatalf("expected ErrTicketNotFound, got %v", err)
 	}
 }
@@ -860,14 +862,14 @@ func TestListEventsFilterByStatus(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 	draft := "draft"
-	store.UpdateEvent(e1.ID, UpdateEventReq{Status: &draft})
+	store.UpdateEvent(e1.ID, model.UpdateEventReq{Status: &draft})
 
 	e2 := newTestEvent("已发布2")
 	if err := store.CreateEvent(e2); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 	cancelled := "cancelled"
-	store.UpdateEvent(e2.ID, UpdateEventReq{Status: &cancelled})
+	store.UpdateEvent(e2.ID, model.UpdateEventReq{Status: &cancelled})
 
 	e3 := newTestEvent("已发布3")
 	if err := store.CreateEvent(e3); err != nil {
@@ -971,7 +973,7 @@ func TestDeleteEventCascadeTickets(t *testing.T) {
 	if err := store.CreateEvent(e); err != nil {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
-	ticket := &Ticket{EventID: e.ID, Name: "票", Price: 0, Stock: 1}
+	ticket := &model.Ticket{EventID: e.ID, Name: "票", Price: 0, Stock: 1}
 	if err := store.CreateTicket(ticket); err != nil {
 		t.Fatalf("CreateTicket failed: %v", err)
 	}
