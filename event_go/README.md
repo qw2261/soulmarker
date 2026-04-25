@@ -39,54 +39,147 @@
 2. **活动中**：参与者之间可以交流，形成氛围
 3. **活动后**：讨论和资料留存，变成一个有长期价值的内容沉淀
 
-## 想做的功能
-
-### 基础功能
-
-- 活动的创建、编辑、发布
-- 活动的浏览、搜索、报名
-- 门票的创建和售卖
-- 参与者的专属讨论区
-
-### 进阶功能
-
-- 系列活动的组织（一个主办方多个活动）
-- 活动数据分析（报名趋势、参与者画像）
-- 活动回顾和内容沉淀
-
 ## 迭代路线
 
-**第一步 — 核心闭环**
+**第一步 — 核心闭环** ✅
 先跑通最基本的流程：创建活动 → 展示活动 → 报名参与。集中精力把这一个流程做顺。
 
-**第二步 — 互动**
+**第二步 — 互动** ✅
 加入讨论区功能，让参与者能在活动前后交流。这是和传统活动平台拉开差距的关键。
 
-**第三步 — 完善**
-门票管理、支付集成、数据分析等周边功能逐步补充。
+**第三步 — 完善** ✅
+门票管理、报名关联门票、库存扣减等周边功能逐步补充。
 
 **第四步 — 生态**
 支持系列化活动、主办方主页、活动推荐等，形成一个活动生态。
 
 ---
 
+## 数据模型
+
+### 核心实体关系
+
+```
+Event (活动)
+  ├── Registration (报名记录) — N:1，一个活动有多个报名
+  │     └── Ticket (门票) — N:1，报名可选关联一张门票
+  ├── Post (帖子) — N:1，一个活动有多个讨论帖
+  │     └── Reply (回复) — N:1，一个帖子有多个回复
+  └── Ticket (门票) — N:1，一个活动可创建多种门票
+```
+
+### Event — 活动
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int64 | 主键 |
+| title | string | 活动标题 |
+| description | string | 活动描述 |
+| event_time | string | 活动时间（RFC3339） |
+| location | string | 活动地点 |
+| capacity | int | 报名容量上限 |
+| price | float64 | 活动基础价格 |
+| status | string | 状态：draft / published / cancelled / ended |
+
+### Ticket — 门票
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int64 | 主键 |
+| event_id | int64 | 所属活动 |
+| name | string | 门票名称（如"普通票""VIP票"） |
+| price | float64 | 门票价格 |
+| stock | int | 当前库存 |
+
+### Registration — 报名记录
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int64 | 主键 |
+| event_id | int64 | 关联活动 |
+| name | string | 报名者姓名 |
+| contact | string | 联系方式（手机/邮箱） |
+| ticket_id | *int64 | 可选，关联的门票 |
+| ticket_name | string | 报名时的门票名称快照 |
+
+### Post & Reply — 讨论区
+
+| 实体 | 说明 |
+|------|------|
+| Post | 帖子，关联 event_id，仅已报名者可创建 |
+| Reply | 回复，关联 post_id，仅已报名者可创建 |
+
+---
+
 ## 当前进度
 
-核心闭环已跑通，所有 9 个 MVP 阶段已完成 ✅
-
-当前 API 列表：
+**v3.1** — 活动列表支持筛选与搜索，共 **17 个 API 接口**。
 
 ```
-POST   /api/events                      创建活动
-GET    /api/events                      活动列表
-GET    /api/events/{id}                 活动详情
-PUT    /api/events/{id}                 编辑活动
-DELETE /api/events/{id}                 删除活动
-POST   /api/events/{id}/register        报名活动
-GET    /api/events/{id}/registrations   报名列表
+POST   /api/events                          创建活动
+GET    /api/events[?status=&price_type=&q=] 活动列表（支持筛选搜索）
+GET    /api/events/{id}                     活动详情
+PUT    /api/events/{id}                     编辑活动
+DELETE /api/events/{id}                     删除活动
+POST   /api/events/{id}/register            报名活动
+GET    /api/events/{id}/registrations       报名列表
+POST   /api/events/{id}/posts               发帖（需已报名）
+GET    /api/events/{id}/posts               帖子列表
+GET    /api/events/{id}/posts/{postId}      帖子详情（含回复）
+POST   /api/events/{id}/posts/{postId}/replies 回复帖子（需已报名）
+POST   /api/events/{id}/tickets             创建门票
+GET    /api/events/{id}/tickets             门票列表
+GET    /api/events/{id}/tickets/{ticketId}  门票详情
+PUT    /api/events/{id}/tickets/{ticketId}  编辑门票
+DELETE /api/events/{id}/tickets/{ticketId}  删除门票
 ```
+
+**活动列表筛选参数**：
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `status` | string | 按状态筛选 | `draft` / `published` / `cancelled` / `ended` |
+| `price_type` | string | 按价格类型筛选 | `free`（免费） / `paid`（付费） |
+| `q` | string | 关键词搜索（标题+描述） | `Go`、`Docker` |
 
 详细任务跟踪见 [mvp_task.md](mvp_task.md)。
+
+---
+
+## 核心流程
+
+### 1. 活动发布
+
+```
+创建活动 (POST /api/events) → 设置门票 (POST /api/events/{id}/tickets)
+→ 活动状态为 published → 对外开放报名
+```
+
+### 2. 用户报名
+
+```
+用户报名 (POST /api/events/{id}/register)
+  ├── 可选传入 ticket_id 关联门票
+  ├── 关联门票时自动扣减库存（原子操作，事务保障）
+  ├── 不传 ticket_id → 纯报名，不涉及门票
+  └── 超出容量 / 重复报名 / 门票售罄 → 明确错误提示
+```
+
+### 3. 活动讨论
+
+```
+报名成功 → 获得发帖/回复权限
+发帖 (POST /api/events/{id}/posts) → 需传入报名时的 contact 验证
+回复 (POST /api/events/{id}/posts/{postId}/replies) → 同上
+```
+
+### 4. 活动管理
+
+```
+编辑活动 (PUT /api/events/{id}) → 局部更新，支持改标题/时间/状态等
+删除活动 (DELETE /api/events/{id}) → 事务级联清理：
+  回复 → 帖子 → 门票 → 报名 → 活动
+```
 
 ---
 
@@ -96,15 +189,21 @@ GET    /api/events/{id}/registrations   报名列表
 
 ```
 event_go/
-├── main.go       # 入口：组装依赖、注册路由、启动服务
-├── types.go      # 数据模型：结构体定义、哨兵错误
-├── store.go      # 数据层：SQLite 操作、建表迁移
-├── handlers.go   # HTTP 层：请求处理、参数校验、响应
-├── go.mod        # Go 模块定义
-├── go.sum        # 依赖锁文件
-├── Dockerfile    # 多阶段构建
-├── README.md     # 项目文档
-└── mvp_task.md   # 任务跟踪
+├── main.go            # 入口：组装依赖、注册路由、启动服务、优雅关闭
+├── types.go           # 数据模型：结构体定义、哨兵错误、常量
+├── store.go           # 数据层：SQLite 建表迁移、所有 CRUD 方法
+├── handlers.go        # HTTP 层：请求处理、参数校验、权限检查、中间件
+├── go.mod             # Go 模块定义
+├── go.sum             # 依赖锁文件
+├── Dockerfile         # 多阶段构建（Go 1.25 → Alpine 3.19）
+├── .gitignore         # 忽略编译产物和数据库文件
+├── README.md          # 项目文档
+├── mvp_task.md        # 任务跟踪
+└── test_reports/      # 阶段测试报告存档
+    ├── v2.0_sqlite_2026-04-25.md
+    ├── v2.1_discussion_2026-04-25.md
+    ├── v3.0_tickets_2026-04-25.md
+    └── observation_report_2026-04-25.md
 ```
 
 ### 依赖注入设计
@@ -113,7 +212,7 @@ event_go/
 main.go
   │  创建 Store（数据层）
   │  创建 Handler（HTTP 层），注入 Store
-  │  注册路由，启动服务
+  │  注册路由，启动服务（监听 SIGINT/SIGTERM 优雅关闭）
   │
   ├──→ Store          ← 封装所有数据库操作
   │      (CreateEvent, ListEvents, GetEvent, ...)
@@ -126,8 +225,7 @@ main.go
 
 - `main.go` 创建 `Store`，再创建 `Handler` 把 `Store` 注入进去
 - `Handler` 的方法直接调用 `h.store.Xxx()`，不走全局变量
-- 加新功能时：`types.go` 加结构体 → `store.go` 加方法 → `handlers.go` 加处理器
-- 每个文件 150-200 行，职责单一
+- 加新功能时：`types.go` 加结构体 → `store.go` 加方法 → `handlers.go` 加处理器 → `main.go` 加路由
 
 ### 技术选型
 
@@ -135,4 +233,13 @@ main.go
 |------|------|
 | Go 标准库路由 | Go 1.25 路由语法（`"POST /api/events/{id}/register"`），零外部依赖 |
 | SQLite（modernc.org/sqlite） | 纯 Go 实现，零 CGO，嵌入式，单文件数据库 |
-| 多阶段 Docker 构建 | 最终镜像 23.6MB，Go 1.25 → Alpine 3.19 |
+| 多阶段 Docker 构建 | 最终镜像 23.7MB，Go 1.25 → Alpine 3.19 |
+
+### 数据一致性保障
+
+| 场景 | 机制 |
+|------|------|
+| 并发报名超卖 | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作 |
+| 门票库存超卖 | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected` |
+| 删除活动数据残留 | 事务级联删除：replies → posts → tickets → registrations → events |
+| 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |

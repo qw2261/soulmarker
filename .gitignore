@@ -14,5 +14,9 @@ AGENTS.md
 # Go build
 event_go/event-go
 
+# Go database files
+event_go/data/
+event_go/*.db
+
 # Test reports (archived)
 event_go/test_reports/
