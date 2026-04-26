@@ -113,7 +113,7 @@ Event (活动)
 
 ## 当前进度
 
-**v4.1** — 综合优化（配置集中管理 + 测试覆盖增强 + 代码注释完善），共 **17 个 API 接口**。
+**v4.2** — handler 测试覆盖率提升至 75%+，共 **17 个 API 接口**。
 
 ```
 POST   /api/events                          创建活动
@@ -276,8 +276,8 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
-| 测试用例 | **66**（Store 32 + Handler 34） |
-| 覆盖率 | **67.8%** |
+| 测试用例 | **81**（Store 32 + Handler 49） |
+| 覆盖率 | **75.2%** |
 | 静态检查 | `go vet ./...` 无警告 |
 
 **测试命令**：
