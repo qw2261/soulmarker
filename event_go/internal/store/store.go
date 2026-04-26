@@ -25,6 +25,13 @@ func (s *Store) Close() error {
 	return nil
 }
 
+func (s *Store) Ping() error {
+	if s.db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+	return s.db.Ping()
+}
+
 func NewStore(dbPath string) *Store {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

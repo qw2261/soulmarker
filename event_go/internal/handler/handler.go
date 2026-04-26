@@ -20,11 +20,20 @@ func getAdminToken() string {
 }
 
 type Handler struct {
-	store *store.Store
+	store     *store.Store
+	startTime time.Time
+	version   string
 }
 
 func NewHandler(s *store.Store) *Handler {
-	return &Handler{store: s}
+	return &Handler{store: s, startTime: time.Now(), version: getVersion()}
+}
+
+func getVersion() string {
+	if v := os.Getenv("VERSION"); v != "" {
+		return v
+	}
+	return "dev"
 }
 
 func parseEventID(r *http.Request) (int64, error) {
@@ -552,6 +561,32 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "门票已删除"})
+}
+
+func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	dbStatus := "connected"
+	var dbError string
+	if err := h.store.Ping(); err != nil {
+		dbStatus = "disconnected"
+		dbError = err.Error()
+	}
+
+	status := "ok"
+	if dbStatus == "disconnected" {
+		status = "degraded"
+	}
+
+	data := map[string]interface{}{
+		"status":         status,
+		"version":        h.version,
+		"uptime_seconds": int64(time.Since(h.startTime).Seconds()),
+		"db":             dbStatus,
+	}
+	if dbError != "" {
+		data["db_error"] = dbError
+	}
+
+	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: data})
 }
 
 func CORS(next http.Handler) http.Handler {

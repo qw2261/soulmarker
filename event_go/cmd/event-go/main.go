@@ -56,15 +56,18 @@ func main() {
 	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
 	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
 
+	mux.HandleFunc("GET /health", h.HealthHandler)
+
 	port := getPort()
 	addr := ":" + port
 	server := &http.Server{
 		Addr:    addr,
-		Handler: handler.CORS(mux),
+		Handler: handler.LoggingMiddleware(handler.CORS(mux)),
 	}
 
 	log.Printf("亦闻 event-go 服务启动，监听端口 %s", port)
 	log.Printf("API 文档：")
+	log.Printf("  GET    /health                               健康检查")
 	log.Printf("  POST   /api/events                          创建活动 🔐")
 	log.Printf("  GET    /api/events                          活动列表")
 	log.Printf("  GET    /api/events/{id}                     活动详情")

@@ -113,7 +113,7 @@ Event (活动)
 
 ## 当前进度
 
-**v3.1** — 活动列表支持筛选与搜索，共 **17 个 API 接口**。
+**v4.0** — 自动化测试体系 + `internal/` 分层架构，共 **17 个 API 接口**。
 
 ```
 POST   /api/events                          创建活动
@@ -195,10 +195,10 @@ event_go/
 ├── internal/
 │   ├── handler/
 │   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查、中间件
-│   │   └── handler_test.go      # Handler 集成测试
+│   │   └── handler_test.go      # Handler 集成测试（34 个用例）
 │   ├── store/
-│   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法
-│   │   └── store_test.go        # Store 单元测试
+│   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法、事务管理
+│   │   └── store_test.go        # Store 单元测试（32 个用例）
 │   └── model/
 │       └── types.go             # 数据模型：结构体定义、哨兵错误、常量
 ├── data/                        # 数据库文件（运行时生成）
@@ -249,7 +249,7 @@ main.go
 
 - `main.go` 创建 `Store`，再创建 `Handler` 把 `Store` 注入进去
 - `Handler` 的方法直接调用 `h.store.Xxx()`，不走全局变量
-- 加新功能时：`types.go` 加结构体 → `store.go` 加方法 → `handlers.go` 加处理器 → `main.go` 加路由
+- 加新功能时：`model/` 加结构体 → `store/` 加方法 → `handler/` 加处理器 → `cmd/` 加路由
 
 ### 技术选型
 
@@ -267,4 +267,21 @@ main.go
 | 门票库存超卖   | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected`          |
 | 删除活动数据残留 | 事务级联删除：replies → posts → tickets → registrations → events |
 | 数据库连接泄漏  | `Store.Close()` + `defer` + 信号监听优雅关闭                      |
+
+### 自动化测试
+
+| 指标 | 结果 |
+|------|------|
+| 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
+| 测试用例 | **66**（Store 32 + Handler 34） |
+| 覆盖率 | **67.0%** |
+| 静态检查 | `go vet ./...` 无警告 |
+
+**测试命令**：
+
+```bash
+cd event_go && go test -v -count=1 ./...   # 运行所有测试
+cd event_go && go test -cover ./...         # 查看覆盖率
+cd event_go && go vet ./...                 # 静态检查
+```
 

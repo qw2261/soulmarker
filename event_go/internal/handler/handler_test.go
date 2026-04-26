@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,8 +36,9 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
 	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
 	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
+	mux.HandleFunc("GET /health", h.HealthHandler)
 
-	server := httptest.NewServer(CORS(mux))
+	server := httptest.NewServer(LoggingMiddleware(CORS(mux)))
 	t.Cleanup(func() {
 		server.Close()
 		s.Close()
@@ -788,5 +791,127 @@ func TestFilterEventsByPriceTypeHandler(t *testing.T) {
 	events := apiResp.Data.([]interface{})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event, got %d", len(events))
+	}
+}
+
+func TestHealthHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if apiResp.Code != 200 {
+		t.Fatalf("expected code 200, got %d", apiResp.Code)
+	}
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+
+	if data["status"] != "ok" {
+		t.Errorf("expected status ok, got %v", data["status"])
+	}
+	if data["version"] != "dev" {
+		t.Errorf("expected version dev, got %v", data["version"])
+	}
+	if data["db"] != "connected" {
+		t.Errorf("expected db connected, got %v", data["db"])
+	}
+	uptime, ok := data["uptime_seconds"].(float64)
+	if !ok {
+		t.Errorf("expected uptime_seconds to be number, got %T", data["uptime_seconds"])
+	} else if uptime < 0 {
+		t.Errorf("expected uptime_seconds >= 0, got %v", uptime)
+	}
+}
+
+func TestHealthHandlerResponseStructure(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	h.HealthHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+
+	requiredFields := []string{"status", "version", "uptime_seconds", "db"}
+	for _, field := range requiredFields {
+		if _, exists := data[field]; !exists {
+			t.Errorf("expected field %q in response", field)
+		}
+	}
+}
+
+func TestResponseWriterCapturesStatusCode(t *testing.T) {
+	rw := &responseWriter{ResponseWriter: httptest.NewRecorder(), statusCode: http.StatusOK}
+
+	if rw.statusCode != http.StatusOK {
+		t.Fatalf("expected initial status %d, got %d", http.StatusOK, rw.statusCode)
+	}
+
+	rw.WriteHeader(http.StatusNotFound)
+	if rw.statusCode != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, rw.statusCode)
+	}
+
+	rw.WriteHeader(http.StatusInternalServerError)
+	if rw.statusCode != http.StatusInternalServerError {
+		t.Errorf("expected status %d after overwrite, got %d", http.StatusInternalServerError, rw.statusCode)
+	}
+}
+
+func TestLoggingMiddlewarePassesThrough(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"code":201}`))
+	})
+
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(`{"data":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	var buf bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(originalLogger)
+
+	w := httptest.NewRecorder()
+	LoggingMiddleware(next).ServeHTTP(w, req)
+
+	result := w.Result()
+	defer result.Body.Close()
+
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", result.StatusCode)
+	}
+
+	if !bytes.Contains(buf.Bytes(), []byte(`"status":201`)) {
+		t.Errorf("expected log to contain status 201, got: %s", buf.String())
 	}
 }
