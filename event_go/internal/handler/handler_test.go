@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -913,5 +914,199 @@ func TestLoggingMiddlewarePassesThrough(t *testing.T) {
 
 	if !bytes.Contains(buf.Bytes(), []byte(`"status":201`)) {
 		t.Errorf("expected log to contain status 201, got: %s", buf.String())
+	}
+}
+
+func TestHealthHandlerDBDisconnected(t *testing.T) {
+	s := store.NewStore(":memory:")
+	h := NewHandler(s)
+	s.Close()
+
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	h.HealthHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+
+	data := apiResp.Data.(map[string]interface{})
+	if data["status"] != "degraded" {
+		t.Errorf("expected status degraded, got %v", data["status"])
+	}
+	if data["db"] != "disconnected" {
+		t.Errorf("expected db disconnected, got %v", data["db"])
+	}
+	if _, exists := data["db_error"]; !exists {
+		t.Errorf("expected db_error field in response")
+	}
+}
+
+func TestMiddlewareChainOrder(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	handler := NewHandler(s)
+
+	t.Setenv("ADMIN_TOKEN", "test-token")
+	defer func() { t.Setenv("ADMIN_TOKEN", "") }()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/events", AdminAuth(http.HandlerFunc(handler.CreateEvent)).ServeHTTP)
+
+	server := httptest.NewServer(LoggingMiddleware(CORS(mux)))
+	defer server.Close()
+
+	req, _ := http.NewRequest("POST", server.URL+"/api/events",
+		strings.NewReader(`{"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer test-token")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	if resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("expected CORS header *, got %q", resp.Header.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestErrorResponseFormat(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, _ := http.Get(srv.URL + "/api/events/999")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("expected valid JSON: %v", err)
+	}
+
+	if apiResp.Code != 404 {
+		t.Errorf("expected code 404, got %d", apiResp.Code)
+	}
+	if apiResp.Message == "" {
+		t.Errorf("expected non-empty message, got %q", apiResp.Message)
+	}
+	if apiResp.Data != nil {
+		t.Errorf("expected nil data for error response, got %v", apiResp.Data)
+	}
+}
+
+func TestCORSOriginEnvConfig(t *testing.T) {
+	originalOrigin := os.Getenv("CORS_ORIGIN")
+	t.Setenv("CORS_ORIGIN", "https://example.com")
+	defer func() {
+		if originalOrigin != "" {
+			t.Setenv("CORS_ORIGIN", originalOrigin)
+		} else {
+			os.Unsetenv("CORS_ORIGIN")
+		}
+	}()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	server := httptest.NewServer(CORS(mux))
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/test")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.Header.Get("Access-Control-Allow-Origin") != "https://example.com" {
+		t.Errorf("expected CORS origin https://example.com, got %q", resp.Header.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestSearchKeywordBoundary(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"title":"Test Event","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
+
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{"empty query", srv.URL + "/api/events?q="},
+		{"no query param", srv.URL + "/api/events"},
+		{"special characters", srv.URL + "/api/events?q=!@#$%"},
+		{"long keyword", srv.URL + "/api/events?q=" + strings.Repeat("a", 100)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := http.Get(tt.query)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("expected 200, got %d for case %q", resp.StatusCode, tt.name)
+			}
+		})
+	}
+}
+
+func TestCORSPreflightRequest(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("OPTIONS", srv.URL+"/api/events", nil)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("preflight request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("expected 204 for preflight, got %d", resp.StatusCode)
+	}
+
+	if resp.Header.Get("Access-Control-Allow-Methods") == "" {
+		t.Errorf("expected Access-Control-Allow-Methods header")
+	}
+}
+
+func TestLoggingMiddlewareIPExtraction(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	var buf bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	defer slog.SetDefault(originalLogger)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Forwarded-For", "192.168.1.100")
+
+	w := httptest.NewRecorder()
+	LoggingMiddleware(next).ServeHTTP(w, req)
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, `"ip":"192.168.1.100"`) {
+		t.Errorf("expected IP 192.168.1.100 in log, got: %s", logOutput)
 	}
 }
