@@ -1111,3 +1111,317 @@ func TestLoggingMiddlewareIPExtraction(t *testing.T) {
 		t.Errorf("expected IP 192.168.1.100 in log, got: %s", logOutput)
 	}
 }
+
+func TestGetTicketHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"title":"获取门票测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+	eventData := created.Data.(map[string]interface{})
+	eid := int64(eventData["id"].(float64))
+
+	s := store.NewStore(":memory:")
+	h := NewHandler(s)
+	ticket := &model.Ticket{EventID: eid, Name: "测试票", Price: 10, Stock: 5}
+	s.CreateTicket(ticket)
+
+	req := httptest.NewRequest("GET", "/api/events/"+itoa64(eid)+"/tickets/"+itoa64(ticket.ID), nil)
+	w := httptest.NewRecorder()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
+	mux.ServeHTTP(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	if apiResp.Code != 200 {
+		t.Errorf("expected code 200, got %d", apiResp.Code)
+	}
+	s.Close()
+}
+
+func TestGetTicketNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/events/999/tickets/999", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetTicketInvalidID(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+
+	req := httptest.NewRequest("GET", "/api/events/abc/tickets/1", nil)
+	w := httptest.NewRecorder()
+	h.GetTicket(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateTicketNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/events/999/tickets/999",
+		strings.NewReader(`{"name":"新名称"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateTicketInvalidBody(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+	ticket := &model.Ticket{EventID: 1, Name: "原始", Price: 10, Stock: 5}
+	s.CreateTicket(ticket)
+
+	req := httptest.NewRequest("PUT", "/api/events/1/tickets/"+itoa64(ticket.ID),
+		strings.NewReader(`invalid json`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.UpdateTicket(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteTicketNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/events/999/tickets/999", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteTicketInvalidID(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+
+	req := httptest.NewRequest("DELETE", "/api/events/abc/tickets/1", nil)
+	w := httptest.NewRecorder()
+	h.DeleteTicket(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestListTicketsEmpty(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"title":"无门票活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+	eventData := created.Data.(map[string]interface{})
+	eid := int64(eventData["id"].(float64))
+
+	resp, _ := http.Get(srv.URL + "/api/events/" + itoa64(eid) + "/tickets")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, ok := apiResp.Data.([]interface{})
+	if !ok {
+		t.Fatalf("expected array data, got %T", apiResp.Data)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected 0 tickets, got %d", len(data))
+	}
+}
+
+func TestCreateReplyNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("POST", srv.URL+"/api/events/999/posts/1/replies",
+		strings.NewReader(`{"contact":"test@test.com","content":"回复"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateReplyInvalidBody(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+	e := &model.Event{Title: "test", EventTime: "2026-12-31T18:00:00+08:00", Location: "线上", Capacity: 10, Status: "published"}
+	s.CreateEvent(e)
+	p := &model.Post{EventID: e.ID, AuthorName: "testuser", Content: "帖子"}
+	s.CreatePost(p)
+
+	req := httptest.NewRequest("POST", "/api/events/"+itoa64(e.ID)+"/posts/"+itoa64(p.ID)+"/replies",
+		strings.NewReader(`invalid`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.CreateReply(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetPostNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/events/999/posts/999", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestListPostsEmpty(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"title":"无帖子活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+	eventData := created.Data.(map[string]interface{})
+	eid := int64(eventData["id"].(float64))
+
+	resp, _ := http.Get(srv.URL + "/api/events/" + itoa64(eid) + "/posts")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, ok := apiResp.Data.([]interface{})
+	if !ok {
+		t.Fatalf("expected array data, got %T", apiResp.Data)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected 0 posts, got %d", len(data))
+	}
+}
+
+func TestListRegistrationsEmpty(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"title":"无报名活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+	eventData := created.Data.(map[string]interface{})
+	eid := int64(eventData["id"].(float64))
+
+	resp, _ := http.Get(srv.URL + "/api/events/" + itoa64(eid) + "/registrations")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	defer resp.Body.Close()
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, ok := apiResp.Data.([]interface{})
+	if !ok {
+		t.Fatalf("expected array data, got %T", apiResp.Data)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected 0 registrations, got %d", len(data))
+	}
+}
+
+func TestUpdateEventInvalidBody(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+	e := &model.Event{Title: "test", EventTime: "2026-12-31T18:00:00+08:00", Location: "线上", Capacity: 10, Status: "draft"}
+	s.CreateEvent(e)
+
+	req := httptest.NewRequest("PUT", "/api/events/"+itoa64(e.ID), strings.NewReader(`invalid`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.UpdateEvent(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteEventNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/events/999", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
