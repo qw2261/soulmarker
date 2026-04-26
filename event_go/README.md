@@ -113,7 +113,7 @@ Event (活动)
 
 ## 当前进度
 
-**v4.0** — 自动化测试体系 + `internal/` 分层架构，共 **17 个 API 接口**。
+**v4.1** — 综合优化（配置集中管理 + 测试覆盖增强 + 代码注释完善），共 **17 个 API 接口**。
 
 ```
 POST   /api/events                          创建活动
@@ -193,9 +193,12 @@ event_go/
 │   └── event-go/
 │       └── main.go              # 入口：组装依赖、注册路由、启动服务、优雅关闭
 ├── internal/
+│   ├── config/
+│   │   └── config.go            # 配置管理：环境变量统一加载
 │   ├── handler/
 │   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查、中间件
-│   │   └── handler_test.go      # Handler 集成测试（34 个用例）
+│   │   ├── handler_test.go      # Handler 集成测试（34 个用例）
+│   │   └── middleware.go        # 中间件：日志、CORS、管理员认证
 │   ├── store/
 │   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法、事务管理
 │   │   └── store_test.go        # Store 单元测试（32 个用例）
@@ -274,7 +277,7 @@ main.go
 |------|------|
 | 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
 | 测试用例 | **66**（Store 32 + Handler 34） |
-| 覆盖率 | **67.0%** |
+| 覆盖率 | **67.8%** |
 | 静态检查 | `go vet ./...` 无警告 |
 
 **测试命令**：
