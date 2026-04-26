@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -1049,7 +1050,7 @@ func TestSearchKeywordBoundary(t *testing.T) {
 	}{
 		{"empty query", srv.URL + "/api/events?q="},
 		{"no query param", srv.URL + "/api/events"},
-		{"special characters", srv.URL + "/api/events?q=!@#$%"},
+		{"special characters", srv.URL + "/api/events?q=" + url.QueryEscape("!@#$%")},
 		{"long keyword", srv.URL + "/api/events?q=" + strings.Repeat("a", 100)},
 	}
 
