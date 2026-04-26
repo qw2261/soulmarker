@@ -19,7 +19,21 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 func init() {
 	format := os.Getenv("LOG_FORMAT")
-	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	levelStr := os.Getenv("LOG_LEVEL")
+
+	var level slog.Level
+	switch levelStr {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: level}
 	if format == "text" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
 	} else {

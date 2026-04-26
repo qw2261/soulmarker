@@ -116,6 +116,10 @@ func (s *Store) migrate() {
 			FOREIGN KEY (event_id) REFERENCES events(id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_tickets_event ON tickets(event_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_posts_event_created ON posts(event_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(event_id, created_at)`,
 	}
 
 	for _, q := range queries {
