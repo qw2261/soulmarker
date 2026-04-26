@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/qw2261/soulmarker/event_go/internal/config"
 )
 
 type responseWriter struct {
@@ -18,8 +20,8 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func init() {
-	format := os.Getenv("LOG_FORMAT")
-	levelStr := os.Getenv("LOG_LEVEL")
+	cfg := config.Load()
+	levelStr := cfg.LogLevel
 
 	var level slog.Level
 	switch levelStr {
@@ -34,7 +36,7 @@ func init() {
 	}
 
 	opts := &slog.HandlerOptions{Level: level}
-	if format == "text" {
+	if cfg.LogFormat == "text" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, opts)))
 	} else {
 		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, opts)))

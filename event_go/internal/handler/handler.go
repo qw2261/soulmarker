@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
@@ -17,7 +17,7 @@ const timeParseMsg = "格式错误，请使用 RFC3339 格式，例如：2026-12
 
 // getAdminToken 从环境变量获取管理员令牌，用于保护需要管理员权限的API
 func getAdminToken() string {
-	return os.Getenv("ADMIN_TOKEN")
+	return config.Load().AdminToken
 }
 
 // Handler 负责处理HTTP请求，协调store层进行数据操作
@@ -34,10 +34,7 @@ func NewHandler(s *store.Store) *Handler {
 
 // getVersion 获取服务版本，默认"dev"，可通过VERSION环境变量配置
 func getVersion() string {
-	if v := os.Getenv("VERSION"); v != "" {
-		return v
-	}
-	return "dev"
+	return config.Load().Version
 }
 
 // parseEventID 从URL路径中解析活动ID
@@ -615,7 +612,8 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 
 // CORS 中间件，处理跨域请求，支持通过CORS_ORIGIN环境变量配置允许的来源
 func CORS(next http.Handler) http.Handler {
-	allowedOrigin := os.Getenv("CORS_ORIGIN")
+	cfg := config.Load()
+	allowedOrigin := cfg.CORSOrigin
 	if allowedOrigin == "" {
 		allowedOrigin = "*"
 	}
