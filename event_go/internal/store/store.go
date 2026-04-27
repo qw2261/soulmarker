@@ -159,32 +159,46 @@ func (s *Store) CreateEvent(e *model.Event) error {
 	return nil
 }
 
-func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*model.Event, error) {
-	query := `SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
-			FROM events WHERE 1=1`
+func buildEventsQuery(status string, priceType string, keyword string) (string, []interface{}) {
+	where := " WHERE 1=1"
 	var args []interface{}
 
 	if status != "" {
-		query += " AND status = ?"
+		where += " AND status = ?"
 		args = append(args, status)
 	}
-
 	if priceType == "free" {
-		query += " AND price = 0"
+		where += " AND price = 0"
 	} else if priceType == "paid" {
-		query += " AND price > 0"
+		where += " AND price > 0"
 	}
-
 	if keyword != "" {
-		query += " AND (title LIKE ? OR description LIKE ?)"
+		where += " AND (title LIKE ? OR description LIKE ?)"
 		args = append(args, "%"+keyword+"%", "%"+keyword+"%")
 	}
+	return where, args
+}
 
-	query += " ORDER BY created_at DESC"
+func (s *Store) ListEvents(status string, priceType string, keyword string, offset, limit int) ([]*model.Event, int, error) {
+	where, args := buildEventsQuery(status, priceType, keyword)
+
+	var total int
+	countArgs := make([]interface{}, len(args))
+	copy(countArgs, args)
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM events"+where, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询活动总数失败: %w", err)
+	}
+
+	query := `SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
+		FROM events` + where + ` ORDER BY created_at DESC`
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("查询活动列表失败: %w", err)
+		return nil, 0, fmt.Errorf("查询活动列表失败: %w", err)
 	}
 	defer rows.Close()
 
@@ -194,16 +208,16 @@ func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*
 		var createdAt, updatedAt string
 		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.EventTime, &e.Location,
 			&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt); err != nil {
-			return nil, fmt.Errorf("读取活动记录失败: %w", err)
+			return nil, 0, fmt.Errorf("读取活动记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析活动创建时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析活动创建时间失败: %w", err)
 		}
 		e.CreatedAt = createdAtTime
 		updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析活动更新时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析活动更新时间失败: %w", err)
 		}
 		e.UpdatedAt = updatedAtTime
 		events = append(events, e)
@@ -212,7 +226,7 @@ func (s *Store) ListEvents(status string, priceType string, keyword string) ([]*
 	if events == nil {
 		events = []*model.Event{}
 	}
-	return events, nil
+	return events, total, nil
 }
 
 func (s *Store) GetEvent(id int64) (*model.Event, error) {
@@ -416,13 +430,23 @@ func (s *Store) Register(r *model.Registration) error {
 	return nil
 }
 
-func (s *Store) ListRegistrations(eventID int64) ([]*model.Registration, error) {
-	rows, err := s.db.Query(
-		`SELECT id, event_id, name, contact, created_at
-		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`, eventID,
-	)
+func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Registration, int, error) {
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询报名总数失败: %w", err)
+	}
+
+	query := `SELECT id, event_id, name, contact, created_at
+		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`
+	args := []interface{}{eventID}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("查询报名列表失败: %w", err)
+		return nil, 0, fmt.Errorf("查询报名列表失败: %w", err)
 	}
 	defer rows.Close()
 
@@ -431,11 +455,11 @@ func (s *Store) ListRegistrations(eventID int64) ([]*model.Registration, error) 
 		r := &model.Registration{}
 		var createdAt string
 		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Contact, &createdAt); err != nil {
-			return nil, fmt.Errorf("读取报名记录失败: %w", err)
+			return nil, 0, fmt.Errorf("读取报名记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析报名时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析报名时间失败: %w", err)
 		}
 		r.CreatedAt = createdAtTime
 		registrations = append(registrations, r)
@@ -444,7 +468,7 @@ func (s *Store) ListRegistrations(eventID int64) ([]*model.Registration, error) 
 	if registrations == nil {
 		registrations = []*model.Registration{}
 	}
-	return registrations, nil
+	return registrations, total, nil
 }
 
 func isUniqueConstraintError(err error) bool {
@@ -484,14 +508,24 @@ func (s *Store) CreatePost(p *model.Post) error {
 	return nil
 }
 
-func (s *Store) ListPosts(eventID int64) ([]*model.Post, error) {
-	rows, err := s.db.Query(
-		`SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
+func (s *Store) ListPosts(eventID int64, offset, limit int) ([]*model.Post, int, error) {
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询帖子总数失败: %w", err)
+	}
+
+	query := `SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
 		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
-		 FROM posts p WHERE p.event_id = ? ORDER BY p.created_at DESC`, eventID,
-	)
+		 FROM posts p WHERE p.event_id = ? ORDER BY p.created_at DESC`
+	args := []interface{}{eventID}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("查询帖子列表失败: %w", err)
+		return nil, 0, fmt.Errorf("查询帖子列表失败: %w", err)
 	}
 	defer rows.Close()
 
@@ -501,11 +535,11 @@ func (s *Store) ListPosts(eventID int64) ([]*model.Post, error) {
 		var createdAt string
 		if err := rows.Scan(&p.ID, &p.EventID, &p.AuthorName, &p.Title, &p.Content,
 			&createdAt, &p.ReplyCount); err != nil {
-			return nil, fmt.Errorf("读取帖子记录失败: %w", err)
+			return nil, 0, fmt.Errorf("读取帖子记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析帖子创建时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析帖子创建时间失败: %w", err)
 		}
 		p.CreatedAt = createdAtTime
 		posts = append(posts, p)
@@ -514,7 +548,7 @@ func (s *Store) ListPosts(eventID int64) ([]*model.Post, error) {
 	if posts == nil {
 		posts = []*model.Post{}
 	}
-	return posts, nil
+	return posts, total, nil
 }
 
 func (s *Store) GetPost(postID int64) (*model.Post, error) {
@@ -610,13 +644,23 @@ func (s *Store) CreateTicket(t *model.Ticket) error {
 	return nil
 }
 
-func (s *Store) ListTickets(eventID int64) ([]*model.Ticket, error) {
-	rows, err := s.db.Query(
-		`SELECT id, event_id, name, price, stock, created_at, updated_at
-		 FROM tickets WHERE event_id = ? ORDER BY created_at ASC`, eventID,
-	)
+func (s *Store) ListTickets(eventID int64, offset, limit int) ([]*model.Ticket, int, error) {
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询门票总数失败: %w", err)
+	}
+
+	query := `SELECT id, event_id, name, price, stock, created_at, updated_at
+		 FROM tickets WHERE event_id = ? ORDER BY created_at ASC`
+	args := []interface{}{eventID}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("查询门票列表失败: %w", err)
+		return nil, 0, fmt.Errorf("查询门票列表失败: %w", err)
 	}
 	defer rows.Close()
 
@@ -625,16 +669,16 @@ func (s *Store) ListTickets(eventID int64) ([]*model.Ticket, error) {
 		t := &model.Ticket{}
 		var createdAt, updatedAt string
 		if err := rows.Scan(&t.ID, &t.EventID, &t.Name, &t.Price, &t.Stock, &createdAt, &updatedAt); err != nil {
-			return nil, fmt.Errorf("读取门票记录失败: %w", err)
+			return nil, 0, fmt.Errorf("读取门票记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析门票创建时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析门票创建时间失败: %w", err)
 		}
 		t.CreatedAt = createdAtTime
 		updatedAtTime, err := time.Parse(model.TimeFormat, updatedAt)
 		if err != nil {
-			return nil, fmt.Errorf("解析门票更新时间失败: %w", err)
+			return nil, 0, fmt.Errorf("解析门票更新时间失败: %w", err)
 		}
 		t.UpdatedAt = updatedAtTime
 		tickets = append(tickets, t)
@@ -643,7 +687,7 @@ func (s *Store) ListTickets(eventID int64) ([]*model.Ticket, error) {
 	if tickets == nil {
 		tickets = []*model.Ticket{}
 	}
-	return tickets, nil
+	return tickets, total, nil
 }
 
 func (s *Store) GetTicket(ticketID int64) (*model.Ticket, error) {

@@ -113,25 +113,26 @@ Event (活动)
 
 ## 当前进度
 
-**v4.2** — handler 测试覆盖率提升至 75%+，共 **17 个 API 接口**。
+**v4.3** — 分页功能上线，共 **17 个 API 接口**。
 
 ```
-POST   /api/events                          创建活动
-GET    /api/events[?status=&price_type=&q=] 活动列表（支持筛选搜索）
-GET    /api/events/{id}                     活动详情
-PUT    /api/events/{id}                     编辑活动
-DELETE /api/events/{id}                     删除活动
-POST   /api/events/{id}/register            报名活动
-GET    /api/events/{id}/registrations       报名列表
-POST   /api/events/{id}/posts               发帖（需已报名）
-GET    /api/events/{id}/posts               帖子列表
-GET    /api/events/{id}/posts/{postId}      帖子详情（含回复）
-POST   /api/events/{id}/posts/{postId}/replies 回复帖子（需已报名）
-POST   /api/events/{id}/tickets             创建门票
-GET    /api/events/{id}/tickets             门票列表
-GET    /api/events/{id}/tickets/{ticketId}  门票详情
-PUT    /api/events/{id}/tickets/{ticketId}  编辑门票
-DELETE /api/events/{id}/tickets/{ticketId}  删除门票
+POST   /api/events                                    创建活动 🔐
+GET    /api/events[?status=&price_type=&q=&page=&page_size=] 活动列表（筛选 + 分页）
+GET    /api/events/{id}                               活动详情
+PUT    /api/events/{id}                               编辑活动 🔐
+DELETE /api/events/{id}                               删除活动 🔐
+POST   /api/events/{id}/register                      报名活动
+GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）
+POST   /api/events/{id}/posts                         发帖（需已报名）
+GET    /api/events/{id}/posts[?page=&page_size=]      帖子列表（分页）
+GET    /api/events/{id}/posts/{postId}                帖子详情（含回复）
+POST   /api/events/{id}/posts/{postId}/replies        回复帖子（需已报名）
+POST   /api/events/{id}/tickets                       创建门票 🔐
+GET    /api/events/{id}/tickets[?page=&page_size=]    门票列表（分页）
+GET    /api/events/{id}/tickets/{ticketId}            门票详情
+PUT    /api/events/{id}/tickets/{ticketId}            编辑门票 🔐
+DELETE /api/events/{id}/tickets/{ticketId}            删除门票 🔐
+GET    /health                                        健康检查
 ```
 
 **活动列表筛选参数**：
@@ -141,6 +142,15 @@ DELETE /api/events/{id}/tickets/{ticketId}  删除门票
 | `status`     | string | 按状态筛选        | `draft` / `published` / `cancelled` / `ended` |
 | `price_type` | string | 按价格类型筛选      | `free`（免费） / `paid`（付费）                       |
 | `q`          | string | 关键词搜索（标题+描述） | `Go`、`Docker`                                 |
+
+**列表接口分页参数**（活动/报名/帖子/门票）：
+
+| 参数          | 类型 | 默认值 | 说明          |
+| ----------- | ---- | --- | ----------- |
+| `page`      | int  | 1   | 页码，从 1 开始    |
+| `page_size` | int  | 20  | 每页条数，最大 100 |
+
+分页响应额外返回 `total`、`page`、`page_size` 字段。
 
 详细任务跟踪见 [mvp\_task.md](mvp_task.md)。
 
@@ -196,12 +206,12 @@ event_go/
 │   ├── config/
 │   │   └── config.go            # 配置管理：环境变量统一加载
 │   ├── handler/
-│   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查、中间件
-│   │   ├── handler_test.go      # Handler 集成测试（34 个用例）
+│   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查
+│   │   ├── handler_test.go      # Handler 集成测试
 │   │   └── middleware.go        # 中间件：日志、CORS、管理员认证
 │   ├── store/
 │   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法、事务管理
-│   │   └── store_test.go        # Store 单元测试（32 个用例）
+│   │   └── store_test.go        # Store 单元测试
 │   └── model/
 │       └── types.go             # 数据模型：结构体定义、哨兵错误、常量
 ├── data/                        # 数据库文件（运行时生成）
@@ -227,11 +237,9 @@ internal/store/store.go      数据层：SQLite CRUD、事务管理
          │
          v
 internal/model/types.go      模型层：类型定义、哨兵错误、常量
-```
 
-- 单向依赖：`main → handler → store → model`
-- 无循环依赖，各层职责清晰
-- `internal` 包防止外部导入，强制封装
+internal/config/config.go    配置层：环境变量统一管理（横向支撑各层）
+```
 
 ### 依赖注入设计
 
@@ -260,7 +268,7 @@ main.go
 | -------------------------- | ------------------------------------------------------ |
 | Go 标准库路由                   | Go 1.25 路由语法（`"POST /api/events/{id}/register"`），零外部依赖 |
 | SQLite（modernc.org/sqlite） | 纯 Go 实现，零 CGO，嵌入式，单文件数据库                               |
-| 多阶段 Docker 构建              | 最终镜像 23.7MB，Go 1.25 → Alpine 3.19                      |
+| 多阶段 Docker 构建              | 最终镜像约 24MB，Go 1.25 → Alpine 3.19                      |
 
 ### 数据一致性保障
 
@@ -276,8 +284,8 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
-| 测试用例 | **81**（Store 32 + Handler 49） |
-| 覆盖率 | **75.2%** |
+| 测试用例 | **81+**（Store + Handler） |
+| 覆盖率 | **~75%** |
 | 静态检查 | `go vet ./...` 无警告 |
 
 **测试命令**：

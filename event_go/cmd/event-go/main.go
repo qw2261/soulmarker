@@ -9,31 +9,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
 
-const (
-	defaultPort = "8080"
-	defaultDB   = "data/event_go.db"
-)
-
-func getPort() string {
-	if p := os.Getenv("PORT"); p != "" {
-		return p
-	}
-	return defaultPort
-}
-
 func main() {
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = defaultDB
-	}
+	cfg := config.Load()
 
-	s := store.NewStore(dbPath)
+	s := store.NewStore(cfg.DatabasePath)
 	defer s.Close()
-	log.Printf("📦 数据库已初始化: %s", dbPath)
+	log.Printf("📦 数据库已初始化: %s", cfg.DatabasePath)
 
 	h := handler.NewHandler(s)
 	mux := http.NewServeMux()
@@ -58,7 +44,7 @@ func main() {
 
 	mux.HandleFunc("GET /health", h.HealthHandler)
 
-	port := getPort()
+	port := cfg.Port
 	addr := ":" + port
 	server := &http.Server{
 		Addr:    addr,

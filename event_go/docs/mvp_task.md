@@ -117,6 +117,7 @@
 | **十八、监控与日志**     | ✅ 已完成 | 健康检查 + 请求日志中间件，70 个测试用例 |
 | **十九、全面综合评测与优化** | ✅ 已完成 | 代码质量、性能、安全、测试覆盖、架构、部署全面评测 |
 | **二十、综合评测后持续优化** | ✅ 已完成 | 测试覆盖 75.2%、数据库索引、代码注释、配置集中管理等 |
+| **二十一、分页** | ✅ 已完成 | 4 个列表接口支持 page/page_size，返回 total |
 
 ***
 
@@ -761,9 +762,10 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 
 ### 已完成总结
 
-经过 20 个阶段的迭代，当前 **v4.2** 功能摘要：
+经过 20 个阶段的迭代，当前 **v4.3** 功能摘要：
 
 - 17 个 API 接口（活动 CRUD + 报名 + 讨论区 + 门票 + 管理员认证 + 筛选搜索 + 健康检查）
+- 4 个列表接口支持分页（`page` / `page_size`，返回 `total`）
 - SQLite 持久化（WAL 模式 + 事务保障）
 - 管理端 API Token 认证
 - 请求日志中间件（JSON 结构化，分级日志）
@@ -779,19 +781,67 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 | B | 全面综合评测与优化 | 第十九阶段 | 代码质量、性能、安全全面评测 |
 | K | 持续优化 | 第二十阶段 | 测试覆盖 75.2%、数据库索引、代码注释等 |
 
+## 二十一阶段：分页 ✅
+
+- [x] 活动列表 `GET /api/events?page=1&page_size=20` 返回分页数据，含 total
+- [x] 报名列表 `GET /api/events/{id}/registrations?page=1&page_size=20`
+- [x] 帖子列表 `GET /api/events/{id}/posts?page=1&page_size=20`
+- [x] 门票列表 `GET /api/events/{id}/tickets?page=1&page_size=20`
+- [x] 默认 page=1, page_size=20；返回 total 总数
+- [x] 支持 page_size 最大限制（如 100）防止滥用
+- [x] 分页参数校验（page >= 1, page_size 1-100）
+- [x] 测试验证通过
+
+### 验证结果
+
+- [x] `go test -v ./...` 全部通过
+- [x] Docker 构建成功
+
+---
+
+## 🔧 小改动（后续统一处理）
+
+> 以下改动比较小，不单独开阶段，在后续功能开发时顺手完成。
+
+- [x] **main.go 走 config 统一配置** ✅ — `DB_PATH` / `PORT` 改用 `config.Load()` 统一管理，移除 `main.go` 中的 `getPort()` / `defaultDB` 等零散常量。
+
+---
+
 ## 待实现功能（优先级排序）
 
-| 优先级 | 方向 | 说明 |
-|--------|------|------|
-| **P1** | 📄 **分页** | 列表接口（活动/报名/帖子/门票）支持分页 |
-| **P1** | 🛡️ **限流** | 基于 IP 的请求频率限制，防滥用 |
-| **P2** | 📝 **API 文档** | Swagger/OpenAPI 文档生成 |
-| **P2** | 🛠️ **树莓派部署** | Docker ARM64 部署 + 内网穿透 |
-| **P2** | 🖥️ **前端界面** | Web / 小程序，等后端功能稳定后再投入 |
-| **P3** | 🔒 **安全审计** | gosec 代码扫描 + 依赖漏洞检查 |
-| **P3** | 🧪 **并发测试** | race 检测 + 并发场景覆盖 |
-| **P3** | 📤 **数据导出** | 报名记录导出为 CSV |
-| **P4** | 🚀 **CI/CD** | GitHub Actions 自动化构建 |
+### 优先级全景
+
+| 优先级 | 方向 | 类型 | 说明 |
+|--------|------|------|------|
+| **P1** | 📄 **分页** | ✅ 已完成 | 列表接口（活动/报名/帖子/门票）支持分页 |
+| **P1** | 🛡️ **限流** | 现有 | 基于 IP 的请求频率限制，防滥用 |
+| **P1** | ❌ **报名取消** | 🆕 新增 | 用户可取消自己的报名，退还门票库存 |
+| **P2** | 🧪 **并发测试** | 升档 | `go test -race` 检测数据竞争 |
+| **P2** | 🔒 **安全审计** | 升档 | gosec 代码扫描 + 依赖漏洞检查 |
+| **P2** | 📤 **数据导出** | 升档 | 报名记录导出为 CSV |
+| **P2** | 🛠️ **树莓派部署** | 现有 | Docker ARM64 部署 + 内网穿透 |
+| **P2** | 🖥️ **前端界面** | 现有 | Web / 小程序，等后端功能稳定后再投入 |
+| **P2** | 🗑️ **内容删除** | 🆕 新增 | 帖子/回复支持管理端和作者删除 |
+| **P2** | ✅ **联系方式校验** | 🆕 新增 | 报名时对邮箱/手机号格式做基本校验 |
+| **P3** | 📝 **API 文档** | 降档 | Swagger/OpenAPI 文档生成 |
+| **P3** | ⏰ **活动状态自动更新** | 🆕 新增 | 启动时自动将过期活动标记为 ended |
+| **P4** | 🚀 **CI/CD** | 现有 | GitHub Actions 自动化构建 |
+| — | 🖼️ **活动封面图（预留）** | 🆕 长期 | 数据模型预留 `cover_image_url` 字段，避免后续 break change |
+
+### 调整说明
+
+| 调整项 | 原优先级 | 新优先级 | 理由 |
+|--------|----------|----------|------|
+| 并发测试 | P3 | P2 | 一行命令即可跑，现有事务逻辑需要尽早验证正确性 |
+| 安全审计 | P3 | P2 | gosec 也是跑命令的事，部署公网前就该扫 |
+| 数据导出 | P3 | P2 | 活动组织者的刚需，比 API 文档更务实 |
+| API 文档 | P2 | P3 | 纯标准库路由，Swagger 注解兼容性存疑；当前 README 表格 + curl 示例已基本够用 |
+| 报名取消 | — | P1 | 报名了不能取消是体验硬伤，`contact` 天然可做身份识别 |
+| 内容删除 | — | P2 | 讨论区没有内容管理手段会变垃圾场，是内容治理基本能力 |
+| 联系方式校验 | — | P2 | 当前只检查非空，无格式校验，容易产生脏数据 |
+| 活动状态自动更新 | — | P3 | `event_time` 已过但状态还是 `published`，靠人工改容易遗忘 |
+
+---
 
 ## 规划详情
 
@@ -807,10 +857,30 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 - 保护报名、发帖等写接口
 - 可配置 `RATE_LIMIT` 环境变量
 
-### P2. API 文档
+### P1. 报名取消 🆕
 
-- 使用 Swagger 注解生成 OpenAPI 文档
-- 编写部署文档和开发规范
+```
+DELETE /api/events/{id}/register?contact=xxx
+```
+
+- 用户通过 `contact` 定位自己的报名记录并取消
+- 取消后自动退还门票库存（事务内原子操作）
+- 已取消报名的用户在帖子/回复上可标记"已退出"
+
+### P2. 并发测试
+
+- `go test -race` 检测数据竞争
+- 补充并发报名、并发门票扣减场景测试
+
+### P2. 安全审计
+
+- 使用 `gosec` 工具扫描代码
+- 定期检查依赖包安全漏洞（`go list -m -u all`）
+
+### P2. 数据导出
+
+- `GET /api/events/{id}/registrations/export` 导出报名记录
+- 支持 CSV 格式
 
 ### P2. 树莓派部署
 
@@ -833,23 +903,42 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 - 待后端功能稳定后再投入
 - 可考虑 Web / 小程序
 
-### P3. 安全审计
+### P2. 内容删除 🆕
 
-- 使用 `gosec` 工具扫描代码
-- 定期检查依赖包安全漏洞（`go list -m -u all`）
+```
+DELETE /api/events/{id}/posts/{postId}              # 管理端 🔐 或作者（传 contact）
+DELETE /api/events/{id}/posts/{postId}/replies/{replyId}
+```
 
-### P3. 并发测试
+- 管理端可直接删除任何帖子/回复（需 Admin Token）
+- 作者通过 `contact` 校验身份后可删除自己的帖子/回复
+- 删除帖子时级联删除其下所有回复
 
-- `go test -race` 检测数据竞争
-- 补充并发报名、并发门票扣减场景测试
+### P2. 联系方式校验 🆕
 
-### P3. 数据导出
+- 对 `RegisterReq.Contact` 增加格式校验
+- 支持邮箱正则 + 手机号正则（至少匹配一种）
+- 校验失败返回 400 并提示格式要求
 
-- `GET /api/events/{id}/registrations/export` 导出报名记录
-- 支持 CSV 格式
+### P3. API 文档
+
+- 使用 Swagger 注解生成 OpenAPI 文档
+- 编写部署文档和开发规范
+
+### P3. 活动状态自动更新 🆕
+
+- 服务启动时执行：`UPDATE events SET status='ended' WHERE status='published' AND event_time < datetime('now')`
+- 在 `NewStore` / `migrate()` 中加一条 SQL 即可
+- 避免靠管理员手动改状态，过期活动自动归档
 
 ### P4. CI/CD
 
 - 配置 GitHub Actions 工作流
 - 代码提交时自动运行测试 + 构建 Docker 镜像
+
+### 长期关注：活动封面图 🆕
+
+- 在 `Event` 结构体中预留 `cover_image_url` 字段
+- 可在做分页时顺手加上，避免后续 break change
+- 先不实现上传逻辑，仅预留字段 + 数据库列
 

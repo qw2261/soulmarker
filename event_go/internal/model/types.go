@@ -67,9 +67,12 @@ type RegisterReq struct {
 }
 
 type APIResp struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code     int         `json:"code"`
+	Message  string      `json:"message"`
+	Data     interface{} `json:"data,omitempty"`
+	Total    *int        `json:"total,omitempty"`
+	Page     *int        `json:"page,omitempty"`
+	PageSize *int        `json:"page_size,omitempty"`
 }
 
 type Post struct {

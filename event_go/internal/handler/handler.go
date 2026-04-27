@@ -52,6 +52,39 @@ func parseTicketID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("ticketId"), 10, 64)
 }
 
+// parsePagination 从URL查询参数中解析分页参数，默认 page=1, page_size=20，最大 page_size=100
+func parsePagination(r *http.Request) (page, pageSize int) {
+	page = 1
+	pageSize = 20
+
+	if p := r.URL.Query().Get("page"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
+		}
+	}
+	if ps := r.URL.Query().Get("page_size"); ps != "" {
+		if v, err := strconv.Atoi(ps); err == nil && v > 0 {
+			pageSize = v
+			if pageSize > 100 {
+				pageSize = 100
+			}
+		}
+	}
+	return
+}
+
+// paginatedOK 写入带分页信息的成功响应
+func paginatedOK(w http.ResponseWriter, data interface{}, total, page, pageSize int) {
+	writeJSON(w, http.StatusOK, model.APIResp{
+		Code:     200,
+		Message:  "ok",
+		Data:     data,
+		Total:    &total,
+		Page:     &page,
+		PageSize: &pageSize,
+	})
+}
+
 // getEventOr404 根据ID获取活动，若不存在则写入404响应
 func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Event, bool) {
 	event, err := h.store.GetEvent(eventID)
@@ -129,18 +162,20 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "活动创建成功", Data: event})
 }
 
-// ListEvents 返回活动列表，支持按status、price_type、q(关键字)筛选
+// ListEvents 返回活动列表，支持按status、price_type、q(关键字)筛选，支持分页
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	priceType := r.URL.Query().Get("price_type")
 	keyword := r.URL.Query().Get("q")
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
 
-	events, err := h.store.ListEvents(status, priceType, keyword)
+	events, total, err := h.store.ListEvents(status, priceType, keyword, offset, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: events})
+	paginatedOK(w, events, total, page, pageSize)
 }
 
 // GetEvent 获取单个活动详情
@@ -273,7 +308,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "报名成功", Data: reg})
 }
 
-// ListRegistrations 返回活动的所有报名记录
+// ListRegistrations 返回活动的报名记录，支持分页
 func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
@@ -286,13 +321,16 @@ func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registrations, err := h.store.ListRegistrations(eventID)
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	registrations, total, err := h.store.ListRegistrations(eventID, offset, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: registrations})
+	paginatedOK(w, registrations, total, page, pageSize)
 }
 
 // CreatePost 创建活动帖子，需要用户已报名
@@ -357,13 +395,16 @@ func (h *Handler) ListPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, err := h.store.ListPosts(eventID)
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	posts, total, err := h.store.ListPosts(eventID, offset, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: posts})
+	paginatedOK(w, posts, total, page, pageSize)
 }
 
 func (h *Handler) GetPost(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +534,7 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "门票创建成功", Data: ticket})
 }
 
-// ListTickets 返回活动的所有门票类型
+// ListTickets 返回活动的门票类型，支持分页
 func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
@@ -506,13 +547,16 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tickets, err := h.store.ListTickets(eventID)
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+
+	tickets, total, err := h.store.ListTickets(eventID, offset, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: tickets})
+	paginatedOK(w, tickets, total, page, pageSize)
 }
 
 // GetTicket 获取单个门票详情

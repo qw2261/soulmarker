@@ -96,7 +96,7 @@ func TestGetEventNotFound(t *testing.T) {
 func TestListEventsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	events, err := store.ListEvents("", "", "")
+	events, _, err := store.ListEvents("", "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestListEventsMultiple(t *testing.T) {
 		}
 	}
 
-	events, err := store.ListEvents("", "", "")
+	events, _, err := store.ListEvents("", "", "", 0, 0)
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestDeleteEventCascadeRegistration(t *testing.T) {
 		t.Fatalf("DeleteEvent failed: %v", err)
 	}
 
-	regs, _ := store.ListRegistrations(e.ID)
+	regs, _, _ := store.ListRegistrations(e.ID, 0, 0)
 	if len(regs) != 0 {
 		t.Fatal("expected 0 registrations after cascade delete")
 	}
@@ -277,7 +277,7 @@ func TestDeleteEventCascadePostsAndReplies(t *testing.T) {
 		t.Fatalf("DeleteEvent failed: %v", err)
 	}
 
-	posts, _ := store.ListPosts(e.ID)
+	posts, _, _ := store.ListPosts(e.ID, 0, 0)
 	if len(posts) != 0 {
 		t.Fatal("expected 0 posts after cascade delete")
 	}
@@ -435,7 +435,7 @@ func TestListRegistrations(t *testing.T) {
 		}
 	}
 
-	regs, err := store.ListRegistrations(e.ID)
+	regs, _, err := store.ListRegistrations(e.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListRegistrations failed: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestListRegistrations(t *testing.T) {
 func TestListRegistrationsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	regs, err := store.ListRegistrations(999)
+	regs, _, err := store.ListRegistrations(999, 0, 0)
 	if err != nil {
 		t.Fatalf("ListRegistrations failed: %v", err)
 	}
@@ -526,7 +526,7 @@ func TestListPosts(t *testing.T) {
 		}
 	}
 
-	posts, err := store.ListPosts(e.ID)
+	posts, _, err := store.ListPosts(e.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListPosts failed: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestListPosts(t *testing.T) {
 func TestListPostsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	posts, err := store.ListPosts(999)
+	posts, _, err := store.ListPosts(999, 0, 0)
 	if err != nil {
 		t.Fatalf("ListPosts failed: %v", err)
 	}
@@ -692,7 +692,7 @@ func TestGetPostIncludesReplyCount(t *testing.T) {
 		t.Fatalf("expected ReplyCount 3, got %d", got.ReplyCount)
 	}
 
-	posts, _ := store.ListPosts(e.ID)
+	posts, _, _ := store.ListPosts(e.ID, 0, 0)
 	if posts[0].ReplyCount != 3 {
 		t.Fatalf("expected ListPosts ReplyCount 3, got %d", posts[0].ReplyCount)
 	}
@@ -730,7 +730,7 @@ func TestListTickets(t *testing.T) {
 		}
 	}
 
-	tickets, err := store.ListTickets(e.ID)
+	tickets, _, err := store.ListTickets(e.ID, 0, 0)
 	if err != nil {
 		t.Fatalf("ListTickets failed: %v", err)
 	}
@@ -742,7 +742,7 @@ func TestListTickets(t *testing.T) {
 func TestListTicketsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	tickets, err := store.ListTickets(999)
+	tickets, _, err := store.ListTickets(999, 0, 0)
 	if err != nil {
 		t.Fatalf("ListTickets failed: %v", err)
 	}
@@ -876,12 +876,12 @@ func TestListEventsFilterByStatus(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _ := store.ListEvents("published", "", "")
+	events, _, _ := store.ListEvents("published", "", "", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 published event, got %d", len(events))
 	}
 
-	events, _ = store.ListEvents("draft", "", "")
+	events, _, _ = store.ListEvents("draft", "", "", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 draft event, got %d", len(events))
 	}
@@ -901,12 +901,12 @@ func TestListEventsFilterByPriceType(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _ := store.ListEvents("", "free", "")
+	events, _, _ := store.ListEvents("", "free", "", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 free event, got %d", len(events))
 	}
 
-	events, _ = store.ListEvents("", "paid", "")
+	events, _, _ = store.ListEvents("", "paid", "", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event, got %d", len(events))
 	}
@@ -927,17 +927,17 @@ func TestListEventsSearchByKeyword(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _ := store.ListEvents("", "", "Go")
+	events, _, _ := store.ListEvents("", "", "Go", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Go', got %d", len(events))
 	}
 
-	events, _ = store.ListEvents("", "", "Docker")
+	events, _, _ = store.ListEvents("", "", "Docker", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Docker', got %d", len(events))
 	}
 
-	events, _ = store.ListEvents("", "", "不存在的")
+	events, _, _ = store.ListEvents("", "", "不存在的", 0, 0)
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events matching '不存在的', got %d", len(events))
 	}
@@ -957,7 +957,7 @@ func TestListEventsCombinedFilter(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _ := store.ListEvents("", "paid", "Go")
+	events, _, _ := store.ListEvents("", "paid", "Go", 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event matching 'Go', got %d", len(events))
 	}
@@ -982,7 +982,7 @@ func TestDeleteEventCascadeTickets(t *testing.T) {
 		t.Fatalf("DeleteEvent failed: %v", err)
 	}
 
-	tickets, _ := store.ListTickets(e.ID)
+	tickets, _, _ := store.ListTickets(e.ID, 0, 0)
 	if len(tickets) != 0 {
 		t.Fatal("expected 0 tickets after cascade delete")
 	}

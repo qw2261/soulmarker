@@ -21,7 +21,7 @@ func Load() *Config {
 		CORSOrigin:   getEnv("CORS_ORIGIN", "*"),
 		LogFormat:    getEnv("LOG_FORMAT", "json"),
 		LogLevel:     getEnv("LOG_LEVEL", "info"),
-		DatabasePath: getEnv("DATABASE_PATH", "./data/event.db"),
+		DatabasePath: getEnv("DATABASE_PATH", "data/event_go.db"),
 		Port:         getEnv("PORT", "8080"),
 		Version:      getEnv("VERSION", "dev"),
 	}
