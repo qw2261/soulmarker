@@ -6,24 +6,26 @@ import (
 )
 
 type Config struct {
-	AdminToken   string
-	CORSOrigin   string
-	LogFormat    string
-	LogLevel     string
-	DatabasePath string
-	Port         string
-	Version      string
+	AdminToken          string
+	CORSOrigin          string
+	LogFormat           string
+	LogLevel            string
+	DatabasePath        string
+	Port                string
+	Version             string
+	CancelDeadlineHours int
 }
 
 func Load() *Config {
 	return &Config{
-		AdminToken:   getEnv("ADMIN_TOKEN", ""),
-		CORSOrigin:   getEnv("CORS_ORIGIN", "*"),
-		LogFormat:    getEnv("LOG_FORMAT", "json"),
-		LogLevel:     getEnv("LOG_LEVEL", "info"),
-		DatabasePath: getEnv("DATABASE_PATH", "data/event_go.db"),
-		Port:         getEnv("PORT", "8080"),
-		Version:      getEnv("VERSION", "dev"),
+		AdminToken:          getEnv("ADMIN_TOKEN", ""),
+		CORSOrigin:          getEnv("CORS_ORIGIN", "*"),
+		LogFormat:           getEnv("LOG_FORMAT", "json"),
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		DatabasePath:        getEnv("DATABASE_PATH", "data/event_go.db"),
+		Port:                getEnv("PORT", "8080"),
+		Version:             getEnv("VERSION", "dev"),
+		CancelDeadlineHours: getEnvInt("CANCEL_DEADLINE_HOURS", 24),
 	}
 }
 

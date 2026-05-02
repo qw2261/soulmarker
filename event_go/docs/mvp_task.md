@@ -118,6 +118,7 @@
 | **十九、全面综合评测与优化** | ✅ 已完成 | 代码质量、性能、安全、测试覆盖、架构、部署全面评测 |
 | **二十、综合评测后持续优化** | ✅ 已完成 | 测试覆盖 75.2%、数据库索引、代码注释、配置集中管理等 |
 | **二十一、分页** | ✅ 已完成 | 4 个列表接口支持 page/page_size，返回 total |
+| **二十二、报名取消** | ✅ 已完成 | DELETE 取消报名 + 24h 截止时间 + 退还门票库存 |
 
 ***
 
@@ -941,4 +942,60 @@ DELETE /api/events/{id}/posts/{postId}/replies/{replyId}
 - 在 `Event` 结构体中预留 `cover_image_url` 字段
 - 可在做分页时顺手加上，避免后续 break change
 - 先不实现上传逻辑，仅预留字段 + 数据库列
+
+***
+
+## 二十二阶段：报名取消 ✅
+
+### 目标
+
+允许用户在活动开始前的截止时间内自由取消报名，自动退还门票库存。
+
+### 方案设计：轻量版截止时间
+
+```
+规则：活动开始前 CANCEL_DEADLINE_HOURS 小时可自由取消，之后不允许
+实现：取消时对比 time.Now() 和 event.event_time
+```
+
+- 默认截止时间：24 小时（通过 `CANCEL_DEADLINE_HOURS` 环境变量可配）
+- 无需管理后台审核，规则自动执行
+- 取消时事务内退还门票库存 + 删除报名记录
+
+### API
+
+```
+DELETE /api/events/{id}/register
+Body: { "contact": "xxx@xxx.com" }
+```
+
+**响应示例**：
+- 200 `{"code":200,"message":"已取消报名"}` — 成功
+- 400 `{"code":400,"message":"已过取消截止时间，无法取消报名"}` — 超时
+- 404 `{"code":404,"message":"未报名该活动，无法参与讨论"}` — 未报名
+
+### 实现要点
+
+- [x] `config.go` — 新增 `CancelDeadlineHours` 配置项（env: `CANCEL_DEADLINE_HOURS`，默认 24）
+- [x] `model/types.go` — 新增 `CancelRegistrationReq` 请求体 + `ErrCancelDeadlineExceeded` 哨兵错误
+- [x] `store.go` — 新增 `CancelRegistration(eventID, contact)` 方法：事务内查询报名记录 → 退还门票库存 → 删除报名记录
+- [x] `handler.go` — 新增 `CancelRegistration` handler：参数校验 → 截止时间检查 → 调用 store
+- [x] `main.go` — 注册路由 `DELETE /api/events/{id}/register`（无需管理员认证）
+- [x] 顺手修复 `ListRegistrations` 查询遗漏 `ticket_id` / `ticket_name` 字段
+
+### 边界场景覆盖
+
+| 场景 | 响应 |
+|------|------|
+| 活动不存在 | 404 |
+| 未报名该活动 | 404 `ErrNotRegistered` |
+| 已过截止时间 | 400 `ErrCancelDeadlineExceeded` |
+| 选了门票 → 取消 | 自动退还库存 +1（事务内） |
+| 未选门票 → 取消 | 直接删除报名记录 |
+
+### 验证结果
+
+- [x] `go build ./...` 编译通过
+- [x] `go vet ./...` 无警告
+- [x] `go test ./...` 81 用例全部通过
 

@@ -308,6 +308,56 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "报名成功", Data: reg})
 }
 
+// CancelRegistration 取消报名，活动开始前N小时可自由取消（N通过CANCEL_DEADLINE_HOURS配置，默认24）
+func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
+	event, ok := h.getEventOr404(w, eventID)
+	if !ok {
+		return
+	}
+
+	var req model.CancelRegistrationReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+		return
+	}
+
+	if req.Contact == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空"})
+		return
+	}
+
+	eventTime, err := time.Parse(model.TimeFormat, event.EventTime)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "解析活动时间失败"})
+		return
+	}
+
+	cfg := config.Load()
+	deadline := eventTime.Add(-time.Duration(cfg.CancelDeadlineHours) * time.Hour)
+	if time.Now().After(deadline) {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: model.ErrCancelDeadlineExceeded.Error()})
+		return
+	}
+
+	if err := h.store.CancelRegistration(eventID, req.Contact); err != nil {
+		switch {
+		case errors.Is(err, model.ErrNotRegistered):
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+		default:
+			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "已取消报名"})
+}
+
 // ListRegistrations 返回活动的报名记录，支持分页
 func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)

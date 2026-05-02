@@ -436,7 +436,7 @@ func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Re
 		return nil, 0, fmt.Errorf("查询报名总数失败: %w", err)
 	}
 
-	query := `SELECT id, event_id, name, contact, created_at
+	query := `SELECT id, event_id, name, contact, ticket_id, ticket_name, created_at
 		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`
 	args := []interface{}{eventID}
 	if limit > 0 {
@@ -454,7 +454,7 @@ func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Re
 	for rows.Next() {
 		r := &model.Registration{}
 		var createdAt string
-		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Contact, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Contact, &r.TicketID, &r.TicketName, &createdAt); err != nil {
 			return nil, 0, fmt.Errorf("读取报名记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
@@ -485,6 +485,49 @@ func (s *Store) IsRegistered(eventID int64, contact string) (bool, error) {
 		return false, fmt.Errorf("查询报名信息失败: %w", err)
 	}
 	return count > 0, nil
+}
+
+func (s *Store) CancelRegistration(eventID int64, contact string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	var ticketID sql.NullInt64
+	err = tx.QueryRow(
+		`SELECT ticket_id FROM registrations WHERE event_id = ? AND contact = ?`,
+		eventID, contact,
+	).Scan(&ticketID)
+	if err == sql.ErrNoRows {
+		return model.ErrNotRegistered
+	}
+	if err != nil {
+		return fmt.Errorf("查询报名记录失败: %w", err)
+	}
+
+	if ticketID.Valid {
+		_, err = tx.Exec(
+			`UPDATE tickets SET stock = stock + 1, updated_at = ? WHERE id = ?`,
+			time.Now().UTC().Format(model.TimeFormat), ticketID.Int64,
+		)
+		if err != nil {
+			return fmt.Errorf("退还门票库存失败: %w", err)
+		}
+	}
+
+	_, err = tx.Exec(
+		`DELETE FROM registrations WHERE event_id = ? AND contact = ?`,
+		eventID, contact,
+	)
+	if err != nil {
+		return fmt.Errorf("删除报名记录失败: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交事务失败: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) CreatePost(p *model.Post) error {

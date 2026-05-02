@@ -113,7 +113,7 @@ Event (活动)
 
 ## 当前进度
 
-**v4.3** — 分页功能上线，共 **17 个 API 接口**。
+**v4.3** — 报名取消功能上线，共 **18 个 API 接口**。
 
 ```
 POST   /api/events                                    创建活动 🔐
@@ -122,6 +122,7 @@ GET    /api/events/{id}                               活动详情
 PUT    /api/events/{id}                               编辑活动 🔐
 DELETE /api/events/{id}                               删除活动 🔐
 POST   /api/events/{id}/register                      报名活动
+DELETE /api/events/{id}/register                      取消报名（活动开始前24h可取消）
 GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）
 POST   /api/events/{id}/posts                         发帖（需已报名）
 GET    /api/events/{id}/posts[?page=&page_size=]      帖子列表（分页）
@@ -172,7 +173,10 @@ GET    /health                                        健康检查
   ├── 可选传入 ticket_id 关联门票
   ├── 关联门票时自动扣减库存（原子操作，事务保障）
   ├── 不传 ticket_id → 纯报名，不涉及门票
-  └── 超出容量 / 重复报名 / 门票售罄 → 明确错误提示
+  ├── 超出容量 / 重复报名 / 门票售罄 → 明确错误提示
+  └── 活动开始前24h可自由取消 (DELETE /api/events/{id}/register)
+       ├── 取消时自动退还门票库存（事务内原子操作）
+       └── 超过截止时间返回 400，无法取消
 ```
 
 ### 3. 活动讨论

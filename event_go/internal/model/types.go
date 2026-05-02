@@ -8,14 +8,15 @@ import (
 const TimeFormat = time.RFC3339
 
 var (
-	ErrNotFound       = errors.New("活动不存在")
-	ErrDuplicate      = errors.New("该联系方式已报名本活动")
-	ErrFull           = errors.New("活动报名已满")
-	ErrNotRegistered  = errors.New("未报名该活动，无法参与讨论")
-	ErrNotParticipant = errors.New("只有报名者才能发帖或回复")
-	ErrTicketNotFound = errors.New("门票不存在")
-	ErrTicketSoldOut  = errors.New("门票已售罄")
-	ErrUnauthorized   = errors.New("认证失败，请提供有效的管理员令牌")
+	ErrNotFound               = errors.New("活动不存在")
+	ErrDuplicate              = errors.New("该联系方式已报名本活动")
+	ErrFull                   = errors.New("活动报名已满")
+	ErrNotRegistered          = errors.New("未报名该活动，无法参与讨论")
+	ErrNotParticipant         = errors.New("只有报名者才能发帖或回复")
+	ErrTicketNotFound         = errors.New("门票不存在")
+	ErrTicketSoldOut          = errors.New("门票已售罄")
+	ErrUnauthorized           = errors.New("认证失败，请提供有效的管理员令牌")
+	ErrCancelDeadlineExceeded = errors.New("已过取消截止时间，无法取消报名")
 )
 
 type Event struct {
@@ -64,6 +65,10 @@ type RegisterReq struct {
 	Name     string `json:"name"`
 	Contact  string `json:"contact"`
 	TicketID *int64 `json:"ticket_id,omitempty"`
+}
+
+type CancelRegistrationReq struct {
+	Contact string `json:"contact"`
 }
 
 type APIResp struct {
