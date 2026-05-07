@@ -119,6 +119,7 @@
 | **二十、综合评测后持续优化** | ✅ 已完成 | 测试覆盖 75.2%、数据库索引、代码注释、配置集中管理等 |
 | **二十一、分页** | ✅ 已完成 | 4 个列表接口支持 page/page_size，返回 total |
 | **二十二、报名取消** | ✅ 已完成 | DELETE 取消报名 + 24h 截止时间 + 退还门票库存 |
+| **二十三、门店 + 用户 + 前端** | ✅ 已完成 | Organizer 层级 + JWT 注册登录 + Vue 3 前端 |
 
 ***
 
@@ -998,4 +999,106 @@ Body: { "contact": "xxx@xxx.com" }
 - [x] `go build ./...` 编译通过
 - [x] `go vet ./...` 无警告
 - [x] `go test ./...` 81 用例全部通过
+
+***
+
+## 第二十三阶段：门店体系 + 用户系统 + Vue 前端 ✅
+
+### 目标
+
+引入门店（主办方）作为一级实体，活动归属门店；实现用户注册/登录（JWT）；Vue 3 + Element Plus 前端。
+
+### 一、数据模型升级
+
+- [x] 新增 `Organizer` 结构体（name, description, contact, logo_url, address, website, tags）
+- [x] `Event` 新增 `organizer_id` + `organizer_name` 字段
+- [x] `CreateEventReq` 新增 `organizer_id`（必填）
+- [x] 新增 `User` 结构体（name, contact, password_hash）
+- [x] 新增 `RegisterUserReq` / `LoginReq` / `LoginResp` / `UserClaims`
+- [x] 新增 `JWT context key` 用于请求上下文传递用户身份
+
+**新版实体关系**：
+```
+Organizer (门店)
+  └── Event (活动)
+        ├── Ticket (门票)
+        ├── Registration (报名)
+        └── Post → Reply (讨论)
+User (用户) — 注册/登录获得 JWT
+  ├── 报名时自动关联用户信息
+  └── 发帖/回复时从 JWT 读取身份，无需重复填写
+```
+
+### 二、数据库
+
+- [x] 新建 `organizers` 表（8 字段 + 时间戳）
+- [x] 新建 `users` 表（contact 唯一索引，bcrypt 密码哈希）
+- [x] `events` 表加 `organizer_id` 列 + 索引
+- [x] 迁移兼容老数据库（ALTER TABLE ADD COLUMN）
+- [x] 新增依赖：`golang-jwt/jwt/v5` + `golang.org/x/crypto`
+
+### 三、API 新增
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/organizers` | 创建门店 🔐 |
+| GET | `/api/organizers` | 门店列表（含活动数） |
+| GET | `/api/organizers/{id}` | 门店详情 |
+| PUT | `/api/organizers/{id}` | 编辑门店 🔐 |
+| DELETE | `/api/organizers/{id}` | 删除门店（旗下活动解绑）🔐 |
+| POST | `/api/auth/register` | 用户注册 |
+| POST | `/api/auth/login` | 用户登录（返回 JWT） |
+
+- [x] `CreateEvent` 校验 `organizer_id` 存在性
+- [x] 活动列表/详情 JOIN 门店名称（`LEFT JOIN organizers`）
+- [x] `CreatePost` / `CreateReply` 支持 JWT 自动识别用户身份
+- [x] `CancelRegistration` 支持 JWT 自动识别用户身份
+
+### 四、认证架构
+
+```
+用户 Token  →  Authorization: Bearer <JWT>  →  UserAuth 中间件 → context
+管理员 Token →  X-Admin-Token: <token>       →  AdminAuth 中间件
+
+两套认证互不冲突，可同时使用
+UserAuth 宽松模式：无 Token 时不拒绝，不注入身份
+```
+
+### 五、Vue 前端（web/）
+
+- [x] Vite + Vue 3 + Element Plus + TypeScript + Pinia + Vue Router
+- [x] **活动列表页** `/`：搜索/状态筛选/价格筛选/分页 + 门店名称展示
+- [x] **活动详情页** `/events/:id`：活动信息 + 所属门店链接 + 报名（已报名显示取消）+ 最近 5 条帖子
+- [x] **讨论区** `/events/:id/discussion`：帖子列表 + 发帖（JWT 自动填充）
+- [x] **帖子详情** `/events/:id/posts/:postId`：内容 + 回复列表 + 写回复
+- [x] **门店列表** `/organizers`：卡片网格 + 活动数展示
+- [x] **用户注册** `/register`：name + contact + password（≥6 位）
+- [x] **用户登录** `/login`：contact + password
+- [x] **管理后台**：门店管理 + 创建活动选门店
+- [x] **NavBar**：显示登录用户 / 登录注册入口 / 管理员入口 / 门店链接
+- [x] API 层独立封装（events.ts / organizers.ts / tickets.ts / posts.ts / auth.ts）
+- [x] `useUserStore` + `useAuthStore`（Pinia + localStorage 持久化）
+- [x] 请求拦截器自动附加 `user_token` (Authorization) 和 `admin_token` (X-Admin-Token)
+
+### 六、Go embed 集成
+
+- [x] `main.go` 新增 SPA fallback 服务（`spaHandler`）
+- [x] Dockerfile 多阶段构建：Node.js 构建前端 → Go 构建后端 → Alpine 运行
+- [x] 静态文件路径 `web/dist`
+
+### 七、环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `JWT_SECRET` | `event-go-dev-secret-change-in-production` | JWT 签名密钥 |
+| `JWT_EXPIRE_HOURS` | `168`（7 天） | Token 有效期 |
+
+### 验证结果
+
+- [x] `go build ./...` 编译通过
+- [x] `go test ./...` 全部通过
+- [x] `go vet ./...` 无警告
+- [x] 用户注册 → 获取 JWT → 携带 Token 发帖成功
+- [x] 管理员创建门店 → 创建活动归属门店 → 活动卡片展示门店名
+- [x] 前端 `npm run dev` + Go 后端联调通过
 

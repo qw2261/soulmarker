@@ -32,10 +32,21 @@
 | 二十、持续优化 | ✅ | 索引、注释、配置集中、日志分级 |
 | 二十一、分页 | ✅ | 4 列表接口 page/page_size/total |
 | 二十二、报名取消 | ✅ | DELETE 取消 + 24h 截止 + 退还库存 |
+| **二十三、门店 + 用户 + 前端** | ✅ | Organizer 层级 + JWT 注册登录 + Vue 3 前端 |
 
 ---
 
-## v4.3 摘要
+## v4.4 摘要
+
+```
+25 个 API 接口 | 门店体系 + JWT 用户系统 | Vue 3 + Element Plus 前端
+Organizer → Event → Ticket → Registration → Post → Reply 两级实体架构
+X-Admin-Token（管理）+ Authorization Bearer JWT（用户）双通道认证
+JWT 自动识别：发帖/回复/取消报名无需重复填身份
+SQLite WAL + 事务 | JSON 结构化日志 | 测试全通过
+```
+
+## v4.3 摘要（历史）
 
 ```
 18 个 API 接口 | 4 列表分页 | 报名取消（24h截止）
@@ -68,6 +79,7 @@ docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go   # 数据持久化
 | 方向 | 说明 |
 |------|------|
 | 🛡️ **限流** | 基于 IP 的请求频率限制，防滥用 |
+| 🏪 **门店详情页** | 前端 `/organizers/:id` 展示门店 + 旗下活动 |
 
 ### P2 — 中期规划
 
@@ -79,7 +91,6 @@ docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go   # 数据持久化
 | ✏️ **内容删除** | 帖子/回复管理端/作者删除 |
 | 📞 **联系方式校验** | 邮箱/手机号格式校验 |
 | 🏠 **树莓派部署** | ARM64 Docker + 内网穿透 |
-| 🖥️ **前端界面** | Web / 小程序（等后端稳定） |
 
 ### P3 — 后续关注
 

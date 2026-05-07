@@ -13,11 +13,13 @@ func setupTestStore(t *testing.T) *Store {
 	t.Cleanup(func() {
 		store.Close()
 	})
+	_ = store.CreateOrganizer(&model.Organizer{Name: "默认门店"})
 	return store
 }
 
 func newTestEvent(title string) *model.Event {
 	return &model.Event{
+		OrganizerID: 1,
 		Title:       title,
 		Description: "测试描述",
 		EventTime:   "2026-12-31T18:00:00+08:00",

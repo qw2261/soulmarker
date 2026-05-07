@@ -61,8 +61,21 @@ func NewStore(dbPath string) *Store {
 
 func (s *Store) migrate() {
 	queries := []string{
+		`CREATE TABLE IF NOT EXISTS organizers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			contact TEXT NOT NULL DEFAULT '',
+			logo_url TEXT NOT NULL DEFAULT '',
+			address TEXT NOT NULL DEFAULT '',
+			website TEXT NOT NULL DEFAULT '',
+			tags TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS events (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organizer_id INTEGER NOT NULL DEFAULT 0,
 			title TEXT NOT NULL,
 			description TEXT NOT NULL DEFAULT '',
 			event_time TEXT NOT NULL,
@@ -71,7 +84,8 @@ func (s *Store) migrate() {
 			price REAL NOT NULL DEFAULT 0,
 			status TEXT NOT NULL DEFAULT 'published',
 			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (organizer_id) REFERENCES organizers(id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS registrations (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +134,14 @@ func (s *Store) migrate() {
 		`CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_posts_event_created ON posts(event_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(event_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			contact TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_contact ON users(contact)`,
 	}
 
 	for _, q := range queries {
@@ -131,6 +153,8 @@ func (s *Store) migrate() {
 	migrations := []string{
 		`ALTER TABLE registrations ADD COLUMN ticket_id INTEGER REFERENCES tickets(id)`,
 		`ALTER TABLE registrations ADD COLUMN ticket_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE events ADD COLUMN organizer_id INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX IF NOT EXISTS idx_events_organizer ON events(organizer_id)`,
 	}
 	for _, q := range migrations {
 		s.db.Exec(q)
@@ -140,9 +164,9 @@ func (s *Store) migrate() {
 func (s *Store) CreateEvent(e *model.Event) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
-		`INSERT INTO events (title, description, event_time, location, capacity, price, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
-		e.Title, e.Description, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
+		`INSERT INTO events (organizer_id, title, description, event_time, location, capacity, price, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
+		e.OrganizerID, e.Title, e.Description, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("创建活动失败: %w", err)
@@ -164,16 +188,16 @@ func buildEventsQuery(status string, priceType string, keyword string) (string, 
 	var args []interface{}
 
 	if status != "" {
-		where += " AND status = ?"
+		where += " AND e.status = ?"
 		args = append(args, status)
 	}
 	if priceType == "free" {
-		where += " AND price = 0"
+		where += " AND e.price = 0"
 	} else if priceType == "paid" {
-		where += " AND price > 0"
+		where += " AND e.price > 0"
 	}
 	if keyword != "" {
-		where += " AND (title LIKE ? OR description LIKE ?)"
+		where += " AND (e.title LIKE ? OR e.description LIKE ?)"
 		args = append(args, "%"+keyword+"%", "%"+keyword+"%")
 	}
 	return where, args
@@ -185,12 +209,12 @@ func (s *Store) ListEvents(status string, priceType string, keyword string, offs
 	var total int
 	countArgs := make([]interface{}, len(args))
 	copy(countArgs, args)
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM events"+where, countArgs...).Scan(&total); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM events e"+where, countArgs...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("查询活动总数失败: %w", err)
 	}
 
-	query := `SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
-		FROM events` + where + ` ORDER BY created_at DESC`
+	query := `SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+		FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id` + where + ` ORDER BY e.created_at DESC`
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)
@@ -206,7 +230,7 @@ func (s *Store) ListEvents(status string, priceType string, keyword string, offs
 	for rows.Next() {
 		e := &model.Event{}
 		var createdAt, updatedAt string
-		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.EventTime, &e.Location,
+		if err := rows.Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.EventTime, &e.Location,
 			&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt); err != nil {
 			return nil, 0, fmt.Errorf("读取活动记录失败: %w", err)
 		}
@@ -233,9 +257,9 @@ func (s *Store) GetEvent(id int64) (*model.Event, error) {
 	e := &model.Event{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
-		`SELECT id, title, description, event_time, location, capacity, price, status, created_at, updated_at
-		 FROM events WHERE id = ?`, id,
-	).Scan(&e.ID, &e.Title, &e.Description, &e.EventTime, &e.Location,
+		`SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+		 FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id WHERE e.id = ?`, id,
+	).Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.EventTime, &e.Location,
 		&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -804,4 +828,209 @@ func (s *Store) DeleteTicket(id int64) error {
 		return model.ErrTicketNotFound
 	}
 	return nil
+}
+
+func (s *Store) CreateUser(u *model.User) error {
+	now := time.Now().Format(model.TimeFormat)
+	result, err := s.db.Exec(
+		"INSERT INTO users (name, contact, password_hash, created_at) VALUES (?, ?, ?, ?)",
+		u.Name, u.Contact, u.PasswordHash, now,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return model.ErrUserExists
+		}
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = id
+	u.CreatedAt, _ = time.Parse(model.TimeFormat, now)
+	return nil
+}
+
+func (s *Store) GetUserByContact(contact string) (*model.User, error) {
+	row := s.db.QueryRow("SELECT id, name, contact, password_hash, created_at FROM users WHERE contact = ?", contact)
+	u := &model.User{}
+	var createdAt string
+	err := row.Scan(&u.ID, &u.Name, &u.Contact, &u.PasswordHash, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+	return u, nil
+}
+
+func (s *Store) CreateOrganizer(o *model.Organizer) error {
+	now := time.Now().Format(model.TimeFormat)
+	result, err := s.db.Exec(
+		"INSERT INTO organizers (name, description, contact, logo_url, address, website, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		o.Name, o.Description, o.Contact, o.LogoURL, o.Address, o.Website, o.Tags, now, now,
+	)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	o.ID = id
+	o.CreatedAt, _ = time.Parse(model.TimeFormat, now)
+	o.UpdatedAt = o.CreatedAt
+	return nil
+}
+
+func (s *Store) GetOrganizer(id int64) (*model.Organizer, error) {
+	o := &model.Organizer{}
+	var createdAt, updatedAt string
+	err := s.db.QueryRow(
+		"SELECT id, name, description, contact, logo_url, address, website, tags, created_at, updated_at FROM organizers WHERE id = ?", id,
+	).Scan(&o.ID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	o.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+	o.UpdatedAt, _ = time.Parse(model.TimeFormat, updatedAt)
+	return o, nil
+}
+
+func (s *Store) ListOrganizers(offset, limit int) ([]*model.Organizer, int, error) {
+	var total int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM organizers").Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(
+		`SELECT o.id, o.name, o.description, o.contact, o.logo_url, o.address, o.website, o.tags, o.created_at, o.updated_at,
+		 COUNT(e.id) as event_count
+		 FROM organizers o LEFT JOIN events e ON o.id = e.organizer_id
+		 GROUP BY o.id ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var organizers []*model.Organizer
+	for rows.Next() {
+		o := &model.Organizer{}
+		var createdAt, updatedAt string
+		if err := rows.Scan(&o.ID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt, &o.EventCount); err != nil {
+			return nil, 0, err
+		}
+		o.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+		o.UpdatedAt, _ = time.Parse(model.TimeFormat, updatedAt)
+		organizers = append(organizers, o)
+	}
+	if organizers == nil {
+		organizers = []*model.Organizer{}
+	}
+	return organizers, total, nil
+}
+
+func (s *Store) UpdateOrganizer(id int64, req model.UpdateOrganizerReq) (*model.Organizer, error) {
+	setClauses := []string{}
+	args := []interface{}{}
+
+	if req.Name != nil {
+		setClauses = append(setClauses, "name = ?")
+		args = append(args, *req.Name)
+	}
+	if req.Description != nil {
+		setClauses = append(setClauses, "description = ?")
+		args = append(args, *req.Description)
+	}
+	if req.Contact != nil {
+		setClauses = append(setClauses, "contact = ?")
+		args = append(args, *req.Contact)
+	}
+	if req.LogoURL != nil {
+		setClauses = append(setClauses, "logo_url = ?")
+		args = append(args, *req.LogoURL)
+	}
+	if req.Address != nil {
+		setClauses = append(setClauses, "address = ?")
+		args = append(args, *req.Address)
+	}
+	if req.Website != nil {
+		setClauses = append(setClauses, "website = ?")
+		args = append(args, *req.Website)
+	}
+	if req.Tags != nil {
+		setClauses = append(setClauses, "tags = ?")
+		args = append(args, *req.Tags)
+	}
+
+	if len(setClauses) == 0 {
+		return s.GetOrganizer(id)
+	}
+
+	now := time.Now().Format(model.TimeFormat)
+	setClauses = append(setClauses, "updated_at = ?")
+	args = append(args, now)
+	args = append(args, id)
+
+	query := "UPDATE organizers SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return nil, model.ErrOrganizerNotFound
+	}
+	return s.GetOrganizer(id)
+}
+
+func (s *Store) DeleteOrganizer(id int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var count int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM events WHERE organizer_id = ?", id).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		if _, err := tx.Exec("UPDATE events SET organizer_id = 0 WHERE organizer_id = ?", id); err != nil {
+			return err
+		}
+	}
+
+	result, err := tx.Exec("DELETE FROM organizers WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return model.ErrOrganizerNotFound
+	}
+
+	return tx.Commit()
+}
+
+func (s *Store) GetUserByID(id int64) (*model.User, error) {
+	row := s.db.QueryRow("SELECT id, name, contact, password_hash, created_at FROM users WHERE id = ?", id)
+	u := &model.User{}
+	var createdAt string
+	err := row.Scan(&u.ID, &u.Name, &u.Contact, &u.PasswordHash, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+	return u, nil
 }

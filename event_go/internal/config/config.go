@@ -14,6 +14,8 @@ type Config struct {
 	Port                string
 	Version             string
 	CancelDeadlineHours int
+	JWTSecret           string
+	JWTExpireHours      int
 }
 
 func Load() *Config {
@@ -26,6 +28,8 @@ func Load() *Config {
 		Port:                getEnv("PORT", "8080"),
 		Version:             getEnv("VERSION", "dev"),
 		CancelDeadlineHours: getEnvInt("CANCEL_DEADLINE_HOURS", 24),
+		JWTSecret:           getEnv("JWT_SECRET", "event-go-dev-secret-change-in-production"),
+		JWTExpireHours:      getEnvInt("JWT_EXPIRE_HOURS", 168),
 	}
 }
 

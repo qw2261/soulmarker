@@ -14,6 +14,8 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
 
+const staticDir = "web/dist"
+
 func main() {
 	cfg := config.Load()
 
@@ -45,16 +47,34 @@ func main() {
 
 	mux.HandleFunc("GET /health", h.HealthHandler)
 
+	mux.HandleFunc("POST /api/auth/register", h.RegisterUser)
+	mux.HandleFunc("POST /api/auth/login", h.Login)
+
+	mux.HandleFunc("POST /api/organizers", handler.AdminAuth(http.HandlerFunc(h.CreateOrganizer)).ServeHTTP)
+	mux.HandleFunc("GET /api/organizers", h.ListOrganizers)
+	mux.HandleFunc("GET /api/organizers/{id}", h.GetOrganizer)
+	mux.HandleFunc("PUT /api/organizers/{id}", handler.AdminAuth(http.HandlerFunc(h.UpdateOrganizer)).ServeHTTP)
+	mux.HandleFunc("DELETE /api/organizers/{id}", handler.AdminAuth(http.HandlerFunc(h.DeleteOrganizer)).ServeHTTP)
+
+	mux.HandleFunc("/", spaHandler(staticDir))
+
 	port := cfg.Port
 	addr := ":" + port
 	server := &http.Server{
 		Addr:    addr,
-		Handler: handler.LoggingMiddleware(handler.CORS(mux)),
+		Handler: handler.LoggingMiddleware(handler.CORS(handler.UserAuth(mux))),
 	}
 
 	log.Printf("亦闻 event-go 服务启动，监听端口 %s", port)
 	log.Printf("API 文档：")
 	log.Printf("  GET    /health                               健康检查")
+	log.Printf("  POST   /api/auth/register                    用户注册")
+	log.Printf("  POST   /api/auth/login                       用户登录")
+	log.Printf("  POST   /api/organizers                       创建门店 🔐")
+	log.Printf("  GET    /api/organizers                       门店列表")
+	log.Printf("  GET    /api/organizers/{id}                  门店详情")
+	log.Printf("  PUT    /api/organizers/{id}                  编辑门店 🔐")
+	log.Printf("  DELETE /api/organizers/{id}                  删除门店 🔐")
 	log.Printf("  POST   /api/events                          创建活动 🔐")
 	log.Printf("  GET    /api/events                          活动列表")
 	log.Printf("  GET    /api/events/{id}                     活动详情")
@@ -93,4 +113,19 @@ func main() {
 		log.Printf("服务关闭失败: %v", err)
 	}
 	log.Println("✅ 服务已关闭")
+}
+
+func spaHandler(root string) http.HandlerFunc {
+	fs := http.FileServer(http.Dir(root))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		fullPath := root + path
+
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			r.URL.Path = "/"
+		}
+
+		fs.ServeHTTP(w, r)
+	}
 }

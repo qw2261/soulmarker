@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,11 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	h := NewHandler(s)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/organizers", AdminAuth(http.HandlerFunc(h.CreateOrganizer)).ServeHTTP)
+	mux.HandleFunc("GET /api/organizers", h.ListOrganizers)
+	mux.HandleFunc("GET /api/organizers/{id}", h.GetOrganizer)
+	mux.HandleFunc("PUT /api/organizers/{id}", AdminAuth(http.HandlerFunc(h.UpdateOrganizer)).ServeHTTP)
+	mux.HandleFunc("DELETE /api/organizers/{id}", AdminAuth(http.HandlerFunc(h.DeleteOrganizer)).ServeHTTP)
 	mux.HandleFunc("POST /api/events", AdminAuth(http.HandlerFunc(h.CreateEvent)).ServeHTTP)
 	mux.HandleFunc("GET /api/events", h.ListEvents)
 	mux.HandleFunc("GET /api/events/{id}", h.GetEvent)
@@ -45,6 +51,9 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 		server.Close()
 		s.Close()
 	})
+
+	_ = s.CreateOrganizer(&model.Organizer{Name: "默认门店"})
+
 	return s, h, server
 }
 
@@ -61,10 +70,36 @@ func itoa64(i int64) string {
 	return fmt.Sprintf("%d", i)
 }
 
+func createTestOrganizer(t *testing.T, srv *httptest.Server) int64 {
+	t.Helper()
+	body := `{"name":"测试门店","description":"测试用"}`
+	resp, err := http.Post(srv.URL+"/api/organizers", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("create organizer failed: %v", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	r := parseResp(t, respBody)
+	orgMap, ok := r.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("organizer data not a map")
+	}
+	return int64(orgMap["id"].(float64))
+}
+
+func makeEventBody(organizerID int64, extra ...string) string {
+	base := fmt.Sprintf(`{"organizer_id":%d,"title":"Go 讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50,"price":0`, organizerID)
+	for _, e := range extra {
+		base += "," + e
+	}
+	base += "}"
+	return base
+}
+
 func TestCreateEventHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"title":"Go 讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50,"price":0}`
+	body := `{"organizer_id":1,"title":"Go 讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50,"price":0}`
 	resp, err := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -82,11 +117,11 @@ func TestCreateEventValidationErrors(t *testing.T) {
 		body string
 	}{
 		{"empty title", `{"event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50}`},
-		{"empty event_time", `{"title":"讲座","location":"线上","capacity":50}`},
-		{"invalid time format", `{"title":"讲座","event_time":"invalid","location":"线上","capacity":50}`},
-		{"empty location", `{"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","capacity":50}`},
-		{"zero capacity", `{"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":0}`},
-		{"negative price", `{"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":-1}`},
+		{"empty event_time", `{"organizer_id":1,"title":"讲座","location":"线上","capacity":50}`},
+		{"invalid time format", `{"organizer_id":1,"title":"讲座","event_time":"invalid","location":"线上","capacity":50}`},
+		{"empty location", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","capacity":50}`},
+		{"zero capacity", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":0}`},
+		{"negative price", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":-1}`},
 	}
 
 	for _, tt := range tests {
@@ -118,7 +153,7 @@ func TestListEventsHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
 	for i := 0; i < 2; i++ {
-		body := `{"title":"活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+		body := `{"organizer_id":1,"title":"活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 		resp, err := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("create event failed: %v", err)
@@ -150,7 +185,7 @@ func TestListEventsHandler(t *testing.T) {
 func TestGetEventHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"详情测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"详情测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, err := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	if err != nil {
 		t.Fatalf("create failed: %v", err)
@@ -198,7 +233,7 @@ func TestGetEventHandlerInvalidID(t *testing.T) {
 func TestUpdateEventHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"原始标题","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"原始标题","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -206,7 +241,7 @@ func TestUpdateEventHandler(t *testing.T) {
 	eventData := created.Data.(map[string]interface{})
 	id := int64(eventData["id"].(float64))
 
-	updateBody := `{"title":"新标题","price":99.9}`
+	updateBody := `{"organizer_id":1,"title":"新标题","price":99.9}`
 	req, _ := http.NewRequest("PUT", srv.URL+"/api/events/"+itoa64(id), strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -232,7 +267,7 @@ func TestUpdateEventHandler(t *testing.T) {
 func TestUpdateEventInvalidStatus(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -255,7 +290,7 @@ func TestUpdateEventInvalidStatus(t *testing.T) {
 func TestUpdateEventHandlerNotFound(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	updateBody := `{"title":"新标题"}`
+	updateBody := `{"organizer_id":1,"title":"新标题"}`
 	req, _ := http.NewRequest("PUT", srv.URL+"/api/events/999", strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -270,7 +305,7 @@ func TestUpdateEventHandlerNotFound(t *testing.T) {
 func TestDeleteEventHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"待删除","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"待删除","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -310,7 +345,7 @@ func TestDeleteEventHandlerNotFound(t *testing.T) {
 func TestRegisterHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"报名测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"报名测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -331,7 +366,7 @@ func TestRegisterHandler(t *testing.T) {
 func TestRegisterHandlerDuplicate(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"重复报名","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"重复报名","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -351,7 +386,7 @@ func TestRegisterHandlerDuplicate(t *testing.T) {
 func TestRegisterHandlerFull(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"已满活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":1,"price":0}`
+	createBody := `{"organizer_id":1,"title":"已满活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":1,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -370,7 +405,7 @@ func TestRegisterHandlerFull(t *testing.T) {
 func TestRegisterHandlerNotPublished(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"草稿活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"草稿活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -399,7 +434,7 @@ func TestRegisterHandlerNotFound(t *testing.T) {
 func TestRegisterHandlerWithTicket(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"门票报名","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"门票报名","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -420,7 +455,7 @@ func TestRegisterHandlerWithTicket(t *testing.T) {
 func TestListRegistrationsHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"报名列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"报名列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -439,7 +474,7 @@ func TestListRegistrationsHandler(t *testing.T) {
 func TestCreatePostHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"发帖测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"发帖测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -459,7 +494,7 @@ func TestCreatePostHandler(t *testing.T) {
 func TestCreatePostHandlerNotRegistered(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"权限测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"权限测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -477,7 +512,7 @@ func TestCreatePostHandlerNotRegistered(t *testing.T) {
 func TestListPostsHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"帖子列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"帖子列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -497,7 +532,7 @@ func TestListPostsHandler(t *testing.T) {
 func TestGetPostHandlerWithReplies(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"帖子详情","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"帖子详情","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -529,7 +564,7 @@ func TestGetPostHandlerWithReplies(t *testing.T) {
 func TestCreateReplyHandler(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"回复测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"回复测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -551,7 +586,7 @@ func TestCreateReplyHandler(t *testing.T) {
 func TestCreateTicketHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"门票测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"门票测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -569,7 +604,7 @@ func TestCreateTicketHandler(t *testing.T) {
 func TestCreateTicketValidationErrors(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"门票校验","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"门票校验","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -599,7 +634,7 @@ func TestCreateTicketValidationErrors(t *testing.T) {
 func TestListTicketsHandler(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"门票列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"门票列表","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -618,7 +653,7 @@ func TestListTicketsHandler(t *testing.T) {
 func TestUpdateTicketHandler(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"更新门票","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"更新门票","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -644,7 +679,7 @@ func TestUpdateTicketHandler(t *testing.T) {
 func TestDeleteTicketHandler(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"删除门票","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"删除门票","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -673,9 +708,9 @@ func TestAdminAuthMiddleware(t *testing.T) {
 
 	t.Run("with valid token", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", srv.URL+"/api/events",
-			strings.NewReader(`{"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
+			strings.NewReader(`{"organizer_id":1,"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer test-token-123")
+		req.Header.Set("X-Admin-Token", "test-token-123")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
@@ -687,7 +722,7 @@ func TestAdminAuthMiddleware(t *testing.T) {
 
 	t.Run("without token", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", srv.URL+"/api/events",
-			strings.NewReader(`{"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
+			strings.NewReader(`{"organizer_id":1,"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -736,7 +771,7 @@ func TestResponseFormat(t *testing.T) {
 func TestFilterEventsByStatusHandler(t *testing.T) {
 	store, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"已发布活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"已发布活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -756,7 +791,7 @@ func TestFilterEventsByStatusHandler(t *testing.T) {
 func TestSearchEventsByKeywordHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"title":"Go 入门讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	body := `{"organizer_id":1,"title":"Go 入门讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
 
 	resp, _ := http.Get(srv.URL + "/api/events?q=Go")
@@ -776,10 +811,10 @@ func TestSearchEventsByKeywordHandler(t *testing.T) {
 func TestFilterEventsByPriceTypeHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	freeBody := `{"title":"免费活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	freeBody := `{"organizer_id":1,"title":"免费活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(freeBody))
 
-	paidBody := `{"title":"付费活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":99.9}`
+	paidBody := `{"organizer_id":1,"title":"付费活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":99.9}`
 	http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(paidBody))
 
 	resp, _ := http.Get(srv.URL + "/api/events?price_type=paid")
@@ -954,6 +989,8 @@ func TestMiddlewareChainOrder(t *testing.T) {
 	defer s.Close()
 	handler := NewHandler(s)
 
+	_ = s.CreateOrganizer(&model.Organizer{Name: "测试门店"})
+
 	t.Setenv("ADMIN_TOKEN", "test-token")
 	defer func() { t.Setenv("ADMIN_TOKEN", "") }()
 
@@ -964,9 +1001,9 @@ func TestMiddlewareChainOrder(t *testing.T) {
 	defer server.Close()
 
 	req, _ := http.NewRequest("POST", server.URL+"/api/events",
-		strings.NewReader(`{"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
+		strings.NewReader(`{"organizer_id":1,"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("X-Admin-Token", "test-token")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1041,7 +1078,7 @@ func TestCORSOriginEnvConfig(t *testing.T) {
 func TestSearchKeywordBoundary(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"title":"Test Event","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	body := `{"organizer_id":1,"title":"Test Event","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
 
 	tests := []struct {
@@ -1115,7 +1152,7 @@ func TestLoggingMiddlewareIPExtraction(t *testing.T) {
 func TestGetTicketHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"获取门票测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"获取门票测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -1255,7 +1292,7 @@ func TestDeleteTicketInvalidID(t *testing.T) {
 func TestListTicketsEmpty(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"无门票活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"无门票活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -1338,7 +1375,7 @@ func TestGetPostNotFound(t *testing.T) {
 func TestListPostsEmpty(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"无帖子活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"无帖子活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)
@@ -1366,7 +1403,7 @@ func TestListPostsEmpty(t *testing.T) {
 func TestListRegistrationsEmpty(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	createBody := `{"title":"无报名活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	createBody := `{"organizer_id":1,"title":"无报名活动","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
 	createResp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
 	var created model.APIResp
 	json.NewDecoder(createResp.Body).Decode(&created)

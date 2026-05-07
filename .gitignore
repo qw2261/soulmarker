@@ -20,3 +20,7 @@ event_go/*.db
 
 # Test reports (archived)
 event_go/test_reports/
+
+# Frontend
+event_go/web/node_modules/
+event_go/web/dist/

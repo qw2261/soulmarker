@@ -1,8 +1,11 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 const TimeFormat = time.RFC3339
@@ -17,19 +20,58 @@ var (
 	ErrTicketSoldOut          = errors.New("门票已售罄")
 	ErrUnauthorized           = errors.New("认证失败，请提供有效的管理员令牌")
 	ErrCancelDeadlineExceeded = errors.New("已过取消截止时间，无法取消报名")
+	ErrUserExists             = errors.New("该联系方式已注册")
+	ErrInvalidCreds           = errors.New("联系方式或密码错误")
+	ErrOrganizerNotFound      = errors.New("门店不存在")
 )
 
-type Event struct {
+type Organizer struct {
 	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
+	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	EventTime   string    `json:"event_time"`
-	Location    string    `json:"location"`
-	Capacity    int       `json:"capacity"`
-	Price       float64   `json:"price"`
-	Status      string    `json:"status"`
+	Contact     string    `json:"contact"`
+	LogoURL     string    `json:"logo_url"`
+	Address     string    `json:"address"`
+	Website     string    `json:"website"`
+	Tags        string    `json:"tags"`
+	EventCount  int       `json:"event_count,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type CreateOrganizerReq struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Contact     string `json:"contact"`
+	LogoURL     string `json:"logo_url"`
+	Address     string `json:"address"`
+	Website     string `json:"website"`
+	Tags        string `json:"tags"`
+}
+
+type UpdateOrganizerReq struct {
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Contact     *string `json:"contact"`
+	LogoURL     *string `json:"logo_url"`
+	Address     *string `json:"address"`
+	Website     *string `json:"website"`
+	Tags        *string `json:"tags"`
+}
+
+type Event struct {
+	ID            int64     `json:"id"`
+	OrganizerID   int64     `json:"organizer_id"`
+	OrganizerName string    `json:"organizer_name,omitempty"`
+	Title         string    `json:"title"`
+	Description   string    `json:"description"`
+	EventTime     string    `json:"event_time"`
+	Location      string    `json:"location"`
+	Capacity      int       `json:"capacity"`
+	Price         float64   `json:"price"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type Registration struct {
@@ -43,6 +85,7 @@ type Registration struct {
 }
 
 type CreateEventReq struct {
+	OrganizerID int64   `json:"organizer_id"`
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
 	EventTime   string  `json:"event_time"`
@@ -70,6 +113,41 @@ type RegisterReq struct {
 type CancelRegistrationReq struct {
 	Contact string `json:"contact"`
 }
+
+type User struct {
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	Contact      string    `json:"contact"`
+	PasswordHash string    `json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type RegisterUserReq struct {
+	Name     string `json:"name"`
+	Contact  string `json:"contact"`
+	Password string `json:"password"`
+}
+
+type LoginReq struct {
+	Contact  string `json:"contact"`
+	Password string `json:"password"`
+}
+
+type LoginResp struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+type UserClaims struct {
+	UserID  int64  `json:"user_id"`
+	Name    string `json:"name"`
+	Contact string `json:"contact"`
+	jwt.RegisteredClaims
+}
+
+type contextKey string
+
+const UserContextKey contextKey = "user"
 
 type APIResp struct {
 	Code     int         `json:"code"`
@@ -111,6 +189,11 @@ type CreateReplyReq struct {
 	AuthorName    string `json:"author_name"`
 	AuthorContact string `json:"author_contact"`
 	Content       string `json:"content"`
+}
+
+func UserFromContext(ctx context.Context) (*UserClaims, bool) {
+	claims, ok := ctx.Value(UserContextKey).(*UserClaims)
+	return claims, ok
 }
 
 type Ticket struct {

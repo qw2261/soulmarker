@@ -60,26 +60,45 @@
 ### 核心实体关系
 
 ```
-Event (活动)
-  ├── Registration (报名记录) — N:1，一个活动有多个报名
-  │     └── Ticket (门票) — N:1，报名可选关联一张门票
-  ├── Post (帖子) — N:1，一个活动有多个讨论帖
-  │     └── Reply (回复) — N:1，一个帖子有多个回复
-  └── Ticket (门票) — N:1，一个活动可创建多种门票
+Organizer (门店/主办方)
+  └── Event (活动)
+        ├── Registration (报名记录)
+        │     └── Ticket (门票) — N:1，报名可选关联一张门票
+        ├── Post (帖子)
+        │     └── Reply (回复) — N:1，一个帖子有多个回复
+        └── Ticket (门票) — N:1，一个活动可创建多种门票
+
+User (用户) — 注册/登录获得 JWT
+  报名/发帖/回复时自动携带身份
 ```
+
+### Organizer — 门店/主办方
+
+| 字段          | 类型      | 说明                          |
+| ----------- | ------- | --------------------------- |
+| id          | int64   | 主键                          |
+| name        | string  | 门店名称                        |
+| description | string  | 简介                          |
+| contact     | string  | 联系方式                        |
+| logo_url    | string  | Logo 图片 URL                 |
+| address     | string  | 地址                          |
+| website     | string  | 官网                          |
+| tags        | string  | 标签（逗号分隔，如"教育,讲座"）|
 
 ### Event — 活动
 
-| 字段          | 类型      | 说明                                       |
-| ----------- | ------- | ---------------------------------------- |
-| id          | int64   | 主键                                       |
-| title       | string  | 活动标题                                     |
-| description | string  | 活动描述                                     |
-| event\_time | string  | 活动时间（RFC3339）                            |
-| location    | string  | 活动地点                                     |
-| capacity    | int     | 报名容量上限                                   |
-| price       | float64 | 活动基础价格                                   |
-| status      | string  | 状态：draft / published / cancelled / ended |
+| 字段             | 类型      | 说明                                       |
+| -------------- | ------- | ---------------------------------------- |
+| id             | int64   | 主键                                       |
+| organizer\_id  | int64   | 所属门店                                     |
+| organizer\_name | string  | 门店名称（查询时自动填充）                          |
+| title          | string  | 活动标题                                     |
+| description    | string  | 活动描述                                     |
+| event\_time    | string  | 活动时间（RFC3339）                            |
+| location       | string  | 活动地点                                     |
+| capacity       | int     | 报名容量上限                                   |
+| price          | float64 | 活动基础价格                                   |
+| status         | string  | 状态：draft / published / cancelled / ended |
 
 ### Ticket — 门票
 
@@ -113,27 +132,41 @@ Event (活动)
 
 ## 当前进度
 
-**v4.3** — 报名取消功能上线，共 **18 个 API 接口**。
+**v4.4** — 门店体系 + 用户系统 + Vue 前端上线，共 **25 个 API 接口**。
 
 ```
-POST   /api/events                                    创建活动 🔐
-GET    /api/events[?status=&price_type=&q=&page=&page_size=] 活动列表（筛选 + 分页）
-GET    /api/events/{id}                               活动详情
+POST   /api/auth/register                            用户注册
+POST   /api/auth/login                               用户登录（返回 JWT）
+POST   /api/organizers                               创建门店 🔐
+GET    /api/organizers[?page=&page_size=]            门店列表（分页，含活动数）
+GET    /api/organizers/{id}                          门店详情
+PUT    /api/organizers/{id}                          编辑门店 🔐
+DELETE /api/organizers/{id}                          删除门店（活动解绑）🔐
+POST   /api/events                                    创建活动（必须归属门店）🔐
+GET    /api/events[?status=&price_type=&q=&page=&page_size=] 活动列表（筛选 + 分页，含门店名）
+GET    /api/events/{id}                               活动详情（含门店名）
 PUT    /api/events/{id}                               编辑活动 🔐
 DELETE /api/events/{id}                               删除活动 🔐
 POST   /api/events/{id}/register                      报名活动
-DELETE /api/events/{id}/register                      取消报名（活动开始前24h可取消）
+DELETE /api/events/{id}/register                      取消报名（活动开始前24h可取消，支持 JWT 自动识别）
 GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）
-POST   /api/events/{id}/posts                         发帖（需已报名）
+POST   /api/events/{id}/posts                         发帖（需已报名，支持 JWT 自动识别）
 GET    /api/events/{id}/posts[?page=&page_size=]      帖子列表（分页）
 GET    /api/events/{id}/posts/{postId}                帖子详情（含回复）
-POST   /api/events/{id}/posts/{postId}/replies        回复帖子（需已报名）
+POST   /api/events/{id}/posts/{postId}/replies        回复帖子（需已报名，支持 JWT 自动识别）
 POST   /api/events/{id}/tickets                       创建门票 🔐
 GET    /api/events/{id}/tickets[?page=&page_size=]    门票列表（分页）
 GET    /api/events/{id}/tickets/{ticketId}            门票详情
 PUT    /api/events/{id}/tickets/{ticketId}            编辑门票 🔐
 DELETE /api/events/{id}/tickets/{ticketId}            删除门票 🔐
 GET    /health                                        健康检查
+```
+
+**认证架构**：
+
+```
+用户 Token  →  Authorization: Bearer <JWT>  →  UserAuth 中间件 → context
+管理员 Token →  X-Admin-Token: <token>       →  AdminAuth 中间件
 ```
 
 **活动列表筛选参数**：
@@ -159,10 +192,21 @@ GET    /health                                        健康检查
 
 ## 核心流程
 
+### 0. 用户注册与登录
+
+```
+注册 (POST /api/auth/register) → name + contact + password（≥6位，bcrypt 加密）
+登录 (POST /api/auth/login) → contact + password → 返回 JWT Token
+
+JWT 有效期 7 天（可配置），前端 localStorage 持久化
+发帖/回复/取消报名时自动从 JWT 解析身份，无需重复填写
+```
+
 ### 1. 活动发布
 
 ```
-创建活动 (POST /api/events) → 设置门票 (POST /api/events/{id}/tickets)
+创建门店 (POST /api/organizers) 🔐 → 创建活动 (POST /api/events) 必选门店
+→ 设置门票 (POST /api/events/{id}/tickets)
 → 活动状态为 published → 对外开放报名
 ```
 
@@ -222,27 +266,28 @@ event_go/
 ├── docs/
 │   └── mvp_task.md              # 任务跟踪文档
 ├── test_reports/                # 阶段性测试报告
-├── Dockerfile                   # 多阶段构建（Go 1.25 → Alpine 3.19）
-├── go.mod                       # Go 模块定义
-├── go.sum                       # 依赖锁文件
-└── README.md                    # 项目文档
+├── Dockerfile                   # 多阶段构建（Node.js → Go → Alpine）
+├── go.mod / go.sum
+├── web/                         # Vue 3 前端（Vite + Element Plus + Pinia）
+└── README.md
 ```
 
 ### 架构分层
 
 ```
-cmd/event-go/main.go         入口层：组装依赖、启动服务
+cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallback
          │
          v
-internal/handler/handler.go  HTTP 层：路由、参数校验、权限检查
+internal/handler/handler.go  HTTP 层：路由、参数校验、权限检查、JWT 认证
          │
          v
-internal/store/store.go      数据层：SQLite CRUD、事务管理
+internal/store/store.go      数据层：SQLite CRUD、事务管理、6 表迁移
          │
          v
-internal/model/types.go      模型层：类型定义、哨兵错误、常量
+internal/model/types.go      模型层：类型定义、哨兵错误、常量、JWT Claims
 
-internal/config/config.go    配置层：环境变量统一管理（横向支撑各层）
+internal/config/config.go    配置层：环境变量统一管理（横向）
+web/                         Vue 3 前端：Vite + Element Plus + Pinia（横向）
 ```
 
 ### 依赖注入设计
@@ -268,20 +313,24 @@ main.go
 
 ### 技术选型
 
-| 选择                         | 原因                                                     |
-| -------------------------- | ------------------------------------------------------ |
-| Go 标准库路由                   | Go 1.25 路由语法（`"POST /api/events/{id}/register"`），零外部依赖 |
-| SQLite（modernc.org/sqlite） | 纯 Go 实现，零 CGO，嵌入式，单文件数据库                               |
-| 多阶段 Docker 构建              | 最终镜像约 24MB，Go 1.25 → Alpine 3.19                      |
+| 选择 | 原因 |
+|------|------|
+| Go 标准库路由 | Go 1.25 `"POST /api/events/{id}/register"`，零外部依赖 |
+| SQLite（modernc.org/sqlite） | 纯 Go，零 CGO，嵌入式，单文件数据库 |
+| Vue 3 + Element Plus + Vite | 渐进式前端，极速 HMR，TypeScript 支持 |
+| bcrypt + JWT (HS256) | 密码安全哈希 + 用户身份令牌 |
+| 多阶段 Docker 构建 | Node.js → Go → Alpine |
 
 ### 数据一致性保障
 
-| 场景       | 机制                                                        |
-| -------- | --------------------------------------------------------- |
-| 并发报名超卖   | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作                       |
-| 门票库存超卖   | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected`          |
+| 场景 | 机制 |
+|------|------|
+| 并发报名超卖 | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作 |
+| 门票库存超卖 | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected` |
 | 删除活动数据残留 | 事务级联删除：replies → posts → tickets → registrations → events |
-| 数据库连接泄漏  | `Store.Close()` + `defer` + 信号监听优雅关闭                      |
+| 删除门店保护 | 事务内解绑旗下活动（organizer_id = 0），不级联删除 |
+| 密码安全 | bcrypt 哈希（`DefaultCost`），不存明文 |
+| 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |
 
 ### 自动化测试
 
@@ -300,3 +349,141 @@ cd event_go && go test -cover ./...         # 查看覆盖率
 cd event_go && go vet ./...                 # 静态检查
 ```
 
+### API 速查
+
+```bash
+# 用户注册
+curl -s -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"张三","contact":"13800001111","password":"123456"}'
+
+# 用户登录
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"contact":"13800001111","password":"123456"}'
+
+# 创建门店（管理端）
+curl -s -X POST http://localhost:8080/api/organizers \
+  -H "Content-Type: application/json" \
+  -d '{"name":"XX大学","description":"综合大学","address":"大学路1号","tags":"教育,讲座"}'
+
+# 创建活动（归属门店）
+curl -s -X POST http://localhost:8080/api/events \
+  -H "Content-Type: application/json" \
+  -d '{"organizer_id":1,"title":"Go 进阶讲座","event_time":"2026-06-15T14:00:00+08:00","location":"线上","capacity":50,"price":19.9}'
+
+# 报名（已登录用户自动携带 JWT）
+curl -s -X POST http://localhost:8080/api/events/1/register \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
+  -d '{"name":"张三","contact":"13800001111"}'
+
+# 发帖（已登录 + 已报名）
+curl -s -X POST http://localhost:8080/api/events/1/posts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
+  -d '{"title":"好活动","content":"推荐"}'
+```
+
+***
+
+## 前端
+
+基于 Vue 3 + Element Plus + TypeScript，Vite 构建。
+
+### 项目结构
+
+```
+event_go/
+├── web/                          # 🆕 Vue 前端项目
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts            # Vite 配置（开发代理到 Go 8080）
+│   ├── tsconfig.json
+│   └── src/
+│       ├── main.ts               # Vue 入口
+│       ├── App.vue
+│       ├── api/                  # API 层（axios + 各模块封装）
+│       ├── stores/               # Pinia 状态管理（认证）
+│       ├── router/               # Vue Router 路由
+│       ├── components/           # 通用组件（导航、卡片、分页、报名表单等）
+│       ├── views/                # 页面（活动列表/详情/讨论/帖子/门店/认证/管理）
+│       └── utils/                # 工具函数（日期/价格格式化）
+├── cmd/event-go/main.go          # 入口（含 SPA 静态文件服务 + Organizer + 用户认证路由）
+├── Dockerfile                    # 多阶段构建（Node.js → Go → Alpine）
+└── ...
+```
+
+### 页面路由
+
+| 路由 | 页面 | 说明 |
+|------|------|------|
+| `/` | 活动列表 | 首页，搜索/筛选/分页，卡片展示门店名 |
+| `/events/:id` | 活动详情 | 活动信息 + 门店链接 + 报名/取消 + 最近帖子 |
+| `/events/:id/discussion` | 讨论区 | 帖子列表 + 发帖（JWT 自动填充） |
+| `/events/:id/posts/:postId` | 帖子详情 | 内容 + 回复列表 + 写回复 |
+| `/organizers` | 门店列表 | 卡片网格，含活动数 |
+| `/login` | 用户登录 | contact + password |
+| `/register` | 用户注册 | name + contact + password（≥6 位） |
+| `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
+| `/admin/events` | 活动管理 | 列表 + 删除 |
+| `/admin/events/new` | 创建活动 | 表单（先选门店） |
+| `/admin/events/:id/edit` | 编辑活动 | 表单 + 状态管理 |
+| `/admin/events/:id/registrations` | 报名列表 | 查看报名记录 |
+
+***
+
+## 快速启动
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `8080` | 服务端口 |
+| `ADMIN_TOKEN` | 空（不校验） | 管理员令牌 |
+| `DATABASE_PATH` | `data/event_go.db` | SQLite 数据库路径 |
+| `JWT_SECRET` | 内置 dev key | JWT 签名密钥（**生产务必修改**） |
+| `JWT_EXPIRE_HOURS` | `168`（7 天） | JWT 有效期 |
+| `CORS_ORIGIN` | `*` | 允许的跨域来源 |
+| `CANCEL_DEADLINE_HOURS` | `24` | 取消报名截止小时数 |
+
+### 环境准备
+
+```bash
+# 如果 nvm 装了但没加载（终端提示 npm: command not found）
+export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+```
+
+### 开发模式（前后端分离）
+
+```bash
+# 终端1：启动 Go 后端（端口 8080）
+cd event_go && go run .
+
+# 终端2：安装前端依赖 + 启动 Vite 开发服务器（端口 5173）
+cd event_go/web
+npm install
+npm run dev
+
+# 浏览器打开 http://localhost:5173
+```
+
+### 生产构建（单二进制）
+
+```bash
+# 1. 构建前端静态文件
+cd event_go/web && npm install && npm run build
+
+# 2. 构建并运行（Go 服务 SPA 静态文件）
+cd event_go && go build -o event-go ./cmd/event-go/ && ./event-go
+
+# 浏览器打开 http://localhost:8080
+```
+
+### Docker 部署
+
+```bash
+cd event_go
+docker build -t event-go .
+docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go
+```

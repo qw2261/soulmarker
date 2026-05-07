@@ -1,16 +1,20 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const timeParseMsg = "格式错误，请使用 RFC3339 格式，例如：2026-12-31T18:00:00+08:00"
@@ -121,6 +125,20 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.OrganizerID <= 0 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门店不能为空"})
+		return
+	}
+	org, err := h.store.GetOrganizer(req.OrganizerID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		return
+	}
+	if org == nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: model.ErrOrganizerNotFound.Error()})
+		return
+	}
+
 	if req.Title == "" {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动标题不能为空"})
 		return
@@ -147,12 +165,14 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event := &model.Event{
-		Title:       req.Title,
-		Description: req.Description,
-		EventTime:   req.EventTime,
-		Location:    req.Location,
-		Capacity:    req.Capacity,
-		Price:       req.Price,
+		OrganizerID:   req.OrganizerID,
+		OrganizerName: org.Name,
+		Title:         req.Title,
+		Description:   req.Description,
+		EventTime:     req.EventTime,
+		Location:      req.Location,
+		Capacity:      req.Capacity,
+		Price:         req.Price,
 	}
 	if err := h.store.CreateEvent(event); err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
@@ -327,8 +347,13 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Contact == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空"})
+	_, contact := getUserIdentity(r)
+	if contact == "" {
+		contact = req.Contact
+	}
+
+	if contact == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空，请先登录或传入 contact"})
 		return
 	}
 
@@ -345,7 +370,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.CancelRegistration(eventID, req.Contact); err != nil {
+	if err := h.store.CancelRegistration(eventID, contact); err != nil {
 		switch {
 		case errors.Is(err, model.ErrNotRegistered):
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
@@ -402,11 +427,17 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AuthorContact == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空"})
+	authorName, authorContact := getUserIdentity(r)
+	if authorContact == "" {
+		authorName = req.AuthorName
+		authorContact = req.AuthorContact
+	}
+
+	if authorContact == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空，请先登录或传入 author_contact"})
 		return
 	}
-	if !h.checkRegistration(w, eventID, req.AuthorContact) {
+	if !h.checkRegistration(w, eventID, authorContact) {
 		return
 	}
 	if req.Title == "" {
@@ -420,8 +451,8 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 	post := &model.Post{
 		EventID:       eventID,
-		AuthorName:    req.AuthorName,
-		AuthorContact: req.AuthorContact,
+		AuthorName:    authorName,
+		AuthorContact: authorContact,
 		Title:         req.Title,
 		Content:       req.Content,
 	}
@@ -512,11 +543,17 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AuthorContact == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空"})
+	authorName, authorContact := getUserIdentity(r)
+	if authorContact == "" {
+		authorName = req.AuthorName
+		authorContact = req.AuthorContact
+	}
+
+	if authorContact == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空，请先登录或传入 author_contact"})
 		return
 	}
-	if !h.checkRegistration(w, post.EventID, req.AuthorContact) {
+	if !h.checkRegistration(w, post.EventID, authorContact) {
 		return
 	}
 	if req.Content == "" {
@@ -526,8 +563,8 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 
 	reply := &model.Reply{
 		PostID:        postID,
-		AuthorName:    req.AuthorName,
-		AuthorContact: req.AuthorContact,
+		AuthorName:    authorName,
+		AuthorContact: authorContact,
 		Content:       req.Content,
 	}
 	if err := h.store.CreateReply(reply); err != nil {
@@ -714,7 +751,7 @@ func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -730,19 +767,245 @@ func writeJSON(w http.ResponseWriter, status int, resp model.APIResp) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// AdminAuth 中间件，验证管理员Bearer令牌，保护需要管理员权限的API
+// AdminAuth 中间件，验证管理员令牌，保护需要管理员权限的API
 func AdminAuth(next http.Handler) http.Handler {
 	token := getAdminToken()
 	if token == "" {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		expected := "Bearer " + token
-		if auth != expected {
+		auth := r.Header.Get("X-Admin-Token")
+		if auth != token {
 			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: model.ErrUnauthorized.Error()})
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
+	var req model.RegisterUserReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+		return
+	}
+	if req.Name == "" || req.Contact == "" || req.Password == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "姓名、联系方式、密码不能为空"})
+		return
+	}
+	if len(req.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "密码至少 6 位"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "密码加密失败"})
+		return
+	}
+
+	u := &model.User{
+		Name:         req.Name,
+		Contact:      req.Contact,
+		PasswordHash: string(hash),
+	}
+	if err := h.store.CreateUser(u); err != nil {
+		if errors.Is(err, model.ErrUserExists) {
+			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: err.Error()})
+		} else {
+			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		}
+		return
+	}
+
+	token, err := h.generateToken(u)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "令牌生成失败"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, model.APIResp{
+		Code: 201, Message: "注册成功",
+		Data: model.LoginResp{Token: token, User: *u},
+	})
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req model.LoginReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+		return
+	}
+	if req.Contact == "" || req.Password == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式、密码不能为空"})
+		return
+	}
+
+	u, err := h.store.GetUserByContact(req.Contact)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		return
+	}
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: model.ErrInvalidCreds.Error()})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
+		writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: model.ErrInvalidCreds.Error()})
+		return
+	}
+
+	token, err := h.generateToken(u)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "令牌生成失败"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.APIResp{
+		Code: 200, Message: "登录成功",
+		Data: model.LoginResp{Token: token, User: *u},
+	})
+}
+
+func (h *Handler) generateToken(u *model.User) (string, error) {
+	cfg := config.Load()
+	claims := &model.UserClaims{
+		UserID:  u.ID,
+		Name:    u.Name,
+		Contact: u.Contact,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(cfg.JWTExpireHours) * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(cfg.JWTSecret))
+}
+
+func UserAuth(next http.Handler) http.Handler {
+	cfg := config.Load()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		tokenStr := strings.TrimPrefix(auth, "Bearer ")
+		claims := &model.UserClaims{}
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
+			return []byte(cfg.JWTSecret), nil
+		})
+		if err != nil || !token.Valid {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), model.UserContextKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func getUserIdentity(r *http.Request) (name, contact string) {
+	if claims, ok := model.UserFromContext(r.Context()); ok {
+		return claims.Name, claims.Contact
+	}
+	return "", ""
+}
+
+func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateOrganizerReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+		return
+	}
+	if req.Name == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门店名称不能为空"})
+		return
+	}
+
+	o := &model.Organizer{
+		Name:        req.Name,
+		Description: req.Description,
+		Contact:     req.Contact,
+		LogoURL:     req.LogoURL,
+		Address:     req.Address,
+		Website:     req.Website,
+		Tags:        req.Tags,
+	}
+	if err := h.store.CreateOrganizer(o); err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "门店创建成功", Data: o})
+}
+
+func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门店 ID"})
+		return
+	}
+	o, err := h.store.GetOrganizer(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		return
+	}
+	if o == nil {
+		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrOrganizerNotFound.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: o})
+}
+
+func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
+	page, pageSize := parsePagination(r)
+	offset := (page - 1) * pageSize
+	organizers, total, err := h.store.ListOrganizers(offset, pageSize)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		return
+	}
+	paginatedOK(w, organizers, total, page, pageSize)
+}
+
+func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门店 ID"})
+		return
+	}
+	var req model.UpdateOrganizerReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+		return
+	}
+	o, err := h.store.UpdateOrganizer(id, req)
+	if err != nil {
+		if errors.Is(err, model.ErrOrganizerNotFound) {
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+		} else {
+			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "门店更新成功", Data: o})
+}
+
+func (h *Handler) DeleteOrganizer(w http.ResponseWriter, r *http.Request) {
+	id, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门店 ID"})
+		return
+	}
+	if err := h.store.DeleteOrganizer(id); err != nil {
+		if errors.Is(err, model.ErrOrganizerNotFound) {
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+		} else {
+			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "门店已删除"})
 }
