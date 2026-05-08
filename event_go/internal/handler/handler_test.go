@@ -12,10 +12,31 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
+
+func makeTestJWT(t *testing.T, userID int64, name, contact string) string {
+	t.Helper()
+	claims := &model.UserClaims{
+		UserID:  userID,
+		Name:    name,
+		Contact: contact,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte("event-go-dev-secret-change-in-production"))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return signed
+}
 
 func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	t.Helper()
@@ -33,7 +54,8 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	mux.HandleFunc("GET /api/events/{id}", h.GetEvent)
 	mux.HandleFunc("PUT /api/events/{id}", AdminAuth(http.HandlerFunc(h.UpdateEvent)).ServeHTTP)
 	mux.HandleFunc("DELETE /api/events/{id}", AdminAuth(http.HandlerFunc(h.DeleteEvent)).ServeHTTP)
-	mux.HandleFunc("POST /api/events/{id}/register", h.Register)
+	mux.HandleFunc("POST /api/events/{id}/register", UserAuth(http.HandlerFunc(h.Register)).ServeHTTP)
+	mux.HandleFunc("DELETE /api/events/{id}/register", UserAuth(http.HandlerFunc(h.CancelRegistration)).ServeHTTP)
 	mux.HandleFunc("GET /api/events/{id}/registrations", h.ListRegistrations)
 	mux.HandleFunc("POST /api/events/{id}/posts", h.CreatePost)
 	mux.HandleFunc("GET /api/events/{id}/posts", h.ListPosts)
@@ -44,6 +66,8 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
 	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
 	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
+	mux.HandleFunc("POST /api/auth/register", h.RegisterUser)
+	mux.HandleFunc("POST /api/auth/login", h.Login)
 	mux.HandleFunc("GET /health", h.HealthHandler)
 
 	server := httptest.NewServer(LoggingMiddleware(CORS(mux)))
@@ -145,7 +169,7 @@ func TestCreateEventInvalidJSON(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+		t.Fatalf("expected 400 for invalid JSON, got %d", resp.StatusCode)
 	}
 }
 
@@ -226,7 +250,7 @@ func TestGetEventHandlerInvalidID(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+		t.Fatalf("expected 400 for invalid ID, got %d", resp.StatusCode)
 	}
 }
 
@@ -1199,6 +1223,596 @@ func TestGetTicketNotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestCancelRegistrationHandlerWithJWT(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+	token := makeTestJWT(t, 1, "测试人", "cancel_jwt@test.com")
+
+	createBody := `{"organizer_id":1,"title":"取消JWT","event_time":"2099-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	resp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+	ed := created.Data.(map[string]interface{})
+	eid := int64(ed["id"].(float64))
+
+	regBody := `{"name":"测试人","contact":"cancel_jwt@test.com"}`
+	http.Post(srv.URL+"/api/events/"+itoa64(eid)+"/register", "application/json", strings.NewReader(regBody))
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/events/"+itoa64(eid)+"/register",
+		strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCancelRegistrationHandlerWithBody(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"organizer_id":1,"title":"取消Body","event_time":"2099-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	resp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+	ed := created.Data.(map[string]interface{})
+	eid := int64(ed["id"].(float64))
+
+	regBody := `{"name":"张三","contact":"cancel_body@test.com"}`
+	http.Post(srv.URL+"/api/events/"+itoa64(eid)+"/register", "application/json", strings.NewReader(regBody))
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/events/"+itoa64(eid)+"/register",
+		strings.NewReader(`{"contact":"cancel_body@test.com"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCancelRegistrationHandlerNoContact(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	createBody := `{"organizer_id":1,"title":"取消NoContact","event_time":"2099-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	resp, _ := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(createBody))
+	var created model.APIResp
+	json.NewDecoder(resp.Body).Decode(&created)
+	resp.Body.Close()
+	ed := created.Data.(map[string]interface{})
+	eid := int64(ed["id"].(float64))
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/events/"+itoa64(eid)+"/register",
+		strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserAuthNoToken(t *testing.T) {
+	var captured bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = true
+		_, contact := getUserIdentity(r)
+		if contact != "" {
+			t.Error("expected empty contact without token")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	UserAuth(next).ServeHTTP(w, req)
+
+	if !captured {
+		t.Error("next handler not called")
+	}
+}
+
+func TestUserAuthWithValidToken(t *testing.T) {
+	token := makeTestJWT(t, 1, "测试", "test@auth.com")
+
+	var captured bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = true
+		name, contact := getUserIdentity(r)
+		if name != "测试" {
+			t.Errorf("expected name 测试, got %s", name)
+		}
+		if contact != "test@auth.com" {
+			t.Errorf("expected contact test@auth.com, got %s", contact)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	UserAuth(next).ServeHTTP(w, req)
+
+	if !captured {
+		t.Error("next handler not called with valid token")
+	}
+}
+
+func TestUserAuthWithInvalidToken(t *testing.T) {
+	var captured bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = true
+		_, contact := getUserIdentity(r)
+		if contact != "" {
+			t.Error("expected empty contact with invalid token")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer invalid.token.here")
+	w := httptest.NewRecorder()
+	UserAuth(next).ServeHTTP(w, req)
+
+	if !captured {
+		t.Error("next handler not called with invalid token")
+	}
+}
+
+func TestUpdateOrganizerHandlerNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"name":"不存在的"}`
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/organizers/999", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteOrganizerHandlerNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/organizers/999", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterUserEmptyBody(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(`{"name":"","contact":"","password":""}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandlerBadJSON(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/auth/login", "application/json", strings.NewReader(`not json`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateEventWithAuth(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"organizer_id":1,"title":"管理员创建","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`
+	req, _ := http.NewRequest("POST", srv.URL+"/api/events", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetEventNotFoundHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/999")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetEventInvalidIDHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/abc")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestListEventsInvalidPage(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events?page=-1")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterEmptyBody(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/events/1/register", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent event, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterBadJSON(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/events/1/register", "application/json", strings.NewReader(`bad`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent event, got %d", resp.StatusCode)
+	}
+}
+
+func TestListRegistrationsInvalidID(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/abc/registrations")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreatePostHandlerBadJSON(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/events/1/posts", "application/json", strings.NewReader(`bad json`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent event, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateReplyHandlerBadJSON(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/events/1/posts/1/replies", "application/json", strings.NewReader(`bad`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent event, got %d", resp.StatusCode)
+	}
+}
+
+func TestListPostsInvalidID(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/abc/posts")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetPostInvalidID(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/1/posts/abc")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateTicketInvalidBody(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/events/1/tickets", "application/json", strings.NewReader(`bad`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent event, got %d", resp.StatusCode)
+	}
+}
+
+func TestListTicketsInvalidID(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/events/abc/tickets")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateOrganizerHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"name":"新门店","description":"测试","tags":"教育,咖啡"}`
+	resp, err := http.Post(srv.URL+"/api/organizers", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateOrganizerEmptyName(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Post(srv.URL+"/api/organizers", "application/json", strings.NewReader(`{"name":""}`))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestListOrganizersHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/organizers")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, _ := json.Marshal(apiResp.Data)
+	var orgs []model.Organizer
+	json.Unmarshal(data, &orgs)
+	if len(orgs) != 1 {
+		t.Fatalf("expected 1 organizer, got %d", len(orgs))
+	}
+}
+
+func TestGetOrganizerHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/organizers/1")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetOrganizerHandlerNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	resp, err := http.Get(srv.URL + "/api/organizers/999")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterUserHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"name":"测试用户","contact":"reg@test.com","password":"123456"}`
+	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, _ := json.Marshal(apiResp.Data)
+	var loginResp model.LoginResp
+	json.Unmarshal(data, &loginResp)
+	if loginResp.Token == "" {
+		t.Fatal("expected token in response")
+	}
+}
+
+func TestRegisterUserDuplicate(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"name":"重复","contact":"dup@test.com","password":"123456"}`
+	http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
+	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterUserShortPassword(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"name":"短密码","contact":"short@test.com","password":"12"}`
+	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandler(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	http.Post(srv.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"name":"登录测试","contact":"login@test.com","password":"abcdef"}`))
+
+	body := `{"contact":"login@test.com","password":"abcdef"}`
+	resp, err := http.Post(srv.URL+"/api/auth/login", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	json.NewDecoder(resp.Body).Decode(&apiResp)
+	data, _ := json.Marshal(apiResp.Data)
+	var loginResp model.LoginResp
+	json.Unmarshal(data, &loginResp)
+	if loginResp.Token == "" {
+		t.Fatal("expected token in response")
+	}
+}
+
+func TestLoginHandlerWrongPassword(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	http.Post(srv.URL+"/api/auth/register", "application/json",
+		strings.NewReader(`{"name":"错误","contact":"wrong@test.com","password":"pass1pass"}`))
+
+	body := `{"contact":"wrong@test.com","password":"wrongpass"}`
+	resp, err := http.Post(srv.URL+"/api/auth/login", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestLoginHandlerNotFound(t *testing.T) {
+	_, _, srv := setupTestServer(t)
+
+	body := `{"contact":"noexist@test.com","password":"anything"}`
+	resp, err := http.Post(srv.URL+"/api/auth/login", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
 }
 

@@ -132,7 +132,7 @@ User (用户) — 注册/登录获得 JWT
 
 ## 当前进度
 
-**v4.4** — 门店体系 + 用户系统 + Vue 前端上线，共 **25 个 API 接口**。
+**v5.0** — 测试覆盖率提升 + 依赖升级，共 **25 个 API 接口**。
 
 ```
 POST   /api/auth/register                            用户注册
@@ -143,7 +143,7 @@ GET    /api/organizers/{id}                          门店详情
 PUT    /api/organizers/{id}                          编辑门店 🔐
 DELETE /api/organizers/{id}                          删除门店（活动解绑）🔐
 POST   /api/events                                    创建活动（必须归属门店）🔐
-GET    /api/events[?status=&price_type=&q=&page=&page_size=] 活动列表（筛选 + 分页，含门店名）
+GET    /api/events[?status=&price_type=&q=&organizer_id=&page=&page_size=] 活动列表（筛选 + 分页，含门店名）
 GET    /api/events/{id}                               活动详情（含门店名）
 PUT    /api/events/{id}                               编辑活动 🔐
 DELETE /api/events/{id}                               删除活动 🔐
@@ -176,6 +176,7 @@ GET    /health                                        健康检查
 | `status`     | string | 按状态筛选        | `draft` / `published` / `cancelled` / `ended` |
 | `price_type` | string | 按价格类型筛选      | `free`（免费） / `paid`（付费）                       |
 | `q`          | string | 关键词搜索（标题+描述） | `Go`、`Docker`                                 |
+| `organizer_id` | int    | 按门店筛选活动 | `1` |
 
 **列表接口分页参数**（活动/报名/帖子/门票）：
 
@@ -337,15 +338,19 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
-| 测试用例 | **81+**（Store + Handler） |
-| 覆盖率 | **~75%** |
+| 测试用例 | **176**（Store + Handler） |
+| Store 覆盖率 | **80.0%** |
+| Handler 覆盖率 | **75.4%** |
+| 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
+| 依赖状态 | 全部最新 |
 
 **测试命令**：
 
 ```bash
 cd event_go && go test -v -count=1 ./...   # 运行所有测试
 cd event_go && go test -cover ./...         # 查看覆盖率
+cd event_go && go test -race ./...          # 数据竞争检测
 cd event_go && go vet ./...                 # 静态检查
 ```
 
@@ -422,7 +427,8 @@ event_go/
 | `/events/:id` | 活动详情 | 活动信息 + 门店链接 + 报名/取消 + 最近帖子 |
 | `/events/:id/discussion` | 讨论区 | 帖子列表 + 发帖（JWT 自动填充） |
 | `/events/:id/posts/:postId` | 帖子详情 | 内容 + 回复列表 + 写回复 |
-| `/organizers` | 门店列表 | 卡片网格，含活动数 |
+| `/organizers` | 门店列表 | 卡片网格，含活动数，可点击进入详情 |
+| `/organizers/:id` | 门店详情 | 门店信息 + 旗下活动列表（分页） |
 | `/login` | 用户登录 | contact + password |
 | `/register` | 用户注册 | name + contact + password（≥6 位） |
 | `/admin` | 管理登录 | Token 认证（X-Admin-Token） |

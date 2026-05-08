@@ -183,10 +183,14 @@ func (s *Store) CreateEvent(e *model.Event) error {
 	return nil
 }
 
-func buildEventsQuery(status string, priceType string, keyword string) (string, []interface{}) {
+func buildEventsQuery(status string, priceType string, keyword string, organizerID int64) (string, []interface{}) {
 	where := " WHERE 1=1"
 	var args []interface{}
 
+	if organizerID > 0 {
+		where += " AND e.organizer_id = ?"
+		args = append(args, organizerID)
+	}
 	if status != "" {
 		where += " AND e.status = ?"
 		args = append(args, status)
@@ -203,8 +207,8 @@ func buildEventsQuery(status string, priceType string, keyword string) (string, 
 	return where, args
 }
 
-func (s *Store) ListEvents(status string, priceType string, keyword string, offset, limit int) ([]*model.Event, int, error) {
-	where, args := buildEventsQuery(status, priceType, keyword)
+func (s *Store) ListEvents(status string, priceType string, keyword string, organizerID int64, offset, limit int) ([]*model.Event, int, error) {
+	where, args := buildEventsQuery(status, priceType, keyword, organizerID)
 
 	var total int
 	countArgs := make([]interface{}, len(args))

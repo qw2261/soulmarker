@@ -187,10 +187,11 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	priceType := r.URL.Query().Get("price_type")
 	keyword := r.URL.Query().Get("q")
+	organizerID, _ := strconv.ParseInt(r.URL.Query().Get("organizer_id"), 10, 64)
 	page, pageSize := parsePagination(r)
 	offset := (page - 1) * pageSize
 
-	events, total, err := h.store.ListEvents(status, priceType, keyword, offset, pageSize)
+	events, total, err := h.store.ListEvents(status, priceType, keyword, organizerID, offset, pageSize)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
 		return

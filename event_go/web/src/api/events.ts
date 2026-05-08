@@ -12,6 +12,7 @@ export interface ListEventsParams {
   status?: string
   price_type?: string
   q?: string
+  organizer_id?: number
   page?: number
   page_size?: number
 }

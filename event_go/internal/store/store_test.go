@@ -98,7 +98,7 @@ func TestGetEventNotFound(t *testing.T) {
 func TestListEventsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	events, _, err := store.ListEvents("", "", "", 0, 0)
+	events, _, err := store.ListEvents("", "", "", 0, 0, 0)
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestListEventsMultiple(t *testing.T) {
 		}
 	}
 
-	events, _, err := store.ListEvents("", "", "", 0, 0)
+	events, _, err := store.ListEvents("", "", "", 0, 0, 0)
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -878,12 +878,12 @@ func TestListEventsFilterByStatus(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("published", "", "", 0, 0)
+	events, _, _ := store.ListEvents("published", "", "", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 published event, got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("draft", "", "", 0, 0)
+	events, _, _ = store.ListEvents("draft", "", "", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 draft event, got %d", len(events))
 	}
@@ -903,12 +903,12 @@ func TestListEventsFilterByPriceType(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "free", "", 0, 0)
+	events, _, _ := store.ListEvents("", "free", "", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 free event, got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "paid", "", 0, 0)
+	events, _, _ = store.ListEvents("", "paid", "", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event, got %d", len(events))
 	}
@@ -929,17 +929,17 @@ func TestListEventsSearchByKeyword(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "", "Go", 0, 0)
+	events, _, _ := store.ListEvents("", "", "Go", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Go', got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "", "Docker", 0, 0)
+	events, _, _ = store.ListEvents("", "", "Docker", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Docker', got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "", "不存在的", 0, 0)
+	events, _, _ = store.ListEvents("", "", "不存在的", 0, 0, 0)
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events matching '不存在的', got %d", len(events))
 	}
@@ -959,7 +959,7 @@ func TestListEventsCombinedFilter(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "paid", "Go", 0, 0)
+	events, _, _ := store.ListEvents("", "paid", "Go", 0, 0, 0)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event matching 'Go', got %d", len(events))
 	}
@@ -987,5 +987,452 @@ func TestDeleteEventCascadeTickets(t *testing.T) {
 	tickets, _, _ := store.ListTickets(e.ID, 0, 0)
 	if len(tickets) != 0 {
 		t.Fatal("expected 0 tickets after cascade delete")
+	}
+}
+
+func TestCreateOrganizer(t *testing.T) {
+	store := setupTestStore(t)
+	o := &model.Organizer{Name: "测试门店", Description: "描述", Contact: "1380000", Tags: "教育,讲座"}
+	if err := store.CreateOrganizer(o); err != nil {
+		t.Fatalf("CreateOrganizer failed: %v", err)
+	}
+	if o.ID != 2 {
+		t.Fatalf("expected ID 2, got %d", o.ID)
+	}
+}
+
+func TestGetOrganizer(t *testing.T) {
+	store := setupTestStore(t)
+	o, err := store.GetOrganizer(1)
+	if err != nil {
+		t.Fatalf("GetOrganizer failed: %v", err)
+	}
+	if o == nil {
+		t.Fatal("expected organizer, got nil")
+	}
+	if o.Name != "默认门店" {
+		t.Fatalf("expected 默认门店, got %s", o.Name)
+	}
+}
+
+func TestGetOrganizerNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	o, err := store.GetOrganizer(999)
+	if err != nil {
+		t.Fatalf("GetOrganizer err: %v", err)
+	}
+	if o != nil {
+		t.Fatal("expected nil for not found")
+	}
+}
+
+func TestListOrganizers(t *testing.T) {
+	store := setupTestStore(t)
+	organizers, total, err := store.ListOrganizers(0, 10)
+	if err != nil {
+		t.Fatalf("ListOrganizers failed: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected 1 total, got %d", total)
+	}
+	if len(organizers) != 1 {
+		t.Fatalf("expected 1 organizer, got %d", len(organizers))
+	}
+	if organizers[0].EventCount < 0 {
+		t.Fatal("expected non-negative event_count")
+	}
+}
+
+func TestUpdateOrganizer(t *testing.T) {
+	store := setupTestStore(t)
+	newName := "更新名称"
+	o, err := store.UpdateOrganizer(1, model.UpdateOrganizerReq{Name: &newName})
+	if err != nil {
+		t.Fatalf("UpdateOrganizer failed: %v", err)
+	}
+	if o.Name != "更新名称" {
+		t.Fatalf("expected 更新名称, got %s", o.Name)
+	}
+}
+
+func TestUpdateOrganizerNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	newName := "X"
+	_, err := store.UpdateOrganizer(999, model.UpdateOrganizerReq{Name: &newName})
+	if err == nil {
+		t.Fatal("expected error for not found")
+	}
+}
+
+func TestDeleteOrganizer(t *testing.T) {
+	store := setupTestStore(t)
+	if err := store.DeleteOrganizer(1); err != nil {
+		t.Fatalf("DeleteOrganizer failed: %v", err)
+	}
+	o, err := store.GetOrganizer(1)
+	if err != nil {
+		t.Fatalf("GetOrganizer after delete: %v", err)
+	}
+	if o != nil {
+		t.Fatal("expected nil after delete")
+	}
+}
+
+func TestDeleteOrganizerNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	err := store.DeleteOrganizer(999)
+	if err == nil {
+		t.Fatal("expected error for not found")
+	}
+}
+
+func TestDeleteOrganizerUnlinkEvents(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("归属活动")
+	if err := store.CreateEvent(e); err != nil {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	if err := store.DeleteOrganizer(1); err != nil {
+		t.Fatalf("DeleteOrganizer: %v", err)
+	}
+	ev, err := store.GetEvent(e.ID)
+	if err != nil {
+		t.Fatalf("GetEvent: %v", err)
+	}
+	if ev.OrganizerID != 0 {
+		t.Fatalf("expected organizer_id 0, got %d", ev.OrganizerID)
+	}
+}
+
+func TestCreateUser(t *testing.T) {
+	store := setupTestStore(t)
+	u := &model.User{Name: "测试用户", Contact: "13800001111", PasswordHash: "hashed"}
+	if err := store.CreateUser(u); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	if u.ID != 1 {
+		t.Fatalf("expected ID 1, got %d", u.ID)
+	}
+}
+
+func TestGetUserByContact(t *testing.T) {
+	store := setupTestStore(t)
+	u := &model.User{Name: "张三", Contact: "zhang@test.com", PasswordHash: "xxx"}
+	store.CreateUser(u)
+
+	found, err := store.GetUserByContact("zhang@test.com")
+	if err != nil {
+		t.Fatalf("GetUserByContact: %v", err)
+	}
+	if found == nil {
+		t.Fatal("expected user, got nil")
+	}
+	if found.Name != "张三" {
+		t.Fatalf("expected 张三, got %s", found.Name)
+	}
+}
+
+func TestGetUserByContactNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	u, err := store.GetUserByContact("no@exist.com")
+	if err != nil {
+		t.Fatalf("GetUserByContact: %v", err)
+	}
+	if u != nil {
+		t.Fatal("expected nil")
+	}
+}
+
+func TestCreateUserDuplicate(t *testing.T) {
+	store := setupTestStore(t)
+	u := &model.User{Name: "重复用户", Contact: "dup_user@test.com", PasswordHash: "aaa"}
+	if err := store.CreateUser(u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	err := store.CreateUser(&model.User{Name: "重复用户2", Contact: "dup_user@test.com", PasswordHash: "bbb"})
+	if err == nil {
+		t.Fatal("expected error for duplicate contact")
+	}
+}
+
+func TestPing(t *testing.T) {
+	store := setupTestStore(t)
+	if err := store.Ping(); err != nil {
+		t.Fatalf("Ping failed: %v", err)
+	}
+}
+
+func TestPingNilDB(t *testing.T) {
+	store := &Store{}
+	err := store.Ping()
+	if err == nil {
+		t.Fatal("expected error for nil db")
+	}
+}
+
+func TestClose(t *testing.T) {
+	store := NewStore(":memory:")
+	defer store.Close()
+	if err := store.Ping(); err != nil {
+		t.Fatalf("should work before close: %v", err)
+	}
+}
+
+func TestCancelRegistrationStore(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("取消测试")
+	e.EventTime = "2099-12-31T18:00:00+08:00"
+	if err := store.CreateEvent(e); err != nil {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	if err := store.Register(&model.Registration{EventID: e.ID, Name: "张三", Contact: "zs@test.com"}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if err := store.CancelRegistration(e.ID, "zs@test.com"); err != nil {
+		t.Fatalf("CancelRegistration: %v", err)
+	}
+	regs, _, _ := store.ListRegistrations(e.ID, 0, 0)
+	if len(regs) != 0 {
+		t.Fatal("expected 0 registrations after cancel")
+	}
+}
+
+func TestCancelRegistrationStoreNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	err := store.CancelRegistration(999, "no@exist.com")
+	if err == nil {
+		t.Fatal("expected error for not found")
+	}
+}
+
+func TestCancelRegistrationStoreWithTicket(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("取消退票")
+	e.EventTime = "2099-12-31T18:00:00+08:00"
+	store.CreateEvent(e)
+	ticket := &model.Ticket{EventID: e.ID, Name: "VIP", Price: 99, Stock: 10}
+	store.CreateTicket(ticket)
+	tid := ticket.ID
+	store.Register(&model.Registration{EventID: e.ID, Name: "李四", Contact: "ls@test.com", TicketID: &tid})
+
+	if err := store.CancelRegistration(e.ID, "ls@test.com"); err != nil {
+		t.Fatalf("CancelRegistration: %v", err)
+	}
+	updated, _ := store.GetTicket(tid)
+	if updated.Stock != 10 {
+		t.Fatalf("expected stock restored to 10, got %d", updated.Stock)
+	}
+}
+
+func TestRegisterStoreFull(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("满员")
+	e.Capacity = 1
+	e.EventTime = "2099-12-31T18:00:00+08:00"
+	store.CreateEvent(e)
+	store.Register(&model.Registration{EventID: e.ID, Name: "用户1", Contact: "u1@test.com"})
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "用户2", Contact: "u2@test.com"})
+	if err == nil {
+		t.Fatal("expected ErrFull")
+	}
+}
+
+func TestRegisterStoreDuplicate(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("重复")
+	e.EventTime = "2099-12-31T18:00:00+08:00"
+	store.CreateEvent(e)
+	store.Register(&model.Registration{EventID: e.ID, Name: "赵六", Contact: "zhao@test.com"})
+	err := store.Register(&model.Registration{EventID: e.ID, Name: "赵六", Contact: "zhao@test.com"})
+	if err == nil {
+		t.Fatal("expected ErrDuplicate")
+	}
+}
+
+func TestListEventsOrgFilter(t *testing.T) {
+	store := setupTestStore(t)
+
+	o2 := &model.Organizer{Name: "门店2"}
+	store.CreateOrganizer(o2)
+
+	e1 := newTestEvent("活动A")
+	e1.OrganizerID = 1
+	store.CreateEvent(e1)
+	e2 := newTestEvent("活动B")
+	e2.OrganizerID = o2.ID
+	store.CreateEvent(e2)
+
+	events, _, _ := store.ListEvents("", "", "", 1, 0, 0)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event for org 1, got %d", len(events))
+	}
+	evs2, _, _ := store.ListEvents("", "", "", o2.ID, 0, 0)
+	if len(evs2) != 1 {
+		t.Fatalf("expected 1 event for org 2, got %d", len(evs2))
+	}
+}
+
+func TestListRegistrationsStoreEmpty(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("空报名")
+	store.CreateEvent(e)
+	_, total, _ := store.ListRegistrations(e.ID, 0, 0)
+	if total != 0 {
+		t.Fatalf("expected 0, got %d", total)
+	}
+}
+
+func TestListTicketsStoreEmpty(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("无票")
+	store.CreateEvent(e)
+	_, total, _ := store.ListTickets(e.ID, 0, 0)
+	if total != 0 {
+		t.Fatalf("expected 0, got %d", total)
+	}
+}
+
+func TestListPostsStoreEmpty(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("无帖")
+	store.CreateEvent(e)
+	_, total, _ := store.ListPosts(e.ID, 0, 0)
+	if total != 0 {
+		t.Fatalf("expected 0, got %d", total)
+	}
+}
+
+func TestCreateEventMissingOrganizer(t *testing.T) {
+	store := NewStore(":memory:")
+	defer store.Close()
+	_ = store.CreateOrganizer(&model.Organizer{Name: "测试"})
+
+	e := newTestEvent("无门店活动")
+	e.OrganizerID = 0
+	err := store.CreateEvent(e)
+	if err != nil {
+		t.Fatalf("CreateEvent with organizer_id=0 should work: %v", err)
+	}
+	ev, _ := store.GetEvent(e.ID)
+	if ev.OrganizerName != "" {
+		t.Fatalf("expected empty organizer_name for id=0, got %s", ev.OrganizerName)
+	}
+}
+
+func TestUpdateEventStatusChange(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("状态更新2")
+	store.CreateEvent(e)
+
+	status := "ended"
+	ev, err := store.UpdateEvent(e.ID, model.UpdateEventReq{Status: &status})
+	if err != nil {
+		t.Fatalf("UpdateEvent: %v", err)
+	}
+	if ev.Status != "ended" {
+		t.Fatalf("expected ended, got %s", ev.Status)
+	}
+}
+
+func TestUpdateEventLocationField(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("地点更新")
+	store.CreateEvent(e)
+
+	loc := "新地址"
+	ev, err := store.UpdateEvent(e.ID, model.UpdateEventReq{Location: &loc})
+	if err != nil {
+		t.Fatalf("UpdateEvent: %v", err)
+	}
+	if ev.Location != "新地址" {
+		t.Fatalf("expected 新地址, got %s", ev.Location)
+	}
+}
+
+func TestDeleteEventWithPosts(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("级联帖子")
+	store.CreateEvent(e)
+
+	p := &model.Post{EventID: e.ID, AuthorName: "作者", AuthorContact: "a@t.com", Title: "帖", Content: "内"}
+	store.CreatePost(p)
+
+	if err := store.DeleteEvent(e.ID); err != nil {
+		t.Fatalf("DeleteEvent: %v", err)
+	}
+
+	got, _ := store.GetPost(p.ID)
+	if got != nil {
+		t.Fatal("expected nil post after cascade delete")
+	}
+}
+
+func TestListOrganizersPageOne(t *testing.T) {
+	store := setupTestStore(t)
+	o2 := &model.Organizer{Name: "门店二"}
+	store.CreateOrganizer(o2)
+
+	orgs, total, _ := store.ListOrganizers(0, 1)
+	if total != 2 {
+		t.Fatalf("expected 2 total, got %d", total)
+	}
+	if len(orgs) != 1 {
+		t.Fatalf("expected 1 page, got %d", len(orgs))
+	}
+}
+
+func TestUpdateOrganizerMultipleFields(t *testing.T) {
+	store := setupTestStore(t)
+	desc := "新描述"
+	addr := "新地址"
+	o, err := store.UpdateOrganizer(1, model.UpdateOrganizerReq{Description: &desc, Address: &addr})
+	if err != nil {
+		t.Fatalf("UpdateOrganizer: %v", err)
+	}
+	if o.Description != "新描述" || o.Address != "新地址" {
+		t.Fatal("expected updated fields")
+	}
+}
+
+func TestDeleteOrganizerWithEvents(t *testing.T) {
+	store := setupTestStore(t)
+	e := newTestEvent("归属活动2")
+	if err := store.CreateEvent(e); err != nil {
+		t.Fatalf("CreateEvent: %v", err)
+	}
+	if err := store.DeleteOrganizer(1); err != nil {
+		t.Fatalf("DeleteOrganizer: %v", err)
+	}
+	ev, _ := store.GetEvent(e.ID)
+	if ev.OrganizerID != 0 {
+		t.Fatalf("expected organizer_id 0 after delete, got %d", ev.OrganizerID)
+	}
+}
+
+func TestGetUserByID(t *testing.T) {
+	store := setupTestStore(t)
+	u := &model.User{Name: "李四", Contact: "lisi@test.com", PasswordHash: "yyy"}
+	store.CreateUser(u)
+
+	found, err := store.GetUserByID(u.ID)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if found == nil {
+		t.Fatal("expected user, got nil")
+	}
+	if found.Contact != "lisi@test.com" {
+		t.Fatalf("expected lisi@test.com, got %s", found.Contact)
+	}
+}
+
+func TestGetUserByIDNotFound(t *testing.T) {
+	store := setupTestStore(t)
+	u, err := store.GetUserByID(999)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if u != nil {
+		t.Fatal("expected nil")
 	}
 }

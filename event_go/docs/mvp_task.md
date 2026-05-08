@@ -120,6 +120,8 @@
 | **二十一、分页** | ✅ 已完成 | 4 个列表接口支持 page/page_size，返回 total |
 | **二十二、报名取消** | ✅ 已完成 | DELETE 取消报名 + 24h 截止时间 + 退还门票库存 |
 | **二十三、门店 + 用户 + 前端** | ✅ 已完成 | Organizer 层级 + JWT 注册登录 + Vue 3 前端 |
+| **二十四、门店详情 + 按店筛选** | ✅ 已完成 | 门店详情页 + `?organizer_id=` 筛选活动 |
+| **二十五、测试覆盖率提升 + 依赖升级** | ✅ 已完成 | 108→176 用例，Store 80%/Handler 75%，依赖全升级 |
 
 ***
 
@@ -809,49 +811,106 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 
 ---
 
-## 待实现功能（优先级排序）
+## 待实现功能（v4.4 后优先级排序）
 
 ### 优先级全景
 
-| 优先级 | 方向 | 类型 | 说明 |
-|--------|------|------|------|
-| **P1** | 📄 **分页** | ✅ 已完成 | 列表接口（活动/报名/帖子/门票）支持分页 |
-| **P1** | 🛡️ **限流** | 现有 | 基于 IP 的请求频率限制，防滥用 |
-| **P1** | ❌ **报名取消** | 🆕 新增 | 用户可取消自己的报名，退还门票库存 |
-| **P2** | 🧪 **并发测试** | 升档 | `go test -race` 检测数据竞争 |
-| **P2** | 🔒 **安全审计** | 升档 | gosec 代码扫描 + 依赖漏洞检查 |
-| **P2** | 📤 **数据导出** | 升档 | 报名记录导出为 CSV |
-| **P2** | 🛠️ **树莓派部署** | 现有 | Docker ARM64 部署 + 内网穿透 |
-| **P2** | 🖥️ **前端界面** | 现有 | Web / 小程序，等后端功能稳定后再投入 |
-| **P2** | 🗑️ **内容删除** | 🆕 新增 | 帖子/回复支持管理端和作者删除 |
-| **P2** | ✅ **联系方式校验** | 🆕 新增 | 报名时对邮箱/手机号格式做基本校验 |
-| **P3** | 📝 **API 文档** | 降档 | Swagger/OpenAPI 文档生成 |
-| **P3** | ⏰ **活动状态自动更新** | 🆕 新增 | 启动时自动将过期活动标记为 ended |
-| **P4** | 🚀 **CI/CD** | 现有 | GitHub Actions 自动化构建 |
-| — | 🖼️ **活动封面图（预留）** | 🆕 长期 | 数据模型预留 `cover_image_url` 字段，避免后续 break change |
+| 优先级 | 方向 | 说明 |
+|--------|------|------|
+| **P1** | 🎫 **报名免填身份 + 二维码核销** | 登录后报名只需选门票点确认；报名成功生成二维码，管理员扫码核销 |
+| **P1** | 📱 **H5 移动端适配** | 响应式 CSS + viewport + 底部 Tab 导航，现有 Vue 改样式即可，后续平滑迁移小程序 |
+| **P1** | 🖼️ **活动封面图** | `Event` 加 `cover_image_url`，卡片 + 详情页展示 |
+| **P1** | 🏷️ **按门店聚合视图** | 首页默认活动列表，增加"按门店浏览"视图切换 |
+| **P1** | 🛡️ **限流** | 基于 IP 的请求频率限制，防滥用 |
+| **P2** | 📨 **报名通知** | 报名后邮箱/站内通知，增加用户留存 |
+| **P2** | 📤 **数据导出** | 报名 CSV 导出 |
+| **P2** | ✏️ **内容删除** | 帖子/回复管理端/作者删除 |
+| **P2** | 📞 **联系方式校验** | 邮箱/手机号格式校验 |
+| **P2** | 🏠 **树莓派部署** | ARM64 Docker + 内网穿透 |
+| **P3** | 📖 **API 文档** | Swagger / OpenAPI |
+| **P3** | ⏰ **活动状态自动更新** | 过期活动自动归档 ended |
+| **P4** | 🚀 **CI/CD** | GitHub Actions 自动化构建 |
 
-### 调整说明
+### v4.4 后调整说明
 
-| 调整项 | 原优先级 | 新优先级 | 理由 |
-|--------|----------|----------|------|
-| 并发测试 | P3 | P2 | 一行命令即可跑，现有事务逻辑需要尽早验证正确性 |
-| 安全审计 | P3 | P2 | gosec 也是跑命令的事，部署公网前就该扫 |
-| 数据导出 | P3 | P2 | 活动组织者的刚需，比 API 文档更务实 |
-| API 文档 | P2 | P3 | 纯标准库路由，Swagger 注解兼容性存疑；当前 README 表格 + curl 示例已基本够用 |
-| 报名取消 | — | P1 | 报名了不能取消是体验硬伤，`contact` 天然可做身份识别 |
-| 内容删除 | — | P2 | 讨论区没有内容管理手段会变垃圾场，是内容治理基本能力 |
-| 联系方式校验 | — | P2 | 当前只检查非空，无格式校验，容易产生脏数据 |
-| 活动状态自动更新 | — | P3 | `event_time` 已过但状态还是 `published`，靠人工改容易遗忘 |
+| 调整项 | 说明 |
+|--------|------|
+| 前端界面 | ✅ 已完成（v4.4），移除待办 |
+| 分页 | ✅ 已完成（v4.3），移除待办 |
+| 报名取消 | ✅ 已完成（v4.3），移除待办 |
+| 门店详情页 + 活动按门店筛选 | ✅ 已完成，P0 清空 |
+| 测试覆盖率 + 依赖升级 | ✅ 已完成（v5.0），176 用例 / Store 80% / Handler 75% / 依赖全升级 / race 零竞争 |
+| 并发测试 / 安全审计 / 大评测 | ✅ 已完成（v5.0），移出待办 |
+| 报名免填身份 + 二维码核销 | 🆕 新增 P1，登录后报名零摩擦，Registration 加 user_id + check_code，管理员扫码核销 |
+| H5 移动端适配 | 🆕 新增 P1，现有 Vue 3 代码改响应式 CSS 即可，改动小收益大，为后续迁移小程序打基础 |
+| 门店详情页 | 升为 P0，后端 API 已完成，前端页面是功能闭环的关键缺口 |
+| 活动封面图 | 升为 P1，已有门店 Logo 先例，活动没有封面图体验差 |
+| 大评测 | 降为 P3，刚做完大更新，应先补齐功能缺口再做大评测 |
 
 ---
 
 ## 规划详情
 
-### P1. 分页
+### 已完成（v4.5）
 
-- 列表接口新增 `page` / `page_size` 查询参数
-- 返回 `total` 总数，方便前端展示分页组件
-- 涉及接口：活动列表、报名列表、帖子列表、门票列表
+- 🏪 **门店详情页** — 路由 `/organizers/:id`，门店信息 + 旗下活动列表（分页 + EventCard）
+- 🔗 **活动按门店筛选** — `GET /api/events?organizer_id=` 后端 + 前端均已支持
+
+### P1. 报名免填身份 + 二维码核销 🆕
+
+**目标**：用户登录后报名零摩擦——只需选门票点确认，不用再填 name/contact。
+报名成功生成核销二维码，活动当天管理员扫码确认到场。
+
+**核心理念**：注册一次，到处通用。账户体系统一后，name/contact 从 JWT 取即可，无需重复输入。
+
+**后端改动**：
+
+- `Registration` 结构体加 `user_id` + `check_code`，name/contact 改为从 users 表 JOIN
+- `RegisterReq` 去掉 name/contact 字段（强制登录，从 JWT 取 user_id）
+- 防重复报名改为 user_id 判断（更可靠）
+- 权限校验（发帖/回复/取消报名）从 contact 改为 user_id
+- 核销接口：`POST /api/registrations/{id}/check`（管理员扫码）
+
+**前端改动**：
+
+- 报名表单简化为"门票选择器 + 确认按钮"，去掉 name/contact 输入框
+- 未登录点击报名 → 弹出登录引导
+- 报名成功后展示核销二维码
+- 用户个人中心展示已报名活动 + 二维码
+
+**兼容性**：老报名记录 user_id=0，标记 legacy，不影响已有数据查询
+
+### P1. H5 移动端适配 🆕
+
+**目标**：现有 Vue 3 前端改造为响应式，支持手机浏览器访问。
+
+**路线**：先做 H5 → 验证移动端使用场景 → 按需迁移微信小程序。
+
+**为什么 H5 优先**：
+- 现有 Vue 3 + Element Plus 代码 100% 复用，只改样式不需要新项目
+- 后端 REST API 不变，H5 和小程序共享同一套接口
+- 先验证移动端高频场景，再做小程序时有数据支撑
+
+**改动范围**：
+- `index.html` 加 `<meta name="viewport">` 移动端视口
+- CSS 全局响应式：Grid 列数、max-width、字体、间距
+- NavBar 移动端切换为底部 Tab 导航（首页、门店、我的）
+- 活动卡片移动端为单列纵排
+- 门店卡片网格 3 列 → 2 列 → 1 列自适应
+- 管理后台保持桌面端（不优先适配）
+
+### P1. 活动封面图
+
+- `Event` 结构体加 `cover_image_url` 字段
+- 数据库 `ALTER TABLE events ADD COLUMN cover_image_url`
+- 活动卡片 + 详情页展示（无图时有默认占位）
+- `CreateEventReq` / `UpdateEventReq` 增加 `cover_image_url`
+
+### P1. 按门店聚合视图
+
+- 首页默认展示活动列表（现状），增加视图切换
+- 切换后按门店分组展示：门店卡片 → 展开旗下活动
+- 类似大众点评"商家列表 + 套餐列表"双重入口
 
 ### P1. 限流
 
@@ -859,15 +918,10 @@ CREATE INDEX IF NOT EXISTS idx_registrations_event_created ON registrations(even
 - 保护报名、发帖等写接口
 - 可配置 `RATE_LIMIT` 环境变量
 
-### P1. 报名取消 🆕
+### P2. 报名通知
 
-```
-DELETE /api/events/{id}/register?contact=xxx
-```
-
-- 用户通过 `contact` 定位自己的报名记录并取消
-- 取消后自动退还门票库存（事务内原子操作）
-- 已取消报名的用户在帖子/回复上可标记"已退出"
+- 报名成功后发送通知（初期可站内消息，后续支持邮件）
+- `POST /api/notifications` 站内通知，报名/取消/活动即将开始触发
 
 ### P2. 并发测试
 
@@ -884,65 +938,42 @@ DELETE /api/events/{id}/register?contact=xxx
 - `GET /api/events/{id}/registrations/export` 导出报名记录
 - 支持 CSV 格式
 
-### P2. 树莓派部署
-
-**目标**：将服务部署到树莓派上，作为家庭服务器
-
-**方案**：
-- 采用 Docker 多架构构建（支持 ARM64）
-- 交叉编译后推送到树莓派运行
-- 后续前端页面集成到同一服务中
-
-**TODO**：
-- [ ] 更新 Dockerfile 支持多架构构建（linux/arm64）
-- [ ] 编写树莓派部署脚本
-- [ ] 配置内网穿透（Frp / Tailscale）
-- [ ] Go 服务增加静态文件服务支持
-- [ ] 前端页面开发与集成
-
-### P2. 前端界面
-
-- 待后端功能稳定后再投入
-- 可考虑 Web / 小程序
-
-### P2. 内容删除 🆕
+### P2. 内容删除
 
 ```
-DELETE /api/events/{id}/posts/{postId}              # 管理端 🔐 或作者（传 contact）
+DELETE /api/events/{id}/posts/{postId}              # 管理端 🔐 或作者（JWT 校验）
 DELETE /api/events/{id}/posts/{postId}/replies/{replyId}
 ```
 
 - 管理端可直接删除任何帖子/回复（需 Admin Token）
-- 作者通过 `contact` 校验身份后可删除自己的帖子/回复
+- 作者通过 JWT 校验身份后可删除自己的帖子/回复
 - 删除帖子时级联删除其下所有回复
 
-### P2. 联系方式校验 🆕
+### P2. 联系方式校验
 
 - 对 `RegisterReq.Contact` 增加格式校验
 - 支持邮箱正则 + 手机号正则（至少匹配一种）
 - 校验失败返回 400 并提示格式要求
 
-### P3. API 文档
+### P2. 树莓派部署
 
-- 使用 Swagger 注解生成 OpenAPI 文档
-- 编写部署文档和开发规范
+- Docker 多架构构建（ARM64）
+- 内网穿透（Frp / Tailscale）
 
-### P3. 活动状态自动更新 🆕
+### P3. 大评测
 
-- 服务启动时执行：`UPDATE events SET status='ended' WHERE status='published' AND event_time < datetime('now')`
-- 在 `NewStore` / `migrate()` 中加一条 SQL 即可
-- 避免靠管理员手动改状态，过期活动自动归档
+- 代码审查：命名、结构、错误处理一致性
+- `gosec` 安全扫描
+- `go test -race` 并发竞争
+- 性能评测：压测 QPS / 内存 / 连接池
+- 安全：SQL 注入 / XSS / Token 泄露检查
+
+### P3. API 文档 / 活动状态自动更新
 
 ### P4. CI/CD
 
 - 配置 GitHub Actions 工作流
 - 代码提交时自动运行测试 + 构建 Docker 镜像
-
-### 长期关注：活动封面图 🆕
-
-- 在 `Event` 结构体中预留 `cover_image_url` 字段
-- 可在做分页时顺手加上，避免后续 break change
-- 先不实现上传逻辑，仅预留字段 + 数据库列
 
 ***
 
@@ -1101,4 +1132,82 @@ UserAuth 宽松模式：无 Token 时不拒绝，不注入身份
 - [x] 用户注册 → 获取 JWT → 携带 Token 发帖成功
 - [x] 管理员创建门店 → 创建活动归属门店 → 活动卡片展示门店名
 - [x] 前端 `npm run dev` + Go 后端联调通过
+
+***
+
+## 第二十四阶段：门店详情页 + 按门店筛选活动 ✅
+
+### 目标
+
+完成 P0 功能闭环：门店列表 → 门店详情页 → 旗下活动。
+
+### 一、后端：活动按门店筛选
+
+- [x] `buildEventsQuery` 新增 `organizerID` 参数
+- [x] `ListEvents` 签名扩展：`ListEvents(status, priceType, keyword, organizerID int64, offset, limit)`
+- [x] Handler 解析 `GET /api/events?organizer_id=` 查询参数
+- [x] WHERE 条件：`AND e.organizer_id = ?`
+
+### 二、前端：门店详情页
+
+- [x] 新页面 `OrganizerDetail.vue`，路由 `/organizers/:id`
+- [x] 门店信息展示：Logo / 名称 / 简介 / 地址 / 联系方式 / 网站 / 标签
+- [x] 旗下活动列表：调用 `GET /api/events?organizer_id=` 分页展示，复用 EventCard
+- [x] 无活动时显示"暂无活动"占位
+- [x] `ListEventsParams` 前端新增 `organizer_id` 字段
+- [x] 门店列表卡片已有点击跳转（`$router.push('/organizers/'+id)`）
+- [x] 活动详情页主办方链接可点击进入
+
+### 验证结果
+
+- [x] `go build ./...` 编译通过
+- [x] `go test ./...` 全部通过
+- [x] `curl /api/events?organizer_id=1` 正确返回该门店旗下活动
+- [x] `curl /api/events`（不带参数）返回全部活动，不受影响
+- [x] 前端门店列表 → 点击卡片 → 门店详情页 → 展示旗下活动
+
+***
+
+## 第二十五阶段：测试覆盖率提升 + 依赖升级 ✅
+
+### 目标
+
+将测试覆盖率从 54-59% 提升至 80%/75%，补齐 Organizer/User/JWT/边界 等模块的测试缺口，升级所有过期依赖。
+
+### 一、测试补充
+
+新增 **68 个测试用例**（108 → 176）：
+
+| 分类 | 数量 | 覆盖内容 |
+|------|------|---------|
+| Store Organizer CRUD | 8 | Create/Get/List/Update/Delete + not-found + UnlinkEvents |
+| Store User CRUD | 6 | Create/GetByContact/GetByID + not-found + Duplicate |
+| Store CancelRegistration | 3 | 正常取消 / 退票库存恢复 / not-found |
+| Store Register 边界 | 2 | 满员(ErrFull) / 重复(ErrDuplicate) |
+| Store 其他 | 9 | Ping/Close/UpdateEvent/DeleteWithPosts/Pagination/空列表 |
+| Handler CancelRegistration | 3 | JWT自动识别 / body传contact / 无contact拒接 |
+| Handler UserAuth | 3 | 无Token放行 / 有效Token注入 / 无效Token忽略 |
+| Handler Organizer 边界 | 3 | UpdateNotFound / DeleteNotFound / CreateEmptyName |
+| Handler Auth 边界 | 4 | Register空字段/重复/短密码 / Login错误JSON |
+| Handler 通用边界 | 15 | GetEvent/Register/Post/Reply/Ticket 的 invalidID/badJSON/not-found |
+
+### 二、依赖升级
+
+| 依赖 | 版本变化 |
+|------|---------|
+| `golang.org/x/mod` | v0.33.0 → v0.35.0 |
+| `golang.org/x/net` | v0.52.0 → v0.53.0 |
+| `github.com/mattn/go-isatty` | v0.0.20 → v0.0.22 |
+
+### 三、验证结果
+
+| 指标 | 改前 | 改后 |
+|------|------|------|
+| 测试用例数 | 108 | **176** |
+| Store 覆盖率 | 59.2% | **80.0%** |
+| Handler 覆盖率 | 53.9% | **75.4%** |
+| 通过率 | 100% | **100%** |
+| `go test -race` | — | **零竞争** |
+| `go vet ./...` | 通过 | **通过** |
+| 过期依赖 | 3个 | **0** |
 

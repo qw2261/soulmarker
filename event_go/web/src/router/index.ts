@@ -14,6 +14,11 @@ const router = createRouter({
       component: () => import('@/views/OrganizerList.vue'),
     },
     {
+      path: '/organizers/:id',
+      name: 'organizer-detail',
+      component: () => import('@/views/OrganizerDetail.vue'),
+    },
+    {
       path: '/events/:id',
       name: 'event-detail',
       component: () => import('@/views/EventDetail.vue'),
