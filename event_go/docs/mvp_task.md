@@ -122,6 +122,7 @@
 | **二十三、门店 + 用户 + 前端** | ✅ 已完成 | Organizer 层级 + JWT 注册登录 + Vue 3 前端 |
 | **二十四、门店详情 + 按店筛选** | ✅ 已完成 | 门店详情页 + `?organizer_id=` 筛选活动 |
 | **二十五、测试覆盖率提升 + 依赖升级** | ✅ 已完成 | 108→176 用例，Store 80%/Handler 75%，依赖全升级 |
+| **二十六、代码拆分重构** | ✅ 已完成 | 1→7 文件, handler 1→7 文件, ListEventsParams 封装 |
 
 ***
 
@@ -1210,4 +1211,51 @@ UserAuth 宽松模式：无 Token 时不拒绝，不注入身份
 | `go test -race` | — | **零竞争** |
 | `go vet ./...` | 通过 | **通过** |
 | 过期依赖 | 3个 | **0** |
+
+---
+
+## 第二十六阶段：代码拆分重构 ✅
+
+### 目标
+
+store.go 1040 行 / handler.go 1012 行，单体文件过长。按功能拆分为同包多文件，同时封装 `ListEventsParams` 结构体。
+
+### 一、model/types.go 新增
+
+- [x] `ListEventsParams` 结构体（Status / PriceType / Keyword / OrganizerID / Offset / Limit）
+
+### 二、store/ 拆分（1 → 7 文件）
+
+- [x] `store.go` — 基础设施（Store 结构体, Close, Ping, NewStore, migrate, isUniqueConstraintError）
+- [x] `store_event.go` — 活动 CRUD（CreateEvent, buildEventsQuery, ListEvents, GetEvent, UpdateEvent, DeleteEvent）
+- [x] `store_ticket.go` — 门票 CRUD（CreateTicket, ListTickets, GetTicket, UpdateTicket, DeleteTicket）
+- [x] `store_registration.go` — 报名 CRUD（Register, ListRegistrations, IsRegistered, CancelRegistration）
+- [x] `store_post.go` — 帖子/回复（CreatePost, ListPosts, GetPost, CreateReply, ListReplies）
+- [x] `store_user.go` — 用户（CreateUser, GetUserByContact, GetUserByID）
+- [x] `store_organizer.go` — 门店（CreateOrganizer, GetOrganizer, ListOrganizers, UpdateOrganizer, DeleteOrganizer）
+
+### 三、handler/ 拆分（1 → 7 文件）
+
+- [x] `handler.go` — 基础设施 + 中间件（Handler 结构体, parseID, paginatedOK, getEventOr404, checkRegistration, HealthHandler, CORS, writeJSON, AdminAuth）
+- [x] `handler_event.go` — 活动 API（CreateEvent, ListEvents, GetEvent, UpdateEvent, DeleteEvent）
+- [x] `handler_ticket.go` — 门票 API（CreateTicket, ListTickets, GetTicket, UpdateTicket, DeleteTicket）
+- [x] `handler_registration.go` — 报名 API（Register, CancelRegistration, ListRegistrations）
+- [x] `handler_post.go` — 帖子/回复 API（CreatePost, ListPosts, GetPost, CreateReply）
+- [x] `handler_auth.go` — 用户认证（RegisterUser, Login, generateToken, UserAuth, getUserIdentity）
+- [x] `handler_organizer.go` — 门店 API（CreateOrganizer, GetOrganizer, ListOrganizers, UpdateOrganizer, DeleteOrganizer）
+
+### 四、ListEvents 签名变更
+
+- [x] `ListEvents(status, priceType, keyword, organizerID, offset, limit)` → `ListEvents(params ListEventsParams)`
+- [x] 更新 store_test.go、handler_event.go 中所有调用点
+
+### 五、验证结果
+
+| 指标 | 结果 |
+|------|------|
+| `go build ./...` | ✅ 通过 |
+| `go vet ./...` | ✅ 零警告 |
+| `go test -count=1 ./...` | ✅ 176 用例全部通过 |
+| `go test -race -cover` | ✅ 零竞争，Store 80.0%，Handler 75.3% |
+| DAG | ✅ 不变，同包编译自动合并 |
 

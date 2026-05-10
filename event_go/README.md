@@ -132,7 +132,7 @@ User (用户) — 注册/登录获得 JWT
 
 ## 当前进度
 
-**v5.0** — 测试覆盖率提升 + 依赖升级，共 **25 个 API 接口**。
+**v5.1** — 代码拆分重构，共 **25 个 API 接口**。
 
 ```
 POST   /api/auth/register                            用户注册
@@ -255,17 +255,30 @@ event_go/
 │   ├── config/
 │   │   └── config.go            # 配置管理：环境变量统一加载
 │   ├── handler/
-│   │   ├── handler.go           # HTTP 层：请求处理、参数校验、权限检查
+│   │   ├── handler.go           # 基础设施：Handler 结构体, parseID, paginatedOK, getEventOr404 等
+│   │   ├── handler_event.go     # 活动 API（Create/List/Get/Update/Delete）
+│   │   ├── handler_ticket.go    # 门票 API（Create/List/Get/Update/Delete）
+│   │   ├── handler_registration.go # 报名 API（Register, CancelRegistration, ListRegistrations）
+│   │   ├── handler_post.go      # 帖子/回复 API（CreatePost/Reply, ListPosts, GetPost）
+│   │   ├── handler_auth.go      # 用户认证（RegisterUser, Login, UserAuth, getUserIdentity）
+│   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
 │   │   ├── handler_test.go      # Handler 集成测试
 │   │   └── middleware.go        # 中间件：日志、CORS、管理员认证
 │   ├── store/
-│   │   ├── store.go             # 数据层：SQLite 建表迁移、所有 CRUD 方法、事务管理
+│   │   ├── store.go             # 基础设施：Store 结构体, Close, Ping, NewStore, migrate
+│   │   ├── store_event.go       # 活动 CRUD
+│   │   ├── store_ticket.go      # 门票 CRUD
+│   │   ├── store_registration.go # 报名 CRUD
+│   │   ├── store_post.go        # 帖子/回复 CRUD
+│   │   ├── store_user.go        # 用户 CRUD
+│   │   ├── store_organizer.go   # 门店 CRUD
 │   │   └── store_test.go        # Store 单元测试
 │   └── model/
-│       └── types.go             # 数据模型：结构体定义、哨兵错误、常量
+│       └── types.go             # 数据模型：结构体定义、哨兵错误、常量、ListEventsParams
 ├── data/                        # 数据库文件（运行时生成）
 ├── docs/
-│   └── mvp_task.md              # 任务跟踪文档
+│   ├── mvp_task.md              # 全量任务跟踪文档
+│   └── mvp_task_core.md         # 核心版任务跟踪
 ├── test_reports/                # 阶段性测试报告
 ├── Dockerfile                   # 多阶段构建（Node.js → Go → Alpine）
 ├── go.mod / go.sum
@@ -279,10 +292,10 @@ event_go/
 cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallback
          │
          v
-internal/handler/handler.go  HTTP 层：路由、参数校验、权限检查、JWT 认证
+internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证（7 文件）
          │
          v
-internal/store/store.go      数据层：SQLite CRUD、事务管理、6 表迁移
+internal/store/*.go          数据层：SQLite CRUD、事务管理、6 表迁移（7 文件）
          │
          v
 internal/model/types.go      模型层：类型定义、哨兵错误、常量、JWT Claims
@@ -310,7 +323,7 @@ main.go
 
 - `main.go` 创建 `Store`，再创建 `Handler` 把 `Store` 注入进去
 - `Handler` 的方法直接调用 `h.store.Xxx()`，不走全局变量
-- 加新功能时：`model/` 加结构体 → `store/` 加方法 → `handler/` 加处理器 → `cmd/` 加路由
+- 加新功能时：`model/` 加结构体 → `store/` 在对应文件加方法 → `handler/` 在对应文件加处理器 → `cmd/` 加路由
 
 ### 技术选型
 

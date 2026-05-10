@@ -35,10 +35,22 @@
 | **二十三、门店 + 用户 + 前端** | ✅ | Organizer 层级 + JWT 注册登录 + Vue 3 前端 |
 | **二十四、门店详情 + 按店筛选** | ✅ | 门店详情页 + `?organizer_id=` 筛选 |
 | **二十五、覆盖率提升 + 依赖升级** | ✅ | 176 用例 / Store 80% / Handler 75% / race clean |
+| **二十六、代码拆分重构** | ✅ | store 1→7 文件, handler 1→7 文件 + ListEventsParams 封装 |
 
 ---
 
-## v5.0 摘要
+## v5.1 摘要
+
+```
+25 个 API 接口 | 176 测试用例 | Store 80% / Handler 75% 覆盖率
+go test -race 零竞争 | go vet 零警告 | 所有依赖最新
+store 7 文件 (max 224行) | handler 7 文件 (max 180行) | ListEventsParams 封装
+Organizer → Event → Ticket → Registration → Post → Reply 两级实体架构
+X-Admin-Token（管理）+ Authorization Bearer JWT（用户）双通道认证
+JWT 自动识别 | SQLite WAL + 事务 | JSON 结构化日志
+```
+
+## v5.0 摘要（历史）
 
 ```
 25 个 API 接口 | 176 测试用例 | Store 80% / Handler 75% 覆盖率
@@ -71,6 +83,51 @@ docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go   # 数据持久化
 ## 🔧 小改动
 
 - [x] **main.go 走 config 统一配置** — `DB_PATH` / `PORT` 改用 `config.Load()`
+
+---
+
+## 二十六、代码拆分重构 ✅
+
+> 背景：store.go 1040 行 / handler.go 1012 行，单体文件过长。拆分为同包多文件，DAG 不变。
+> 原则：**只拆文件不拆包**，所有 `package store` / `package handler` 编译为同一单元，依赖方向不变。
+
+### 拆分结果
+
+#### store/（1 → 7 文件，最大 224 行）
+
+| 文件 | 行数 | 内容 |
+|------|------|------|
+| `store.go` | 163 | Store 结构体, Close, Ping, NewStore, migrate, isUniqueConstraintError |
+| `store_event.go` | 224 | CreateEvent, buildEventsQuery, ListEvents, GetEvent, UpdateEvent, DeleteEvent |
+| `store_ticket.go` | 148 | CreateTicket, ListTickets, GetTicket, UpdateTicket, DeleteTicket |
+| `store_registration.go` | 187 | Register, ListRegistrations, IsRegistered, CancelRegistration |
+| `store_post.go` | 146 | CreatePost, ListPosts, GetPost, CreateReply, ListReplies |
+| `store_user.go` | 60 | CreateUser, GetUserByContact, GetUserByID |
+| `store_organizer.go` | 163 | CreateOrganizer, GetOrganizer, ListOrganizers, UpdateOrganizer, DeleteOrganizer |
+
+#### handler/（1 → 7 文件，最大 180 行）
+
+| 文件 | 行数 | 内容 |
+|------|------|------|
+| `handler.go` | 180 | Handler 结构体, NewHandler, parseID 系列, paginatedOK, getEventOr404, checkRegistration, HealthHandler, CORS, writeJSON, AdminAuth |
+| `handler_event.go` | 162 | CreateEvent, ListEvents, GetEvent, UpdateEvent, DeleteEvent |
+| `handler_ticket.go` | 143 | CreateTicket, ListTickets, GetTicket, UpdateTicket, DeleteTicket |
+| `handler_registration.go` | 148 | Register, CancelRegistration, ListRegistrations |
+| `handler_post.go` | 173 | CreatePost, ListPosts, GetPost, CreateReply |
+| `handler_auth.go` | 146 | RegisterUser, Login, generateToken, UserAuth, getUserIdentity |
+| `handler_organizer.go` | 105 | CreateOrganizer, GetOrganizer, ListOrganizers, UpdateOrganizer, DeleteOrganizer |
+
+#### model/ 新增
+
+- `ListEventsParams` 结构体，`ListEvents(status, priceType, keyword, organizerID, offset, limit)` → `ListEvents(params ListEventsParams)`
+
+### 验证
+
+```
+go build ✅ | go vet ✅ | go test -race -cover ✅
+176 用例全部通过 | Store 80.0% | Handler 75.3%
+DAG 不变: cmd/main.go → handler/*.go → store/*.go → model/types.go
+```
 
 ---
 

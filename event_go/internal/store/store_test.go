@@ -98,7 +98,7 @@ func TestGetEventNotFound(t *testing.T) {
 func TestListEventsEmpty(t *testing.T) {
 	store := setupTestStore(t)
 
-	events, _, err := store.ListEvents("", "", "", 0, 0, 0)
+	events, _, err := store.ListEvents(model.ListEventsParams{})
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestListEventsMultiple(t *testing.T) {
 		}
 	}
 
-	events, _, err := store.ListEvents("", "", "", 0, 0, 0)
+	events, _, err := store.ListEvents(model.ListEventsParams{})
 	if err != nil {
 		t.Fatalf("ListEvents failed: %v", err)
 	}
@@ -878,12 +878,12 @@ func TestListEventsFilterByStatus(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("published", "", "", 0, 0, 0)
+	events, _, _ := store.ListEvents(model.ListEventsParams{Status: "published"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 published event, got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("draft", "", "", 0, 0, 0)
+	events, _, _ = store.ListEvents(model.ListEventsParams{Status: "draft"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 draft event, got %d", len(events))
 	}
@@ -903,12 +903,12 @@ func TestListEventsFilterByPriceType(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "free", "", 0, 0, 0)
+	events, _, _ := store.ListEvents(model.ListEventsParams{PriceType: "free"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 free event, got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "paid", "", 0, 0, 0)
+	events, _, _ = store.ListEvents(model.ListEventsParams{PriceType: "paid"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event, got %d", len(events))
 	}
@@ -929,17 +929,17 @@ func TestListEventsSearchByKeyword(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "", "Go", 0, 0, 0)
+	events, _, _ := store.ListEvents(model.ListEventsParams{Keyword: "Go"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Go', got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "", "Docker", 0, 0, 0)
+	events, _, _ = store.ListEvents(model.ListEventsParams{Keyword: "Docker"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event matching 'Docker', got %d", len(events))
 	}
 
-	events, _, _ = store.ListEvents("", "", "不存在的", 0, 0, 0)
+	events, _, _ = store.ListEvents(model.ListEventsParams{Keyword: "不存在的"})
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events matching '不存在的', got %d", len(events))
 	}
@@ -959,7 +959,7 @@ func TestListEventsCombinedFilter(t *testing.T) {
 		t.Fatalf("CreateEvent failed: %v", err)
 	}
 
-	events, _, _ := store.ListEvents("", "paid", "Go", 0, 0, 0)
+	events, _, _ := store.ListEvents(model.ListEventsParams{PriceType: "paid", Keyword: "Go"})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 paid event matching 'Go', got %d", len(events))
 	}
@@ -1262,11 +1262,11 @@ func TestListEventsOrgFilter(t *testing.T) {
 	e2.OrganizerID = o2.ID
 	store.CreateEvent(e2)
 
-	events, _, _ := store.ListEvents("", "", "", 1, 0, 0)
+	events, _, _ := store.ListEvents(model.ListEventsParams{OrganizerID: 1})
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event for org 1, got %d", len(events))
 	}
-	evs2, _, _ := store.ListEvents("", "", "", o2.ID, 0, 0)
+	evs2, _, _ := store.ListEvents(model.ListEventsParams{OrganizerID: o2.ID})
 	if len(evs2) != 1 {
 		t.Fatalf("expected 1 event for org 2, got %d", len(evs2))
 	}

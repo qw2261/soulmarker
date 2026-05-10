@@ -149,6 +149,15 @@ type contextKey string
 
 const UserContextKey contextKey = "user"
 
+type ListEventsParams struct {
+	Status      string
+	PriceType   string
+	Keyword     string
+	OrganizerID int64
+	Offset      int
+	Limit       int
+}
+
 type APIResp struct {
 	Code     int         `json:"code"`
 	Message  string      `json:"message"`
