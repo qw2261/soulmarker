@@ -196,14 +196,14 @@ func (s *Store) DeleteEvent(id int64) error {
 		return fmt.Errorf("删除帖子失败: %w", err)
 	}
 
-	_, err = tx.Exec(`DELETE FROM tickets WHERE event_id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("删除门票失败: %w", err)
-	}
-
 	_, err = tx.Exec(`DELETE FROM registrations WHERE event_id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("删除报名记录失败: %w", err)
+	}
+
+	_, err = tx.Exec(`DELETE FROM tickets WHERE event_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("删除门票失败: %w", err)
 	}
 
 	result, err := tx.Exec(`DELETE FROM events WHERE id = ?`, id)

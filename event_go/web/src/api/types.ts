@@ -47,6 +47,18 @@ export interface Registration {
   created_at: string
 }
 
+export interface MyRegistration {
+  id: number
+  event_id: number
+  event_title: string
+  event_time: string
+  location: string
+  event_status: string
+  ticket_id?: number
+  ticket_name?: string
+  created_at: string
+}
+
 export interface RegistrationStatus {
   registered: boolean
 }
@@ -107,25 +119,15 @@ export interface UpdateEventReq {
 }
 
 export interface RegisterReq {
-  name: string
-  contact: string
   ticket_id?: number
 }
 
-export interface CancelRegistrationReq {
-  contact: string
-}
-
 export interface CreatePostReq {
-  author_name: string
-  author_contact: string
   title: string
   content: string
 }
 
 export interface CreateReplyReq {
-  author_name: string
-  author_contact: string
   content: string
 }
 

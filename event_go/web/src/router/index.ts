@@ -49,6 +49,11 @@ const router = createRouter({
       component: () => import('@/views/auth/Register.vue'),
     },
     {
+      path: '/me/registrations',
+      name: 'my-registrations',
+      component: () => import('@/views/MyRegistrations.vue'),
+    },
+    {
       path: '/admin/events',
       name: 'admin-events',
       component: () => import('@/views/admin/EventManage.vue'),

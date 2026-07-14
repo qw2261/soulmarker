@@ -131,8 +131,8 @@ func (h *Handler) getPostForEventOr404(w http.ResponseWriter, eventID, postID in
 }
 
 // checkRegistration 验证用户是否已报名活动，未报名返回403响应
-func (h *Handler) checkRegistration(w http.ResponseWriter, eventID int64, contact string) bool {
-	registered, err := h.store.IsRegistered(eventID, contact)
+func (h *Handler) checkRegistration(w http.ResponseWriter, eventID, userID int64) bool {
+	registered, err := h.store.IsRegisteredByUserID(eventID, userID)
 	if err != nil {
 		writeInternalError(w, "check_registration", err)
 		return false

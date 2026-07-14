@@ -133,7 +133,19 @@ func (s *Store) UpdateTicket(id int64, req model.UpdateTicketReq) (*model.Ticket
 }
 
 func (s *Store) DeleteTicket(id int64) error {
-	result, err := s.db.Exec(`DELETE FROM tickets WHERE id = ?`, id)
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启删除门票事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`UPDATE registrations SET ticket_id = NULL WHERE ticket_id = ?`, id); err != nil {
+		return fmt.Errorf("解除报名门票引用失败: %w", err)
+	}
+	result, err := tx.Exec(`DELETE FROM tickets WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("删除门票失败: %w", err)
 	}
@@ -143,6 +155,9 @@ func (s *Store) DeleteTicket(id int64) error {
 	}
 	if n == 0 {
 		return model.ErrTicketNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交删除门票事务失败: %w", err)
 	}
 	return nil
 }

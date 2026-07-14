@@ -2,9 +2,12 @@ package store
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 func TestMigrationEmptyDatabase(t *testing.T) {
@@ -19,6 +22,179 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertNullableColumn(t, s.db, "registrations", "user_id")
 	assertNullableColumn(t, s.db, "posts", "user_id")
 	assertNullableColumn(t, s.db, "replies", "user_id")
+	assertColumnExists(t, s.db, "registrations", "identity_status")
+	assertColumnExists(t, s.db, "posts", "identity_status")
+	assertColumnExists(t, s.db, "replies", "identity_status")
+}
+
+func TestMigrationBackfillsMatchingIdentityAndMarksLegacy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "identity-v3.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)`,
+		`INSERT INTO schema_migrations VALUES (1, 'v5_1_baseline', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO schema_migrations VALUES (2, 'v5_1_legacy_columns', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO schema_migrations VALUES (3, 'identity_user_id_expand', '2026-01-01T00:00:00Z')`,
+		`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, contact TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)`,
+		`CREATE TABLE organizers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', logo_url TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE events (id INTEGER PRIMARY KEY, organizer_id INTEGER NOT NULL DEFAULT 0, FOREIGN KEY (organizer_id) REFERENCES organizers(id))`,
+		`CREATE TABLE tickets (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id))`,
+		`CREATE TABLE registrations (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, name TEXT NOT NULL, contact TEXT NOT NULL, ticket_id INTEGER, created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (ticket_id) REFERENCES tickets(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE posts (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE replies (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY (post_id) REFERENCES posts(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`INSERT INTO events VALUES (10, 0)`,
+		`INSERT INTO users VALUES (7, '匹配用户', 'match@example.com', 'hash', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO registrations VALUES (1, 10, NULL, '匹配用户', 'match@example.com', NULL, '2026-01-01T00:00:00Z')`,
+		`INSERT INTO registrations VALUES (2, 10, NULL, '遗留用户', 'legacy@example.com', NULL, '2026-01-01T00:00:00Z')`,
+		`INSERT INTO posts VALUES (1, 10, NULL, '匹配用户', 'match@example.com', '标题', '内容', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO replies VALUES (1, 1, NULL, '遗留用户', 'legacy@example.com', '回复', '2026-01-01T00:00:00Z')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v3 database: %v", err)
+		}
+	}
+	_ = db.Close()
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer s.Close()
+
+	var userID sql.NullInt64
+	var status string
+	if err := s.db.QueryRow(`SELECT user_id, identity_status FROM registrations WHERE id = 1`).Scan(&userID, &status); err != nil {
+		t.Fatal(err)
+	}
+	if !userID.Valid || userID.Int64 != 7 || status != "backfilled" {
+		t.Fatalf("unexpected backfill: user_id=%v status=%s", userID, status)
+	}
+	if err := s.db.QueryRow(`SELECT user_id, identity_status FROM registrations WHERE id = 2`).Scan(&userID, &status); err != nil {
+		t.Fatal(err)
+	}
+	if userID.Valid || status != "legacy" {
+		t.Fatalf("unexpected legacy record: user_id=%v status=%s", userID, status)
+	}
+
+	report, err := s.GetIdentityMigrationReport(100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Registrations.Total != 2 || report.Registrations.Backfilled != 1 || report.Registrations.Legacy != 1 {
+		t.Fatalf("unexpected registration report: %+v", report.Registrations)
+	}
+	if len(report.LegacyRecords) != 2 {
+		t.Fatalf("expected registration and reply legacy records, got %d", len(report.LegacyRecords))
+	}
+}
+
+func TestDatabaseBackupRestoreRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.db")
+	backupPath := filepath.Join(dir, "app.db.bak")
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateOrganizer(&model.Organizer{Name: "备份门店"}); err != nil {
+		t.Fatal(err)
+	}
+	event := &model.Event{OrganizerID: 1, Title: "备份活动", EventTime: "2099-12-31T18:00:00+08:00", Location: "线上", Capacity: 10}
+	if err := s.CreateEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backupPath, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteEvent(event.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	backup, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, backup, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	restored, err := s.GetEvent(event.ID)
+	if err != nil || restored == nil || restored.Title != event.Title {
+		t.Fatalf("restored event mismatch: event=%+v err=%v", restored, err)
+	}
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+}
+
+func TestMigrationRebuildsEventsWhenOrganizerForeignKeyIsMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-event-fk.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)`,
+		`INSERT INTO schema_migrations VALUES (1, 'v5_1_baseline', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO schema_migrations VALUES (2, 'v5_1_legacy_columns', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO schema_migrations VALUES (3, 'identity_user_id_expand', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO schema_migrations VALUES (4, 'identity_backfill_and_legacy_status', '2026-01-01T00:00:00Z')`,
+		`CREATE TABLE organizers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', logo_url TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, contact TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)`,
+		`CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, organizer_id INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', event_time TEXT NOT NULL, location TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 0, price REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'published', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE tickets (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, name TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, stock INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id))`,
+		`CREATE TABLE registrations (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, name TEXT NOT NULL, contact TEXT NOT NULL, ticket_id INTEGER, ticket_name TEXT NOT NULL DEFAULT '', identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (ticket_id) REFERENCES tickets(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE posts (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE replies (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, content TEXT NOT NULL, identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (post_id) REFERENCES posts(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`INSERT INTO organizers VALUES (1, '原门店', '', '', '', '', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO events VALUES (1, 1, '保留活动', '', '2099-01-01T00:00:00Z', '线上', 10, 0, 'published', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare missing-fk database: %v", err)
+		}
+	}
+	_ = db.Close()
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer s.Close()
+	hasForeignKey, err := tableHasForeignKeyDB(s.db, "events", "organizers", "organizer_id")
+	if err != nil || !hasForeignKey {
+		t.Fatalf("organizer foreign key not rebuilt: exists=%v err=%v", hasForeignKey, err)
+	}
+	event, err := s.GetEvent(1)
+	if err != nil || event == nil || event.Title != "保留活动" {
+		t.Fatalf("event not preserved after rebuild: event=%+v err=%v", event, err)
+	}
 }
 
 func TestMigrationLegacyDatabasePreservesData(t *testing.T) {
@@ -37,17 +213,20 @@ func TestMigrationLegacyDatabasePreservesData(t *testing.T) {
 		)`,
 		`CREATE TABLE registrations (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL,
-			name TEXT NOT NULL, contact TEXT NOT NULL, created_at TEXT NOT NULL
+			name TEXT NOT NULL, contact TEXT NOT NULL, created_at TEXT NOT NULL,
+			FOREIGN KEY (event_id) REFERENCES events(id)
 		)`,
 		`CREATE TABLE posts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL,
 			author_name TEXT NOT NULL, author_contact TEXT NOT NULL,
-			title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+			title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+			FOREIGN KEY (event_id) REFERENCES events(id)
 		)`,
 		`CREATE TABLE replies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL,
 			author_name TEXT NOT NULL, author_contact TEXT NOT NULL,
-			content TEXT NOT NULL, created_at TEXT NOT NULL
+			content TEXT NOT NULL, created_at TEXT NOT NULL,
+			FOREIGN KEY (post_id) REFERENCES posts(id)
 		)`,
 		`INSERT INTO events (title, event_time, location, capacity, created_at, updated_at)
 		 VALUES ('旧活动', '2026-12-31T18:00:00+08:00', '线上', 10, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,

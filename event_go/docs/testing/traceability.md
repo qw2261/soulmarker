@@ -17,7 +17,12 @@
 | G1-R09 | v5.3 | High | 所有错误响应有稳定 error_code，HTTP 500 不泄露 SQL/数据库细节 | APIResp、Handler | SEC-ERROR-001 | — | v5.2 test-report | Local Pass |
 | G2-R01 | v5.4 | High | 迁移按版本、事务执行并记录 schema_migrations，错误返回启动入口 | internal/store/store.go | MIG-SCHEMA-001 | — | v5.2 test-report | Local Pass |
 | G2-R02 | v5.4 | High | registrations.user_id 可空，非空时活动内唯一 | migration v3 | MIG-IDENTITY-EXPAND-001 | — | v5.2 test-report | Local Pass |
-| G2-R03 | v5.4 | High | posts/replies 增加可空 user_id，后续授权切换到用户 ID | migration v3 | MIG-IDENTITY-EXPAND-001 | — | v5.2 test-report | Partial: Expand only |
-| G2-R08 | v5.4 | High | 真实文件空库、旧库、重复执行和迁移失败可诊断 | migration_test.go | MIG-LEGACY-001 | 备份恢复演练待完成 | v5.2 test-report | Partial |
+| G2-R03 | v5.4 | High | 新增讨论写入 user_id，报名校验仅使用 user_id | Handler、Store、migration v3-v5 | SEC-IDENTITY-001 | — | v5.4 test-report | Local Pass |
+| G2-R04 | v5.4 | High | 当前用户可分页查询自己的报名，单活动状态按 user_id 返回 | /api/me/registrations、registration status | IT-ME-REG-001 | MyRegistrations.vue build | v5.4 test-report | Local Pass |
+| G2-R05 | v5.4 | Critical | 报名、取消、发帖、回复必须登录且请求体不能指定身份 | Handler DTO、requireUser | SEC-IDENTITY-001 | 前端表单 build | v5.4 test-report | Local Pass |
+| G2-R06 | v5.4 | High | 精确回填匹配用户，未匹配记录标记 legacy 并输出人工清单 | migration v4、identity report | MIG-IDENTITY-BACKFILL-001 | 管理接口待 UI | v5.4 test-report | Local Pass |
+| G2-R07 | v5.4 | Critical | 每个 SQLite 连接启用外键，启动检查孤儿；删除语义有 ADR 和测试 | Store、ADR-001 | DB-FK-001 | — | v5.4 test-report | Local Pass |
+| G2-R08 | v5.4 | High | 真实文件空库、旧库、重复、失败和备份恢复通过 | migration_test.go | MIG-LEGACY-001 | — | v5.4 test-report | Local Pass |
+| G2-R09 | v5.4 | Critical | 并发报名不超容量、库存不为负、重复取消只退一次 | Store mutex + transaction | CONC-REG-001 | — | v5.4 test-report | Local Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

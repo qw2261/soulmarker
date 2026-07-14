@@ -122,24 +122,27 @@ User (用户) — 注册/登录获得 JWT
 | contact      | string  | 联系方式（手机/邮箱） |
 | ticket\_id   | \*int64 | 可选，关联的门票    |
 | ticket\_name | string  | 报名时的门票名称快照  |
-| user\_id     | \*int64 | 可选，身份模型 v2 的用户 ID；当前处于 Expand 阶段 |
+| user\_id     | \*int64 | 新报名的可信用户 ID；历史无法匹配的数据为空并标记 legacy |
+| identity\_status | string | verified / backfilled / legacy |
 
 ### Post & Reply — 讨论区
 
 | 实体    | 说明                       |
 | ----- | ------------------------ |
-| Post  | 帖子，关联 event\_id；schema v3 已增加 nullable user\_id |
-| Reply | 回复，关联 post\_id；schema v3 已增加 nullable user\_id |
+| Post  | 帖子，关联 event\_id；user\_id 是新增讨论的唯一作者身份 |
+| Reply | 回复，关联 post\_id；user\_id 是新增回复的唯一作者身份 |
 
 ***
 
 ## 当前进度
 
-**v5.2 开发基线** — 统一 Router 与首批安全修复，共 **26 个 API 接口**。
+**v5.4 身份模型 v2 候选版** — 用户 ID 成为报名和讨论的身份源，共 **28 个 API 接口**。
 
 ```
 POST   /api/auth/register                            用户注册
 POST   /api/auth/login                               用户登录（返回 JWT）
+GET    /api/me/registrations[?page=&page_size=]      当前用户报名列表
+GET    /api/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
 POST   /api/organizers                               创建门店 🔐
 GET    /api/organizers[?page=&page_size=]            门店列表（分页，含活动数）
 GET    /api/organizers/{id}                          门店详情
@@ -150,8 +153,8 @@ GET    /api/events[?status=&price_type=&q=&organizer_id=&page=&page_size=] 活�
 GET    /api/events/{id}                               活动详情（含门店名）
 PUT    /api/events/{id}                               编辑活动 🔐
 DELETE /api/events/{id}                               删除活动 🔐
-POST   /api/events/{id}/register                      报名活动
-DELETE /api/events/{id}/register                      取消报名（活动开始前24h可取消，支持 JWT 自动识别）
+POST   /api/events/{id}/register                      报名活动（必须登录，身份来自 JWT）
+DELETE /api/events/{id}/register                      取消自己的报名（活动开始前24h）
 GET    /api/events/{id}/registration                  当前登录用户的报名状态
 GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）🔐
 POST   /api/events/{id}/posts                         发帖（需已报名，支持 JWT 自动识别）
@@ -206,7 +209,7 @@ GET    /health                                        健康检查
 登录 (POST /api/auth/login) → contact + password → 返回 JWT Token
 
 JWT 有效期 7 天（可配置），前端 localStorage 持久化
-发帖/回复/取消报名时自动从 JWT 解析身份，无需重复填写
+报名、发帖、回复、取消和“我的报名”均从 JWT user_id 加载持久化用户，不接受联系方式授权
 ```
 
 ### 1. 活动发布
@@ -221,6 +224,7 @@ JWT 有效期 7 天（可配置），前端 localStorage 持久化
 
 ```
 用户报名 (POST /api/events/{id}/register)
+  ├── 必须登录，姓名和联系方式从账户资料读取
   ├── 可选传入 ticket_id 关联门票
   ├── 关联门票时自动扣减库存（原子操作，事务保障）
   ├── 不传 ticket_id → 纯报名，不涉及门票
@@ -234,8 +238,8 @@ JWT 有效期 7 天（可配置），前端 localStorage 持久化
 
 ```
 报名成功 → 获得发帖/回复权限
-发帖 (POST /api/events/{id}/posts) → 需传入报名时的 contact 验证
-回复 (POST /api/events/{id}/posts/{postId}/replies) → 同上
+发帖 (POST /api/events/{id}/posts) → 通过 JWT user_id 验证报名
+回复 (POST /api/events/{id}/posts/{postId}/replies) → 同上，不接受 author_contact 回退
 ```
 
 ### 4. 活动管理
@@ -266,9 +270,10 @@ event_go/
 │   │   ├── handler_ticket.go    # 门票 API（Create/List/Get/Update/Delete）
 │   │   ├── handler_registration.go # 报名 API（Register, CancelRegistration, ListRegistrations）
 │   │   ├── handler_post.go      # 帖子/回复 API（CreatePost/Reply, ListPosts, GetPost）
-│   │   ├── handler_auth.go      # 用户认证（RegisterUser, Login, UserAuth, getUserIdentity）
+│   │   ├── handler_auth.go      # 用户认证、JWT 解析与持久化用户校验
 │   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
 │   │   ├── handler_test.go      # Handler 集成测试
+│   │   ├── handler_identity.go  # 身份迁移报告 API
 │   │   └── middleware.go        # 中间件：日志、CORS、安全响应头、管理员认证
 │   ├── store/
 │   │   ├── store.go             # Store、版本化事务迁移、schema_migrations
@@ -278,8 +283,10 @@ event_go/
 │   │   ├── store_post.go        # 帖子/回复 CRUD
 │   │   ├── store_user.go        # 用户 CRUD
 │   │   ├── store_organizer.go   # 门店 CRUD
+│   │   ├── store_identity.go    # 身份迁移统计与 legacy 清单
 │   │   ├── store_test.go        # Store 单元测试
-│   │   └── migration_test.go    # 空库、旧库、重复与失败迁移测试
+│   │   ├── store_concurrency_test.go # 容量、库存、取消并发测试
+│   │   └── migration_test.go    # 空库、旧库、重复、失败与恢复测试
 │   └── model/
 │       └── types.go             # 数据模型：结构体定义、哨兵错误、常量、ListEventsParams
 ├── data/                        # 数据库文件（运行时生成）
@@ -300,7 +307,7 @@ event_go/
 cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallback
          │
          v
-internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证（7 文件）
+internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证
          │
          v
 internal/store/*.go          数据层：SQLite CRUD、事务管理、版本化迁移
@@ -349,18 +356,20 @@ main.go
 |------|------|
 | 并发报名超卖 | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作 |
 | 门票库存超卖 | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected` |
-| 删除活动数据残留 | 事务级联删除：replies → posts → tickets → registrations → events |
+| 删除活动数据残留 | 事务级联删除：replies → posts → registrations → tickets → events |
 | 删除门店保护 | 事务内解绑旗下活动（organizer_id = 0），不级联删除 |
 | 密码安全 | bcrypt 哈希（`DefaultCost`），不存明文 |
 | 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |
 | Schema 漂移 | `schema_migrations` + 逐版本事务执行；迁移失败阻止启动 |
+| 外键与孤儿数据 | 单连接 SQLite 强制 `foreign_keys=ON`，启动执行 `foreign_key_check` |
+| 并发报名 | Store 内串行化关键写事务；容量、库存与取消均有并发回归测试 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **192** 个顶层 Go 测试 |
+| 测试用例 | **202** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
@@ -375,7 +384,7 @@ cd event_go && go vet ./...                 # 静态检查
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=3`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=5`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -384,7 +393,7 @@ cd event_go
 cp data/event_go.db data/event_go.db.pre-upgrade.bak
 ```
 
-当前迁移仅新增表、nullable 字段和索引，不删除旧字段。详细回滚步骤见 [docs/releases/v5.2.0/migration-rollback.md](docs/releases/v5.2.0/migration-rollback.md)。
+身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。详细回滚步骤见 [docs/releases/v5.4.0/migration-rollback.md](docs/releases/v5.4.0/migration-rollback.md)。
 
 ### API 速查
 
@@ -413,7 +422,7 @@ curl -s -X POST http://localhost:8080/api/events \
 curl -s -X POST http://localhost:8080/api/events/1/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <JWT_TOKEN>" \
-  -d '{"name":"张三","contact":"13800001111"}'
+  -d '{}'
 
 # 发帖（已登录 + 已报名）
 curl -s -X POST http://localhost:8080/api/events/1/posts \
@@ -463,6 +472,7 @@ event_go/
 | `/organizers/:id` | 门店详情 | 门店信息 + 旗下活动列表（分页） |
 | `/login` | 用户登录 | contact + password |
 | `/register` | 用户注册 | name + contact + password（≥6 位） |
+| `/me/registrations` | 我的报名 | 当前账户报名记录、活动和票种信息 |
 | `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
 | `/admin/events` | 活动管理 | 列表 + 删除 |
 | `/admin/events/new` | 创建活动 | 表单（先选门店） |

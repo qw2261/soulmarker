@@ -10,6 +10,12 @@ import (
 
 const TimeFormat = time.RFC3339
 
+const (
+	IdentityStatusLegacy     = "legacy"
+	IdentityStatusBackfilled = "backfilled"
+	IdentityStatusVerified   = "verified"
+)
+
 var (
 	ErrNotFound               = errors.New("活动不存在")
 	ErrDuplicate              = errors.New("该联系方式已报名本活动")
@@ -75,13 +81,15 @@ type Event struct {
 }
 
 type Registration struct {
-	ID         int64     `json:"id"`
-	EventID    int64     `json:"event_id"`
-	Name       string    `json:"name"`
-	Contact    string    `json:"contact"`
-	TicketID   *int64    `json:"ticket_id,omitempty"`
-	TicketName string    `json:"ticket_name,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	EventID        int64     `json:"event_id"`
+	UserID         *int64    `json:"-"`
+	Name           string    `json:"name"`
+	Contact        string    `json:"contact"`
+	TicketID       *int64    `json:"ticket_id,omitempty"`
+	TicketName     string    `json:"ticket_name,omitempty"`
+	IdentityStatus string    `json:"identity_status,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type CreateEventReq struct {
@@ -106,13 +114,7 @@ type UpdateEventReq struct {
 }
 
 type RegisterReq struct {
-	Name     string `json:"name"`
-	Contact  string `json:"contact"`
 	TicketID *int64 `json:"ticket_id,omitempty"`
-}
-
-type CancelRegistrationReq struct {
-	Contact string `json:"contact"`
 }
 
 type User struct {
@@ -173,24 +175,40 @@ type RegistrationStatusResp struct {
 	Registered bool `json:"registered"`
 }
 
+type MyRegistration struct {
+	ID          int64     `json:"id"`
+	EventID     int64     `json:"event_id"`
+	EventTitle  string    `json:"event_title"`
+	EventTime   string    `json:"event_time"`
+	Location    string    `json:"location"`
+	EventStatus string    `json:"event_status"`
+	TicketID    *int64    `json:"ticket_id,omitempty"`
+	TicketName  string    `json:"ticket_name,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type Post struct {
-	ID            int64     `json:"id"`
-	EventID       int64     `json:"event_id"`
-	AuthorName    string    `json:"author_name"`
-	AuthorContact string    `json:"-"`
-	Title         string    `json:"title"`
-	Content       string    `json:"content"`
-	ReplyCount    int       `json:"reply_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	EventID        int64     `json:"event_id"`
+	UserID         *int64    `json:"-"`
+	AuthorName     string    `json:"author_name"`
+	AuthorContact  string    `json:"-"`
+	IdentityStatus string    `json:"-"`
+	Title          string    `json:"title"`
+	Content        string    `json:"content"`
+	ReplyCount     int       `json:"reply_count"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type Reply struct {
-	ID            int64     `json:"id"`
-	PostID        int64     `json:"post_id"`
-	AuthorName    string    `json:"author_name"`
-	AuthorContact string    `json:"-"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	PostID         int64     `json:"post_id"`
+	UserID         *int64    `json:"-"`
+	AuthorName     string    `json:"author_name"`
+	AuthorContact  string    `json:"-"`
+	IdentityStatus string    `json:"-"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type PostDetailResp struct {
@@ -199,16 +217,34 @@ type PostDetailResp struct {
 }
 
 type CreatePostReq struct {
-	AuthorName    string `json:"author_name"`
-	AuthorContact string `json:"author_contact"`
-	Title         string `json:"title"`
-	Content       string `json:"content"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 type CreateReplyReq struct {
-	AuthorName    string `json:"author_name"`
-	AuthorContact string `json:"author_contact"`
-	Content       string `json:"content"`
+	Content string `json:"content"`
+}
+
+type IdentityEntityStats struct {
+	Total      int `json:"total"`
+	Verified   int `json:"verified"`
+	Backfilled int `json:"backfilled"`
+	Legacy     int `json:"legacy"`
+}
+
+type LegacyIdentityRecord struct {
+	EntityType string `json:"entity_type"`
+	ID         int64  `json:"id"`
+	ParentID   int64  `json:"parent_id"`
+	Name       string `json:"name"`
+	Contact    string `json:"contact"`
+}
+
+type IdentityMigrationReport struct {
+	Registrations IdentityEntityStats    `json:"registrations"`
+	Posts         IdentityEntityStats    `json:"posts"`
+	Replies       IdentityEntityStats    `json:"replies"`
+	LegacyRecords []LegacyIdentityRecord `json:"legacy_records"`
 }
 
 func UserFromContext(ctx context.Context) (*UserClaims, bool) {

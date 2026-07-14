@@ -10,10 +10,14 @@ import (
 
 func (s *Store) CreatePost(p *model.Post) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
+	identityStatus := model.IdentityStatusLegacy
+	if p.UserID != nil {
+		identityStatus = model.IdentityStatusVerified
+	}
 	result, err := s.db.Exec(
-		`INSERT INTO posts (event_id, author_name, author_contact, title, content, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		p.EventID, p.AuthorName, p.AuthorContact, p.Title, p.Content, now,
+		`INSERT INTO posts (event_id, user_id, author_name, author_contact, title, content, identity_status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.EventID, p.UserID, p.AuthorName, p.AuthorContact, p.Title, p.Content, identityStatus, now,
 	)
 	if err != nil {
 		return fmt.Errorf("创建帖子失败: %w", err)
@@ -24,6 +28,7 @@ func (s *Store) CreatePost(p *model.Post) error {
 	}
 	p.ID = id
 	p.ReplyCount = 0
+	p.IdentityStatus = identityStatus
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	p.CreatedAt = createdAt
 	return nil
@@ -35,7 +40,7 @@ func (s *Store) ListPosts(eventID int64, offset, limit int) ([]*model.Post, int,
 		return nil, 0, fmt.Errorf("查询帖子总数失败: %w", err)
 	}
 
-	query := `SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
+	query := `SELECT p.id, p.event_id, p.user_id, p.author_name, p.title, p.content, p.identity_status, p.created_at,
 		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
 		 FROM posts p WHERE p.event_id = ? ORDER BY p.created_at DESC`
 	args := []interface{}{eventID}
@@ -54,8 +59,8 @@ func (s *Store) ListPosts(eventID int64, offset, limit int) ([]*model.Post, int,
 	for rows.Next() {
 		p := &model.Post{}
 		var createdAt string
-		if err := rows.Scan(&p.ID, &p.EventID, &p.AuthorName, &p.Title, &p.Content,
-			&createdAt, &p.ReplyCount); err != nil {
+		if err := rows.Scan(&p.ID, &p.EventID, &p.UserID, &p.AuthorName, &p.Title, &p.Content,
+			&p.IdentityStatus, &createdAt, &p.ReplyCount); err != nil {
 			return nil, 0, fmt.Errorf("读取帖子记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
@@ -76,10 +81,10 @@ func (s *Store) GetPost(postID int64) (*model.Post, error) {
 	p := &model.Post{}
 	var createdAt string
 	err := s.db.QueryRow(
-		`SELECT p.id, p.event_id, p.author_name, p.title, p.content, p.created_at,
+		`SELECT p.id, p.event_id, p.user_id, p.author_name, p.title, p.content, p.identity_status, p.created_at,
 		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
 		 FROM posts p WHERE p.id = ?`, postID,
-	).Scan(&p.ID, &p.EventID, &p.AuthorName, &p.Title, &p.Content, &createdAt, &p.ReplyCount)
+	).Scan(&p.ID, &p.EventID, &p.UserID, &p.AuthorName, &p.Title, &p.Content, &p.IdentityStatus, &createdAt, &p.ReplyCount)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -96,10 +101,14 @@ func (s *Store) GetPost(postID int64) (*model.Post, error) {
 
 func (s *Store) CreateReply(r *model.Reply) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
+	identityStatus := model.IdentityStatusLegacy
+	if r.UserID != nil {
+		identityStatus = model.IdentityStatusVerified
+	}
 	result, err := s.db.Exec(
-		`INSERT INTO replies (post_id, author_name, author_contact, content, created_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		r.PostID, r.AuthorName, r.AuthorContact, r.Content, now,
+		`INSERT INTO replies (post_id, user_id, author_name, author_contact, content, identity_status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		r.PostID, r.UserID, r.AuthorName, r.AuthorContact, r.Content, identityStatus, now,
 	)
 	if err != nil {
 		return fmt.Errorf("创建回复失败: %w", err)
@@ -109,6 +118,7 @@ func (s *Store) CreateReply(r *model.Reply) error {
 		return fmt.Errorf("获取回复 ID 失败: %w", err)
 	}
 	r.ID = id
+	r.IdentityStatus = identityStatus
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
 	return nil
@@ -116,7 +126,7 @@ func (s *Store) CreateReply(r *model.Reply) error {
 
 func (s *Store) ListReplies(postID int64) ([]*model.Reply, error) {
 	rows, err := s.db.Query(
-		`SELECT id, post_id, author_name, content, created_at
+		`SELECT id, post_id, user_id, author_name, content, identity_status, created_at
 		 FROM replies WHERE post_id = ? ORDER BY created_at ASC`, postID,
 	)
 	if err != nil {
@@ -128,7 +138,7 @@ func (s *Store) ListReplies(postID int64) ([]*model.Reply, error) {
 	for rows.Next() {
 		r := &model.Reply{}
 		var createdAt string
-		if err := rows.Scan(&r.ID, &r.PostID, &r.AuthorName, &r.Content, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.PostID, &r.UserID, &r.AuthorName, &r.Content, &r.IdentityStatus, &createdAt); err != nil {
 			return nil, fmt.Errorf("读取回复记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)

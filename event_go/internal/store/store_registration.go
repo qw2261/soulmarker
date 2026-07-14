@@ -9,6 +9,9 @@ import (
 )
 
 func (s *Store) Register(r *model.Registration) error {
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+
 	event, err := s.GetEvent(r.EventID)
 	if err != nil {
 		return err
@@ -63,9 +66,14 @@ func (s *Store) Register(r *model.Registration) error {
 	}
 
 	now := time.Now().UTC().Format(model.TimeFormat)
+	identityStatus := model.IdentityStatusLegacy
+	if r.UserID != nil {
+		identityStatus = model.IdentityStatusVerified
+	}
 	result, err := tx.Exec(
-		`INSERT INTO registrations (event_id, name, contact, ticket_id, ticket_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		r.EventID, r.Name, r.Contact, r.TicketID, ticketName, now,
+		`INSERT INTO registrations (event_id, user_id, name, contact, ticket_id, ticket_name, identity_status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.EventID, r.UserID, r.Name, r.Contact, r.TicketID, ticketName, identityStatus, now,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -85,6 +93,7 @@ func (s *Store) Register(r *model.Registration) error {
 
 	r.ID = id
 	r.TicketName = ticketName
+	r.IdentityStatus = identityStatus
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
 	return nil
@@ -96,7 +105,7 @@ func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Re
 		return nil, 0, fmt.Errorf("查询报名总数失败: %w", err)
 	}
 
-	query := `SELECT id, event_id, name, contact, ticket_id, ticket_name, created_at
+	query := `SELECT id, event_id, user_id, name, contact, ticket_id, ticket_name, identity_status, created_at
 		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`
 	args := []interface{}{eventID}
 	if limit > 0 {
@@ -114,7 +123,7 @@ func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Re
 	for rows.Next() {
 		r := &model.Registration{}
 		var createdAt string
-		if err := rows.Scan(&r.ID, &r.EventID, &r.Name, &r.Contact, &r.TicketID, &r.TicketName, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.EventID, &r.UserID, &r.Name, &r.Contact, &r.TicketID, &r.TicketName, &r.IdentityStatus, &createdAt); err != nil {
 			return nil, 0, fmt.Errorf("读取报名记录失败: %w", err)
 		}
 		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
@@ -143,7 +152,31 @@ func (s *Store) IsRegistered(eventID int64, contact string) (bool, error) {
 	return count > 0, nil
 }
 
+func (s *Store) IsRegisteredByUserID(eventID, userID int64) (bool, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM registrations WHERE event_id = ? AND user_id = ?`,
+		eventID, userID,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("查询用户报名信息失败: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (s *Store) CancelRegistration(eventID int64, contact string) error {
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+	return s.cancelRegistration(eventID, "contact", contact)
+}
+
+func (s *Store) CancelRegistrationByUserID(eventID, userID int64) error {
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+	return s.cancelRegistration(eventID, "user_id", userID)
+}
+
+func (s *Store) cancelRegistration(eventID int64, identityColumn string, identity interface{}) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("开启事务失败: %w", err)
@@ -151,10 +184,8 @@ func (s *Store) CancelRegistration(eventID int64, contact string) error {
 	defer tx.Rollback()
 
 	var ticketID sql.NullInt64
-	err = tx.QueryRow(
-		`SELECT ticket_id FROM registrations WHERE event_id = ? AND contact = ?`,
-		eventID, contact,
-	).Scan(&ticketID)
+	query := fmt.Sprintf(`SELECT ticket_id FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
+	err = tx.QueryRow(query, eventID, identity).Scan(&ticketID)
 	if err == sql.ErrNoRows {
 		return model.ErrNotRegistered
 	}
@@ -172,10 +203,8 @@ func (s *Store) CancelRegistration(eventID int64, contact string) error {
 		}
 	}
 
-	_, err = tx.Exec(
-		`DELETE FROM registrations WHERE event_id = ? AND contact = ?`,
-		eventID, contact,
-	)
+	deleteQuery := fmt.Sprintf(`DELETE FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
+	_, err = tx.Exec(deleteQuery, eventID, identity)
 	if err != nil {
 		return fmt.Errorf("删除报名记录失败: %w", err)
 	}
@@ -184,4 +213,58 @@ func (s *Store) CancelRegistration(eventID int64, contact string) error {
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) ListMyRegistrations(userID int64, offset, limit int) ([]*model.MyRegistration, int, error) {
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM registrations WHERE user_id = ?`, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询用户报名总数失败: %w", err)
+	}
+
+	query := `SELECT r.id, r.event_id, e.title, e.event_time, e.location, e.status,
+		 r.ticket_id, r.ticket_name, r.created_at
+		 FROM registrations r
+		 JOIN events e ON e.id = r.event_id
+		 WHERE r.user_id = ?
+		 ORDER BY e.event_time DESC, r.created_at DESC`
+	args := []interface{}{userID}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询用户报名列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	registrations := make([]*model.MyRegistration, 0)
+	for rows.Next() {
+		registration := &model.MyRegistration{}
+		var createdAt string
+		if err := rows.Scan(
+			&registration.ID,
+			&registration.EventID,
+			&registration.EventTitle,
+			&registration.EventTime,
+			&registration.Location,
+			&registration.EventStatus,
+			&registration.TicketID,
+			&registration.TicketName,
+			&createdAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("读取用户报名记录失败: %w", err)
+		}
+		createdAtTime, err := time.Parse(model.TimeFormat, createdAt)
+		if err != nil {
+			return nil, 0, fmt.Errorf("解析用户报名时间失败: %w", err)
+		}
+		registration.CreatedAt = createdAtTime
+		registrations = append(registrations, registration)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("遍历用户报名记录失败: %w", err)
+	}
+	return registrations, total, nil
 }

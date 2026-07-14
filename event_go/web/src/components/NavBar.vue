@@ -6,6 +6,7 @@
     </div>
     <div class="navbar-right">
       <template v-if="user.isLoggedIn">
+        <router-link to="/me/registrations">我的报名</router-link>
         <span class="user-name">{{ user.user?.name }}</span>
         <el-button text @click="user.logout()">退出</el-button>
       </template>

@@ -35,12 +35,6 @@
 
           <el-card class="reply-form">
             <el-form :model="form" label-position="top">
-              <el-form-item label="昵称">
-                <el-input v-model="form.author_name" placeholder="你的昵称" />
-              </el-form-item>
-              <el-form-item label="联系方式（报名时的手机/邮箱）">
-                <el-input v-model="form.author_contact" placeholder="用于验证报名身份" />
-              </el-form-item>
               <el-form-item label="回复内容">
                 <el-input
                   v-model="form.content"
@@ -50,7 +44,7 @@
                 />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" @click="submitReply" :loading="replying">回复</el-button>
+                <el-button type="primary" @click="submitReply" :loading="replying" :disabled="!userStore.isLoggedIn">回复</el-button>
               </el-form-item>
             </el-form>
           </el-card>
@@ -81,8 +75,6 @@ const loading = ref(true)
 const replying = ref(false)
 
 const form = reactive({
-  author_name: userStore.user?.name || '',
-  author_contact: userStore.user?.contact || '',
   content: '',
 })
 
@@ -99,8 +91,12 @@ async function fetchPost() {
 }
 
 async function submitReply() {
-  if (!form.content || !form.author_name || !form.author_contact) {
-    ElMessage.warning('请填写完整信息')
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录并报名后再回复')
+    return
+  }
+  if (!form.content) {
+    ElMessage.warning('请填写回复内容')
     return
   }
   replying.value = true

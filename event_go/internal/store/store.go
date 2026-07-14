@@ -6,16 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 3
+const CurrentSchemaVersion = 5
 
 type Store struct {
-	db *sql.DB
+	db             *sql.DB
+	registrationMu sync.Mutex
 }
 
 type migration struct {
@@ -55,6 +57,8 @@ func OpenStore(dbPath string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	if err := db.Ping(); err != nil {
 		return closeOnError(fmt.Errorf("连接数据库失败: %w", err))
@@ -67,6 +71,12 @@ func OpenStore(dbPath string) (*Store, error) {
 	}
 	if err := migrate(db); err != nil {
 		return closeOnError(fmt.Errorf("数据库迁移失败: %w", err))
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		return closeOnError(fmt.Errorf("启用外键失败: %w", err))
+	}
+	if err := validateForeignKeys(db); err != nil {
+		return closeOnError(err)
 	}
 
 	return &Store{db: db}, nil
@@ -141,6 +151,8 @@ func migrations() []migration {
 		{version: 1, name: "v5_1_baseline", apply: migrateV51Baseline},
 		{version: 2, name: "v5_1_legacy_columns", apply: migrateV51LegacyColumns},
 		{version: 3, name: "identity_user_id_expand", apply: migrateIdentityUserIDExpand},
+		{version: 4, name: "identity_backfill_and_legacy_status", apply: migrateIdentityBackfill},
+		{version: 5, name: "foreign_key_readiness", apply: migrateForeignKeyReadiness},
 	}
 }
 
@@ -239,7 +251,7 @@ func migrateV51LegacyColumns(tx *sql.Tx) error {
 	}{
 		{"registrations", "ticket_id", "ticket_id INTEGER REFERENCES tickets(id)"},
 		{"registrations", "ticket_name", "ticket_name TEXT NOT NULL DEFAULT ''"},
-		{"events", "organizer_id", "organizer_id INTEGER NOT NULL DEFAULT 0"},
+		{"events", "organizer_id", "organizer_id INTEGER NOT NULL DEFAULT 0 REFERENCES organizers(id)"},
 	}
 	for _, column := range columns {
 		if err := addColumnIfMissing(tx, column.table, column.column, column.definition); err != nil {
@@ -271,6 +283,196 @@ func migrateIdentityUserIDExpand(tx *sql.Tx) error {
 		`CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_replies_user ON replies(user_id)`,
 	})
+}
+
+func migrateIdentityBackfill(tx *sql.Tx) error {
+	columns := []struct {
+		table      string
+		column     string
+		definition string
+	}{
+		{"registrations", "identity_status", "identity_status TEXT NOT NULL DEFAULT 'legacy' CHECK (identity_status IN ('legacy', 'backfilled', 'verified'))"},
+		{"posts", "identity_status", "identity_status TEXT NOT NULL DEFAULT 'legacy' CHECK (identity_status IN ('legacy', 'backfilled', 'verified'))"},
+		{"replies", "identity_status", "identity_status TEXT NOT NULL DEFAULT 'legacy' CHECK (identity_status IN ('legacy', 'backfilled', 'verified'))"},
+	}
+	for _, column := range columns {
+		if err := addColumnIfMissing(tx, column.table, column.column, column.definition); err != nil {
+			return err
+		}
+	}
+
+	return execStatements(tx, []string{
+		`UPDATE registrations SET identity_status = 'verified' WHERE user_id IS NOT NULL AND identity_status = 'legacy'`,
+		`UPDATE posts SET identity_status = 'verified' WHERE user_id IS NOT NULL AND identity_status = 'legacy'`,
+		`UPDATE replies SET identity_status = 'verified' WHERE user_id IS NOT NULL AND identity_status = 'legacy'`,
+		`UPDATE registrations
+		 SET user_id = (SELECT users.id FROM users WHERE users.contact = registrations.contact),
+		     identity_status = 'backfilled'
+		 WHERE user_id IS NULL
+		   AND EXISTS (SELECT 1 FROM users WHERE users.contact = registrations.contact)`,
+		`UPDATE posts
+		 SET user_id = (SELECT users.id FROM users WHERE users.contact = posts.author_contact),
+		     identity_status = 'backfilled'
+		 WHERE user_id IS NULL
+		   AND EXISTS (SELECT 1 FROM users WHERE users.contact = posts.author_contact)`,
+		`UPDATE replies
+		 SET user_id = (SELECT users.id FROM users WHERE users.contact = replies.author_contact),
+		     identity_status = 'backfilled'
+		 WHERE user_id IS NULL
+		   AND EXISTS (SELECT 1 FROM users WHERE users.contact = replies.author_contact)`,
+		`CREATE INDEX IF NOT EXISTS idx_registrations_identity_status ON registrations(identity_status)`,
+		`CREATE INDEX IF NOT EXISTS idx_posts_identity_status ON posts(identity_status)`,
+		`CREATE INDEX IF NOT EXISTS idx_replies_identity_status ON replies(identity_status)`,
+	})
+}
+
+func migrateForeignKeyReadiness(tx *sql.Tx) error {
+	now := time.Now().UTC().Format(model.TimeFormat)
+	if err := execStatements(tx, []string{
+		fmt.Sprintf(`INSERT OR IGNORE INTO organizers
+			(id, name, description, contact, logo_url, address, website, tags, created_at, updated_at)
+			VALUES (0, '', '', '', '', '', '', '', '%s', '%s')`, now, now),
+		`UPDATE events SET organizer_id = 0
+		 WHERE NOT EXISTS (SELECT 1 FROM organizers WHERE organizers.id = events.organizer_id)`,
+	}); err != nil {
+		return err
+	}
+
+	hasOrganizerForeignKey, err := tableHasForeignKeyTx(tx, "events", "organizers", "organizer_id")
+	if err != nil {
+		return err
+	}
+	if !hasOrganizerForeignKey {
+		if err := rebuildEventsWithForeignKey(tx); err != nil {
+			return err
+		}
+	}
+
+	return execStatements(tx, []string{
+		`UPDATE registrations SET ticket_id = NULL
+		 WHERE ticket_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM tickets WHERE tickets.id = registrations.ticket_id)`,
+		`UPDATE registrations SET user_id = NULL, identity_status = 'legacy'
+		 WHERE user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = registrations.user_id)`,
+		`UPDATE posts SET user_id = NULL, identity_status = 'legacy'
+		 WHERE user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = posts.user_id)`,
+		`UPDATE replies SET user_id = NULL, identity_status = 'legacy'
+		 WHERE user_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = replies.user_id)`,
+	})
+}
+
+func rebuildEventsWithForeignKey(tx *sql.Tx) error {
+	return execStatements(tx, []string{
+		`CREATE TABLE events_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organizer_id INTEGER NOT NULL DEFAULT 0,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			event_time TEXT NOT NULL,
+			location TEXT NOT NULL,
+			capacity INTEGER NOT NULL DEFAULT 0,
+			price REAL NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'published',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (organizer_id) REFERENCES organizers(id)
+		)`,
+		`INSERT INTO events_new
+			(id, organizer_id, title, description, event_time, location, capacity, price, status, created_at, updated_at)
+		 SELECT id, organizer_id, title, description, event_time, location, capacity, price, status, created_at, updated_at
+		 FROM events`,
+		`DROP TABLE events`,
+		`ALTER TABLE events_new RENAME TO events`,
+		`CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_organizer ON events(organizer_id)`,
+	})
+}
+
+func validateForeignKeys(db *sql.DB) error {
+	var enabled int
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&enabled); err != nil {
+		return fmt.Errorf("读取外键状态失败: %w", err)
+	}
+	if enabled != 1 {
+		return fmt.Errorf("SQLite 外键未启用")
+	}
+	required := []struct {
+		table, parent, column string
+	}{
+		{"events", "organizers", "organizer_id"},
+		{"registrations", "events", "event_id"},
+		{"registrations", "tickets", "ticket_id"},
+		{"registrations", "users", "user_id"},
+		{"posts", "events", "event_id"},
+		{"posts", "users", "user_id"},
+		{"replies", "posts", "post_id"},
+		{"replies", "users", "user_id"},
+		{"tickets", "events", "event_id"},
+	}
+	for _, foreignKey := range required {
+		exists, err := tableHasForeignKeyDB(db, foreignKey.table, foreignKey.parent, foreignKey.column)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("缺少外键约束: %s.%s -> %s", foreignKey.table, foreignKey.column, foreignKey.parent)
+		}
+	}
+
+	rows, err := db.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("执行外键一致性检查失败: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table string
+		var rowID int64
+		var parent string
+		var foreignKeyID int
+		if err := rows.Scan(&table, &rowID, &parent, &foreignKeyID); err != nil {
+			return fmt.Errorf("读取外键违规记录失败: %w", err)
+		}
+		return fmt.Errorf("检测到外键违规: table=%s row_id=%d parent=%s fk_id=%d", table, rowID, parent, foreignKeyID)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("遍历外键检查结果失败: %w", err)
+	}
+	return nil
+}
+
+func tableHasForeignKeyTx(tx *sql.Tx, table, parent, column string) (bool, error) {
+	rows, err := tx.Query(fmt.Sprintf("PRAGMA foreign_key_list(%s)", table))
+	if err != nil {
+		return false, fmt.Errorf("读取 %s 外键失败: %w", table, err)
+	}
+	defer rows.Close()
+	return scanForeignKeyRows(rows, table, parent, column)
+}
+
+func tableHasForeignKeyDB(db *sql.DB, table, parent, column string) (bool, error) {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA foreign_key_list(%s)", table))
+	if err != nil {
+		return false, fmt.Errorf("读取 %s 外键失败: %w", table, err)
+	}
+	defer rows.Close()
+	return scanForeignKeyRows(rows, table, parent, column)
+}
+
+func scanForeignKeyRows(rows *sql.Rows, table, parent, column string) (bool, error) {
+	for rows.Next() {
+		var id, sequence int
+		var referencedTable, fromColumn, toColumn, onUpdate, onDelete, match string
+		if err := rows.Scan(&id, &sequence, &referencedTable, &fromColumn, &toColumn, &onUpdate, &onDelete, &match); err != nil {
+			return false, fmt.Errorf("解析 %s 外键失败: %w", table, err)
+		}
+		if referencedTable == parent && fromColumn == column {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("遍历 %s 外键失败: %w", table, err)
+	}
+	return false, nil
 }
 
 func execStatements(tx *sql.Tx, statements []string) error {

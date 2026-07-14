@@ -59,10 +59,21 @@
               </div>
             </template>
             <RegisterForm
-              v-else-if="event.status === 'published'"
+              v-else-if="event.status === 'published' && userStore.isLoggedIn"
               :event-id="event.id"
               @registered="onRegistered"
             />
+            <el-alert
+              v-else-if="event.status === 'published'"
+              title="登录后即可使用账户身份报名"
+              type="info"
+              show-icon
+              :closable="false"
+            >
+              <template #default>
+                <el-button type="primary" @click="$router.push('/login')">去登录</el-button>
+              </template>
+            </el-alert>
             <el-alert
               v-else
               :title="event.status === 'draft' ? '活动尚未发布，暂不可报名' : '活动已结束或取消，不可报名'"
@@ -112,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Shop } from '@element-plus/icons-vue'
@@ -132,14 +143,12 @@ const loading = ref(true)
 const registered = ref(false)
 const recentPosts = ref<Post[]>([])
 
-const userContact = computed(() => userStore.user?.contact || '')
-
 async function fetchEvent() {
   const id = Number(route.params.id)
   try {
     const res = await getEvent(id)
     event.value = res.data || null
-    if (userContact.value) {
+    if (userStore.isLoggedIn) {
       await checkRegistration(id)
     }
     await fetchRecentPosts(id)
@@ -178,7 +187,7 @@ async function handleCancel() {
       '确认取消',
       { type: 'warning' }
     )
-    const res = await cancelRegistration(event.value.id, { contact: userContact.value })
+    const res = await cancelRegistration(event.value.id)
     if (res.code === 200) {
       ElMessage.success('已取消报名')
       registered.value = false

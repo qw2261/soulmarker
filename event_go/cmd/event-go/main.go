@@ -47,6 +47,8 @@ func main() {
 	log.Printf("  GET    /health                               健康检查")
 	log.Printf("  POST   /api/auth/register                    用户注册")
 	log.Printf("  POST   /api/auth/login                       用户登录")
+	log.Printf("  GET    /api/me/registrations                 当前用户报名列表")
+	log.Printf("  GET    /api/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/organizers                       创建门店 🔐")
 	log.Printf("  GET    /api/organizers                       门店列表")
 	log.Printf("  GET    /api/organizers/{id}                  门店详情")

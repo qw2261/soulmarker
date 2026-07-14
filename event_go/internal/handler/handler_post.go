@@ -7,6 +7,11 @@ import (
 )
 
 func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
+	user, authenticated := h.requireUser(w, r)
+	if !authenticated {
+		return
+	}
+
 	eventID, err := parseEventID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
@@ -23,17 +28,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorName, authorContact := getUserIdentity(r)
-	if authorContact == "" {
-		authorName = req.AuthorName
-		authorContact = req.AuthorContact
-	}
-
-	if authorContact == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空，请先登录或传入 author_contact"})
-		return
-	}
-	if !h.checkRegistration(w, eventID, authorContact) {
+	if !h.checkRegistration(w, eventID, user.ID) {
 		return
 	}
 	if req.Title == "" {
@@ -45,10 +40,12 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := user.ID
 	post := &model.Post{
 		EventID:       eventID,
-		AuthorName:    authorName,
-		AuthorContact: authorContact,
+		UserID:        &userID,
+		AuthorName:    user.Name,
+		AuthorContact: user.Contact,
 		Title:         req.Title,
 		Content:       req.Content,
 	}
@@ -117,6 +114,11 @@ func (h *Handler) GetPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
+	user, authenticated := h.requireUser(w, r)
+	if !authenticated {
+		return
+	}
+
 	eventID, err := parseEventID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
@@ -139,17 +141,7 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authorName, authorContact := getUserIdentity(r)
-	if authorContact == "" {
-		authorName = req.AuthorName
-		authorContact = req.AuthorContact
-	}
-
-	if authorContact == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "联系方式不能为空，请先登录或传入 author_contact"})
-		return
-	}
-	if !h.checkRegistration(w, post.EventID, authorContact) {
+	if !h.checkRegistration(w, post.EventID, user.ID) {
 		return
 	}
 	if req.Content == "" {
@@ -157,10 +149,12 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := user.ID
 	reply := &model.Reply{
 		PostID:        postID,
-		AuthorName:    authorName,
-		AuthorContact: authorContact,
+		UserID:        &userID,
+		AuthorName:    user.Name,
+		AuthorContact: user.Contact,
 		Content:       req.Content,
 	}
 	if err := h.store.CreateReply(reply); err != nil {

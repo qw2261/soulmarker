@@ -12,6 +12,8 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 
 	mux.HandleFunc("POST /api/auth/register", h.RegisterUser)
 	mux.HandleFunc("POST /api/auth/login", h.Login)
+	mux.HandleFunc("GET /api/me/registrations", h.ListMyRegistrations)
+	mux.HandleFunc("GET /api/admin/identity-migration", AdminAuth(http.HandlerFunc(h.GetIdentityMigrationReport)).ServeHTTP)
 
 	mux.HandleFunc("POST /api/organizers", AdminAuth(http.HandlerFunc(h.CreateOrganizer)).ServeHTTP)
 	mux.HandleFunc("GET /api/organizers", h.ListOrganizers)

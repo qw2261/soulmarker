@@ -1436,3 +1436,52 @@ func TestGetUserByIDNotFound(t *testing.T) {
 		t.Fatal("expected nil")
 	}
 }
+
+func TestSQLiteForeignKeysEnabled(t *testing.T) {
+	s := setupTestStore(t)
+	var enabled int
+	if err := s.db.QueryRow(`PRAGMA foreign_keys`).Scan(&enabled); err != nil {
+		t.Fatal(err)
+	}
+	if enabled != 1 {
+		t.Fatalf("expected foreign_keys=1, got %d", enabled)
+	}
+	_, err := s.db.Exec(`INSERT INTO events
+		(organizer_id, title, event_time, location, capacity, created_at, updated_at)
+		VALUES (999, '孤儿活动', '2099-12-31T18:00:00+08:00', '线上', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`)
+	if err == nil {
+		t.Fatal("expected foreign key violation for missing organizer")
+	}
+}
+
+func TestDeleteTicketPreservesRegistrationSnapshot(t *testing.T) {
+	s := setupTestStore(t)
+	event := newTestEvent("删除门票引用")
+	if err := s.CreateEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	ticket := &model.Ticket{EventID: event.ID, Name: "历史票种", Stock: 1}
+	if err := s.CreateTicket(ticket); err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "报名用户", Contact: "snapshot@example.com", PasswordHash: "hash"}
+	if err := s.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	ticketID := ticket.ID
+	if err := s.Register(&model.Registration{
+		EventID: event.ID, UserID: &user.ID, Name: user.Name, Contact: user.Contact, TicketID: &ticketID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteTicket(ticket.ID); err != nil {
+		t.Fatal(err)
+	}
+	registrations, _, err := s.ListRegistrations(event.ID, 0, 0)
+	if err != nil || len(registrations) != 1 {
+		t.Fatalf("registrations=%+v err=%v", registrations, err)
+	}
+	if registrations[0].TicketID != nil || registrations[0].TicketName != "历史票种" {
+		t.Fatalf("ticket snapshot not preserved: %+v", registrations[0])
+	}
+}

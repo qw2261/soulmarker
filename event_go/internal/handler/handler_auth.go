@@ -143,9 +143,20 @@ func UserAuth(next http.Handler) http.Handler {
 	})
 }
 
-func getUserIdentity(r *http.Request) (name, contact string) {
-	if claims, ok := model.UserFromContext(r.Context()); ok {
-		return claims.Name, claims.Contact
+func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (*model.User, bool) {
+	claims, ok := model.UserFromContext(r.Context())
+	if !ok || claims.UserID <= 0 {
+		writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "请先登录"})
+		return nil, false
 	}
-	return "", ""
+	user, err := h.store.GetUserByID(claims.UserID)
+	if err != nil {
+		writeInternalError(w, "load_authenticated_user", err)
+		return nil, false
+	}
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户不存在或登录已失效"})
+		return nil, false
+	}
+	return user, true
 }

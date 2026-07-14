@@ -8,19 +8,13 @@
             ← 返回活动
           </el-button>
           <h2>讨论区</h2>
-          <el-button type="primary" @click="showForm = !showForm">
+          <el-button type="primary" @click="togglePostForm">
             {{ showForm ? '取消' : '发帖' }}
           </el-button>
         </div>
 
         <el-card v-if="showForm" class="post-form">
           <el-form :model="form" label-position="top">
-            <el-form-item label="昵称">
-              <el-input v-model="form.author_name" placeholder="你的昵称" />
-            </el-form-item>
-            <el-form-item label="联系方式（报名时的手机/邮箱）">
-              <el-input v-model="form.author_contact" placeholder="用于验证报名身份" />
-            </el-form-item>
             <el-form-item label="标题">
               <el-input v-model="form.title" placeholder="帖子标题" />
             </el-form-item>
@@ -63,7 +57,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listPosts, createPost as apiCreatePost } from '@/api/posts'
 import type { Post } from '@/api/types'
@@ -73,6 +67,7 @@ import NavBar from '@/components/NavBar.vue'
 import Pagination from '@/components/Pagination.vue'
 
 const route = useRoute()
+const router = useRouter()
 const eventId = Number(route.params.id)
 const userStore = useUserStore()
 
@@ -85,11 +80,18 @@ const showForm = ref(false)
 const posting = ref(false)
 
 const form = reactive({
-  author_name: userStore.user?.name || '',
-  author_contact: userStore.user?.contact || '',
   title: '',
   content: '',
 })
+
+function togglePostForm() {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录并报名后再发帖')
+    router.push('/login')
+    return
+  }
+  showForm.value = !showForm.value
+}
 
 async function fetchPosts() {
   loading.value = true
@@ -103,8 +105,8 @@ async function fetchPosts() {
 }
 
 async function createPost() {
-  if (!form.title || !form.content || !form.author_name || !form.author_contact) {
-    ElMessage.warning('请填写完整信息')
+  if (!form.title || !form.content) {
+    ElMessage.warning('请填写标题和内容')
     return
   }
   posting.value = true

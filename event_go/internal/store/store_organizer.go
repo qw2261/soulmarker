@@ -28,6 +28,9 @@ func (s *Store) CreateOrganizer(o *model.Organizer) error {
 }
 
 func (s *Store) GetOrganizer(id int64) (*model.Organizer, error) {
+	if id == 0 {
+		return nil, nil
+	}
 	o := &model.Organizer{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
@@ -46,7 +49,7 @@ func (s *Store) GetOrganizer(id int64) (*model.Organizer, error) {
 
 func (s *Store) ListOrganizers(offset, limit int) ([]*model.Organizer, int, error) {
 	var total int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM organizers").Scan(&total); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM organizers WHERE id <> 0").Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -54,6 +57,7 @@ func (s *Store) ListOrganizers(offset, limit int) ([]*model.Organizer, int, erro
 		`SELECT o.id, o.name, o.description, o.contact, o.logo_url, o.address, o.website, o.tags, o.created_at, o.updated_at,
 		 COUNT(e.id) as event_count
 		 FROM organizers o LEFT JOIN events e ON o.id = e.organizer_id
+		 WHERE o.id <> 0
 		 GROUP BY o.id ORDER BY o.created_at DESC LIMIT ? OFFSET ?`,
 		limit, offset,
 	)
@@ -134,6 +138,9 @@ func (s *Store) UpdateOrganizer(id int64, req model.UpdateOrganizerReq) (*model.
 }
 
 func (s *Store) DeleteOrganizer(id int64) error {
+	if id == 0 {
+		return model.ErrOrganizerNotFound
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

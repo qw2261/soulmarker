@@ -5,8 +5,8 @@ import type {
   UpdateEventReq,
   Registration,
   RegistrationStatus,
+  MyRegistration,
   RegisterReq,
-  CancelRegistrationReq,
 } from './types'
 
 export interface ListEventsParams {
@@ -42,8 +42,8 @@ export function registerEvent(id: number, data: RegisterReq) {
   return post<Registration>(`/api/events/${id}/register`, data)
 }
 
-export function cancelRegistration(id: number, data: CancelRegistrationReq) {
-  return del(`/api/events/${id}/register`, data)
+export function cancelRegistration(id: number) {
+  return del(`/api/events/${id}/register`)
 }
 
 export function listRegistrations(
@@ -55,4 +55,8 @@ export function listRegistrations(
 
 export function getRegistrationStatus(id: number) {
   return get<RegistrationStatus>('/api/events/' + id + '/registration')
+}
+
+export function listMyRegistrations(params?: { page?: number; page_size?: number }) {
+  return get<MyRegistration[]>('/api/me/registrations', params)
 }
