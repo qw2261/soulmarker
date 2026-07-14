@@ -126,7 +126,7 @@
 - [x] **G0-R04** 抽取唯一 Router 构造，使生产入口与集成测试使用相同路由和中间件。
 - [x] **G0-R05** 建立 CHANGELOG、测试策略、追溯矩阵、发布报告和回滚模板。
 - [x] **G0-R06** 增加 .dockerignore，排除 node_modules、dist、data、test_reports 等本地产物。
-- [ ] **G0-R07** 对当前版本生成带 Commit SHA、环境和精确命令的 v5.2 基线报告。
+- [x] **G0-R07** 对当前版本生成带候选 Commit SHA、环境和精确命令的 v5.2 基线报告。
 
 ### 受控重构边界
 
@@ -686,7 +686,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 
 | 阶段 | 状态 | 目标版本 | 证据 | 备注 |
 |---|---|---|---|---|
-| G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 本地门禁通过，等待 Commit 与远端 CI 证据 |
+| G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 已推送，等待远端 CI、Tag 与最终发布证据 |
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现，等待完整门禁与远端 CI；身份兼容路径归 G2 收口 |
 | G2 | In Progress | v5.4 | [追溯矩阵](testing/traceability.md) | 版本化迁移与 user_id Expand 已完成，身份切换、回填、备份恢复和并发验证待完成 |
 | G3 | Planned | v5.5 | — | 与 G2 后半段可小范围并行 |
