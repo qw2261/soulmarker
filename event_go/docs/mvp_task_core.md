@@ -1,8 +1,10 @@
 # 亦闻 event-go MVP 任务跟踪（核心版）
 
+> **历史摘要**：本文件保留截至 v5.1 的阶段摘要，后续不再承担路线图职责。当前能力以 [README.md](../README.md) 为准，未来目标与阶段状态统一维护在 [goal.md](goal.md)。
+
 > 目标：跑通"创建活动 → 浏览活动 → 报名参与 → 讨论互动"完整闭环
 > 技术栈：Go 标准库 + SQLite + Docker
-> 全量版见 `mvp_task.md`，测试数据见 `test_reports/`
+> 全量历史见 [mvp_task.md](mvp_task.md)；历史原始测试资料曾存放于被忽略的 test_reports/，当前发布证据后续统一进入 docs/releases/。
 
 ---
 
@@ -73,7 +75,7 @@ JWT 自动识别 | SQLite WAL + 事务 | JSON 结构化日志
 ## 快速启动
 
 ```bash
-cd event_go && go run .                # 本地
+cd event_go && go run ./cmd/event-go   # 本地
 cd event_go && docker build -t event-go . && docker run -p 8080:8080 event-go   # Docker
 docker run -p 8080:8080 -v $(pwd)/data:/app/data event-go   # 数据持久化
 ```

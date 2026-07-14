@@ -95,6 +95,7 @@ type CreateEventReq struct {
 }
 
 type UpdateEventReq struct {
+	OrganizerID *int64   `json:"organizer_id"`
 	Title       *string  `json:"title"`
 	Description *string  `json:"description"`
 	EventTime   *string  `json:"event_time"`
@@ -159,12 +160,17 @@ type ListEventsParams struct {
 }
 
 type APIResp struct {
-	Code     int         `json:"code"`
-	Message  string      `json:"message"`
-	Data     interface{} `json:"data,omitempty"`
-	Total    *int        `json:"total,omitempty"`
-	Page     *int        `json:"page,omitempty"`
-	PageSize *int        `json:"page_size,omitempty"`
+	Code      int         `json:"code"`
+	ErrorCode string      `json:"error_code,omitempty"`
+	Message   string      `json:"message"`
+	Data      interface{} `json:"data,omitempty"`
+	Total     *int        `json:"total,omitempty"`
+	Page      *int        `json:"page,omitempty"`
+	PageSize  *int        `json:"page_size,omitempty"`
+}
+
+type RegistrationStatusResp struct {
+	Registered bool `json:"registered"`
 }
 
 type Post struct {
@@ -185,6 +191,11 @@ type Reply struct {
 	AuthorContact string    `json:"-"`
 	Content       string    `json:"content"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type PostDetailResp struct {
+	Post    *Post    `json:"post"`
+	Replies []*Reply `json:"replies"`
 }
 
 type CreatePostReq struct {

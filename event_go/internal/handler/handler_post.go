@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
@@ -20,8 +19,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req model.CreatePostReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -55,7 +53,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		Content:       req.Content,
 	}
 	if err := h.store.CreatePost(post); err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_post", err)
 		return
 	}
 
@@ -79,7 +77,7 @@ func (h *Handler) ListPosts(w http.ResponseWriter, r *http.Request) {
 
 	posts, total, err := h.store.ListPosts(eventID, offset, pageSize)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_posts", err)
 		return
 	}
 
@@ -87,56 +85,57 @@ func (h *Handler) ListPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetPost(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
 	postID, err := parsePostID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的帖子 ID"})
 		return
 	}
 
-	post, err := h.store.GetPost(postID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
-		return
-	}
-	if post == nil {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: "帖子不存在"})
+	post, ok := h.getPostForEventOr404(w, eventID, postID)
+	if !ok {
 		return
 	}
 
 	replies, err := h.store.ListReplies(postID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_replies", err)
 		return
 	}
 
-	result := map[string]interface{}{
-		"post":    post,
-		"replies": replies,
+	result := model.PostDetailResp{
+		Post:    post,
+		Replies: replies,
 	}
 
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: result})
 }
 
 func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
 	postID, err := parsePostID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的帖子 ID"})
 		return
 	}
 
-	post, err := h.store.GetPost(postID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
-		return
-	}
-	if post == nil {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: "帖子不存在"})
+	post, ok := h.getPostForEventOr404(w, eventID, postID)
+	if !ok {
 		return
 	}
 
 	var req model.CreateReplyReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -165,7 +164,7 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		Content:       req.Content,
 	}
 	if err := h.store.CreateReply(reply); err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_reply", err)
 		return
 	}
 

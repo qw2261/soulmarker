@@ -1,5 +1,5 @@
 import { get, post } from './client'
-import type { Post, Reply, CreatePostReq, CreateReplyReq } from './types'
+import type { Post, Reply, PostDetail, CreatePostReq, CreateReplyReq } from './types'
 
 export function listPosts(
   eventId: number,
@@ -9,7 +9,7 @@ export function listPosts(
 }
 
 export function getPost(eventId: number, postId: number) {
-  return get<Post>(`/api/events/${eventId}/posts/${postId}`)
+  return get<PostDetail>(`/api/events/${eventId}/posts/${postId}`)
 }
 
 export function createPost(eventId: number, data: CreatePostReq) {

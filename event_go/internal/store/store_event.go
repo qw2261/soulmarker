@@ -143,6 +143,9 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 	if req.Title != nil {
 		event.Title = *req.Title
 	}
+	if req.OrganizerID != nil {
+		event.OrganizerID = *req.OrganizerID
+	}
 	if req.Description != nil {
 		event.Description = *req.Description
 	}
@@ -164,17 +167,16 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 
 	now := time.Now().UTC().Format(model.TimeFormat)
 	_, err = s.db.Exec(
-		`UPDATE events SET title=?, description=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
+		`UPDATE events SET organizer_id=?, title=?, description=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
 		 WHERE id=?`,
-		event.Title, event.Description, event.EventTime, event.Location,
+		event.OrganizerID, event.Title, event.Description, event.EventTime, event.Location,
 		event.Capacity, event.Price, event.Status, now, id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("更新活动失败: %w", err)
 	}
 
-	event.UpdatedAt, _ = time.Parse(model.TimeFormat, now)
-	return event, nil
+	return s.GetEvent(id)
 }
 
 func (s *Store) DeleteEvent(id int64) error {

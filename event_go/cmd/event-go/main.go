@@ -18,51 +18,28 @@ const staticDir = "web/dist"
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("配置校验失败: %v", err)
+	}
 
-	s := store.NewStore(cfg.DatabasePath)
+	s, err := store.OpenStore(cfg.DatabasePath)
+	if err != nil {
+		log.Fatalf("数据库初始化失败: %v", err)
+	}
 	defer s.Close()
 	log.Printf("📦 数据库已初始化: %s", cfg.DatabasePath)
 
 	h := handler.NewHandler(s)
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("POST /api/events", handler.AdminAuth(http.HandlerFunc(h.CreateEvent)).ServeHTTP)
-	mux.HandleFunc("GET /api/events", h.ListEvents)
-	mux.HandleFunc("GET /api/events/{id}", h.GetEvent)
-	mux.HandleFunc("PUT /api/events/{id}", handler.AdminAuth(http.HandlerFunc(h.UpdateEvent)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}", handler.AdminAuth(http.HandlerFunc(h.DeleteEvent)).ServeHTTP)
-	mux.HandleFunc("POST /api/events/{id}/register", h.Register)
-	mux.HandleFunc("DELETE /api/events/{id}/register", h.CancelRegistration)
-	mux.HandleFunc("GET /api/events/{id}/registrations", h.ListRegistrations)
-	mux.HandleFunc("POST /api/events/{id}/posts", h.CreatePost)
-	mux.HandleFunc("GET /api/events/{id}/posts", h.ListPosts)
-	mux.HandleFunc("GET /api/events/{id}/posts/{postId}", h.GetPost)
-	mux.HandleFunc("POST /api/events/{id}/posts/{postId}/replies", h.CreateReply)
-
-	mux.HandleFunc("POST /api/events/{id}/tickets", handler.AdminAuth(http.HandlerFunc(h.CreateTicket)).ServeHTTP)
-	mux.HandleFunc("GET /api/events/{id}/tickets", h.ListTickets)
-	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
-	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", handler.AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
-
-	mux.HandleFunc("GET /health", h.HealthHandler)
-
-	mux.HandleFunc("POST /api/auth/register", h.RegisterUser)
-	mux.HandleFunc("POST /api/auth/login", h.Login)
-
-	mux.HandleFunc("POST /api/organizers", handler.AdminAuth(http.HandlerFunc(h.CreateOrganizer)).ServeHTTP)
-	mux.HandleFunc("GET /api/organizers", h.ListOrganizers)
-	mux.HandleFunc("GET /api/organizers/{id}", h.GetOrganizer)
-	mux.HandleFunc("PUT /api/organizers/{id}", handler.AdminAuth(http.HandlerFunc(h.UpdateOrganizer)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/organizers/{id}", handler.AdminAuth(http.HandlerFunc(h.DeleteOrganizer)).ServeHTTP)
-
-	mux.HandleFunc("/", spaHandler(staticDir))
 
 	port := cfg.Port
 	addr := ":" + port
 	server := &http.Server{
-		Addr:    addr,
-		Handler: handler.LoggingMiddleware(handler.CORS(handler.UserAuth(mux))),
+		Addr:              addr,
+		Handler:           handler.NewRouter(h, spaHandler(staticDir)),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Printf("亦闻 event-go 服务启动，监听端口 %s", port)
@@ -82,7 +59,8 @@ func main() {
 	log.Printf("  DELETE /api/events/{id}                     删除活动 🔐")
 	log.Printf("  POST   /api/events/{id}/register            报名活动")
 	log.Printf("  DELETE /api/events/{id}/register            取消报名")
-	log.Printf("  GET    /api/events/{id}/registrations       报名列表")
+	log.Printf("  GET    /api/events/{id}/registration        当前用户报名状态")
+	log.Printf("  GET    /api/events/{id}/registrations       报名列表 🔐")
 	log.Printf("  POST   /api/events/{id}/posts               发帖（需已报名）")
 	log.Printf("  GET    /api/events/{id}/posts               帖子列表")
 	log.Printf("  GET    /api/events/{id}/posts/{postId}      帖子详情（含回复）")

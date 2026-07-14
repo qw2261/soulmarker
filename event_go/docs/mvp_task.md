@@ -1,5 +1,7 @@
 # 亦闻 event-go MVP 任务跟踪
 
+> **历史档案**：本文件记录 v1–v5.1 的完整演进过程，后续不再追加新的未来路线图。当前能力以 [README.md](../README.md) 为准，后续阶段目标、验收门槛和迭代节奏统一维护在 [goal.md](goal.md)。文中的历史覆盖率和评测结论未全部绑定 Commit；<code>json:"-"</code> 仅表示不输出字段，不等于加密；WAL 或 race 通过也不等于业务并发测试完成。
+
 > 目标：跑通"创建活动 → 浏览活动 → 报名参与"核心闭环
 > 技术栈：Go 标准库 + SQLite + Docker
 
@@ -130,7 +132,7 @@
 
 ```bash
 # 本地运行
-cd event_go && go run .
+cd event_go && go run ./cmd/event-go
 
 # Docker 运行
 cd event_go && docker build -t event-go . && docker run -p 8080:8080 event-go
@@ -224,7 +226,7 @@ curl -s -X DELETE http://localhost:8080/api/events/1
 
 ## 第十二阶段：代码审计与修复 ✅
 
-基于 `test_reports/observation_report_2026-04-25.md` 的审计发现，完成以下修复：
+基于历史本地报告 v1.0_observation_report_2026-04-25.md 的审计发现，完成以下修复。该报告位于被忽略的 test_reports/，不作为当前发布证据。
 
 ### P0 — 严重（数据一致性）
 
@@ -664,7 +666,7 @@ server := &http.Server{
 
 ## 第二十阶段：综合评测后的持续优化 ✅
 
-基于 [`test_reports/comprehensive_evaluation_2026-04-26.md`](../test_reports/comprehensive_evaluation_2026-04-26.md) 的评测结果，完成以下持续优化。
+基于历史本地报告 v4.0_comprehensive_evaluation_2026-04-26.md 的评测结果，完成以下持续优化。该报告位于被忽略的 test_reports/，不作为当前发布证据。
 
 ### 一、优化优先级矩阵
 
@@ -1258,4 +1260,3 @@ store.go 1040 行 / handler.go 1012 行，单体文件过长。按功能拆分�
 | `go test -count=1 ./...` | ✅ 176 用例全部通过 |
 | `go test -race -cover` | ✅ 零竞争，Store 80.0%，Handler 75.3% |
 | DAG | ✅ 不变，同包编译自动合并 |
-

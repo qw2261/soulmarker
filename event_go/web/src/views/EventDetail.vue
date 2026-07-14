@@ -116,7 +116,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Shop } from '@element-plus/icons-vue'
-import { getEvent, listRegistrations, cancelRegistration } from '@/api/events'
+import { getEvent, getRegistrationStatus, cancelRegistration } from '@/api/events'
 import { listPosts } from '@/api/posts'
 import type { Event, Post } from '@/api/types'
 import { EventStatusMap, EventStatusColors } from '@/api/types'
@@ -150,9 +150,8 @@ async function fetchEvent() {
 
 async function checkRegistration(eventId: number) {
   try {
-    const res = await listRegistrations(eventId, { page_size: 200 })
-    const list = res.data || []
-    registered.value = list.some((r) => r.contact === userContact.value)
+    const res = await getRegistrationStatus(eventId)
+    registered.value = res.data?.registered || false
   } catch {
     registered.value = false
   }

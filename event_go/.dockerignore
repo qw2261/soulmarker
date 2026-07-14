@@ -1,0 +1,10 @@
+.DS_Store
+.git
+.github
+.vscode
+data/
+event-go
+test_reports/
+web/dist/
+web/node_modules/
+web/tsconfig.tsbuildinfo

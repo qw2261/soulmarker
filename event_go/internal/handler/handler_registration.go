@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,8 +27,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req model.RegisterReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -61,7 +59,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, model.ErrTicketSoldOut):
 			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: err.Error()})
 		default:
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "register_event", err)
 		}
 		return
 	}
@@ -82,8 +80,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req model.CancelRegistrationReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -99,7 +96,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 
 	eventTime, err := time.Parse(model.TimeFormat, event.EventTime)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "解析活动时间失败"})
+		writeInternalError(w, "cancel_registration_parse_event_time", err)
 		return
 	}
 
@@ -115,12 +112,42 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, model.ErrNotRegistered):
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		default:
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "cancel_registration", err)
 		}
 		return
 	}
 
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "已取消报名"})
+}
+
+func (h *Handler) GetRegistrationStatus(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
+	if _, ok := h.getEventOr404(w, eventID); !ok {
+		return
+	}
+
+	claims, ok := model.UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "请先登录"})
+		return
+	}
+
+	registered, err := h.store.IsRegistered(eventID, claims.Contact)
+	if err != nil {
+		writeInternalError(w, "get_registration_status", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.APIResp{
+		Code:    200,
+		Message: "ok",
+		Data:    model.RegistrationStatusResp{Registered: registered},
+	})
 }
 
 func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +167,7 @@ func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 
 	registrations, total, err := h.store.ListRegistrations(eventID, offset, pageSize)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_registrations", err)
 		return
 	}
 

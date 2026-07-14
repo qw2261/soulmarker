@@ -4,6 +4,7 @@ import type {
   CreateEventReq,
   UpdateEventReq,
   Registration,
+  RegistrationStatus,
   RegisterReq,
   CancelRegistrationReq,
 } from './types'
@@ -50,4 +51,8 @@ export function listRegistrations(
   params?: { page?: number; page_size?: number }
 ) {
   return get<Registration[]>(`/api/events/${id}/registrations`, params)
+}
+
+export function getRegistrationStatus(id: number) {
+  return get<RegistrationStatus>('/api/events/' + id + '/registration')
 }

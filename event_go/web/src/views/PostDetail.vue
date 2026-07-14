@@ -90,9 +90,8 @@ async function fetchPost() {
   try {
     const res = await getPost(eventId, postId)
     if (res.data) {
-      // The API returns post with replies embedded
-      post.value = res.data
-      replies.value = (res.data as any).replies || []
+      post.value = res.data.post
+      replies.value = res.data.replies
     }
   } finally {
     loading.value = false

@@ -47,6 +47,10 @@ export interface Registration {
   created_at: string
 }
 
+export interface RegistrationStatus {
+  registered: boolean
+}
+
 export interface Post {
   id: number
   event_id: number
@@ -66,8 +70,14 @@ export interface Reply {
   created_at: string
 }
 
+export interface PostDetail {
+  post: Post
+  replies: Reply[]
+}
+
 export interface APIResp<T = any> {
   code: number
+  error_code?: string
   message: string
   data?: T
   total?: number
@@ -86,6 +96,7 @@ export interface CreateEventReq {
 }
 
 export interface UpdateEventReq {
+  organizer_id?: number
   title?: string
   description?: string
   event_time?: string

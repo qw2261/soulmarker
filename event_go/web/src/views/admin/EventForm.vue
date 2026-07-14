@@ -128,7 +128,16 @@ async function submit() {
   try {
     if (isEdit) {
       const id = Number(route.params.id)
-      await updateEvent(id, { ...form })
+      await updateEvent(id, {
+        organizer_id: form.organizer_id,
+        title: form.title,
+        description: form.description,
+        event_time: form.event_time,
+        location: form.location,
+        capacity: form.capacity,
+        price: form.price,
+        status: form.status,
+      })
       ElMessage.success('活动已更新')
     } else {
       await createEvent({

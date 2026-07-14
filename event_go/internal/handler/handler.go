@@ -2,6 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +15,8 @@ import (
 )
 
 const timeParseMsg = "格式错误，请使用 RFC3339 格式，例如：2026-12-31T18:00:00+08:00"
+
+const maxRequestBodyBytes int64 = 1 << 20
 
 // getAdminToken 从环境变量获取管理员令牌，用于保护需要管理员权限的API
 func getAdminToken() string {
@@ -87,7 +92,7 @@ func paginatedOK(w http.ResponseWriter, data interface{}, total, page, pageSize 
 func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Event, bool) {
 	event, err := h.store.GetEvent(eventID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "get_event", err)
 		return nil, false
 	}
 	if event == nil {
@@ -97,11 +102,39 @@ func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Ev
 	return event, true
 }
 
+// getTicketForEventOr404 确保门票存在且属于 URL 指定的活动。
+func (h *Handler) getTicketForEventOr404(w http.ResponseWriter, eventID, ticketID int64) (*model.Ticket, bool) {
+	ticket, err := h.store.GetTicket(ticketID)
+	if err != nil {
+		writeInternalError(w, "get_ticket", err)
+		return nil, false
+	}
+	if ticket == nil || ticket.EventID != eventID {
+		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrTicketNotFound.Error()})
+		return nil, false
+	}
+	return ticket, true
+}
+
+// getPostForEventOr404 确保帖子存在且属于 URL 指定的活动。
+func (h *Handler) getPostForEventOr404(w http.ResponseWriter, eventID, postID int64) (*model.Post, bool) {
+	post, err := h.store.GetPost(postID)
+	if err != nil {
+		writeInternalError(w, "get_post", err)
+		return nil, false
+	}
+	if post == nil || post.EventID != eventID {
+		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: "帖子不存在"})
+		return nil, false
+	}
+	return post, true
+}
+
 // checkRegistration 验证用户是否已报名活动，未报名返回403响应
 func (h *Handler) checkRegistration(w http.ResponseWriter, eventID int64, contact string) bool {
 	registered, err := h.store.IsRegistered(eventID, contact)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "check_registration", err)
 		return false
 	}
 	if !registered {
@@ -113,10 +146,9 @@ func (h *Handler) checkRegistration(w http.ResponseWriter, eventID int64, contac
 
 func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	dbStatus := "connected"
-	var dbError string
 	if err := h.store.Ping(); err != nil {
 		dbStatus = "disconnected"
-		dbError = err.Error()
+		slog.Error("health check database failure", "error", err)
 	}
 
 	status := "ok"
@@ -130,10 +162,6 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		"uptime_seconds": int64(time.Since(h.startTime).Seconds()),
 		"db":             dbStatus,
 	}
-	if dbError != "" {
-		data["db_error"] = dbError
-	}
-
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: data})
 }
 
@@ -158,9 +186,76 @@ func CORS(next http.Handler) http.Handler {
 
 // writeJSON 统一JSON响应格式，设置Content-Type和响应状态码
 func writeJSON(w http.ResponseWriter, status int, resp model.APIResp) {
+	if status >= http.StatusBadRequest && resp.ErrorCode == "" {
+		resp.ErrorCode = defaultErrorCode(status)
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("encode response", "error", err)
+	}
+}
+
+func defaultErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusConflict:
+		return "CONFLICT"
+	case http.StatusRequestEntityTooLarge:
+		return "REQUEST_TOO_LARGE"
+	default:
+		return "INTERNAL_ERROR"
+	}
+}
+
+func writeInternalError(w http.ResponseWriter, operation string, err error) {
+	slog.Error("request failed", "operation", operation, "error", err)
+	writeJSON(w, http.StatusInternalServerError, model.APIResp{
+		Code:      http.StatusInternalServerError,
+		ErrorCode: "INTERNAL_ERROR",
+		Message:   "服务器内部错误",
+	})
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(dst); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, model.APIResp{
+				Code:      http.StatusRequestEntityTooLarge,
+				ErrorCode: "REQUEST_TOO_LARGE",
+				Message:   "请求体过大",
+			})
+			return false
+		}
+		writeJSON(w, http.StatusBadRequest, model.APIResp{
+			Code:      http.StatusBadRequest,
+			ErrorCode: "INVALID_JSON",
+			Message:   "请求体格式错误",
+		})
+		return false
+	}
+
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{
+			Code:      http.StatusBadRequest,
+			ErrorCode: "INVALID_JSON",
+			Message:   "请求体只能包含一个 JSON 对象",
+		})
+		return false
+	}
+	return true
 }
 
 // AdminAuth 中间件，验证管理员令牌，保护需要管理员权限的API

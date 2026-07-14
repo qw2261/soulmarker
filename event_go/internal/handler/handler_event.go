@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
@@ -12,8 +12,7 @@ import (
 
 func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateEventReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -23,7 +22,7 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	org, err := h.store.GetOrganizer(req.OrganizerID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_event_get_organizer", err)
 		return
 	}
 	if org == nil {
@@ -31,7 +30,7 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Title == "" {
+	if strings.TrimSpace(req.Title) == "" {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动标题不能为空"})
 		return
 	}
@@ -43,7 +42,7 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动" + timeParseMsg})
 		return
 	}
-	if req.Location == "" {
+	if strings.TrimSpace(req.Location) == "" {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动地点不能为空"})
 		return
 	}
@@ -67,7 +66,7 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		Price:         req.Price,
 	}
 	if err := h.store.CreateEvent(event); err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_event", err)
 		return
 	}
 
@@ -87,7 +86,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		Limit:       pageSize,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_events", err)
 		return
 	}
 	paginatedOK(w, events, total, page, pageSize)
@@ -116,9 +115,24 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req model.UpdateEventReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
+	}
+
+	if req.OrganizerID != nil {
+		if *req.OrganizerID <= 0 {
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门店不能为空"})
+			return
+		}
+		organizer, err := h.store.GetOrganizer(*req.OrganizerID)
+		if err != nil {
+			writeInternalError(w, "update_event_get_organizer", err)
+			return
+		}
+		if organizer == nil {
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: model.ErrOrganizerNotFound.Error()})
+			return
+		}
 	}
 
 	if req.Status != nil {
@@ -128,13 +142,35 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动标题不能为空"})
+		return
+	}
+	if req.EventTime != nil {
+		if _, err := time.Parse(model.TimeFormat, *req.EventTime); err != nil {
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动" + timeParseMsg})
+			return
+		}
+	}
+	if req.Location != nil && strings.TrimSpace(*req.Location) == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动地点不能为空"})
+		return
+	}
+	if req.Capacity != nil && *req.Capacity <= 0 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动容量必须大于 0"})
+		return
+	}
+	if req.Price != nil && *req.Price < 0 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "价格不能为负数"})
+		return
+	}
 
 	event, err := h.store.UpdateEvent(id, req)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "update_event", err)
 		}
 		return
 	}
@@ -153,7 +189,7 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "delete_event", err)
 		}
 		return
 	}

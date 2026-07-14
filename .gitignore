@@ -24,3 +24,4 @@ event_go/test_reports/
 # Frontend
 event_go/web/node_modules/
 event_go/web/dist/
+event_go/web/tsconfig.tsbuildinfo

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -16,8 +15,7 @@ import (
 
 func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	var req model.RegisterUserReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" || req.Contact == "" || req.Password == "" {
@@ -31,7 +29,7 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "密码加密失败"})
+		writeInternalError(w, "register_hash_password", err)
 		return
 	}
 
@@ -44,14 +42,14 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrUserExists) {
 			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "register_user", err)
 		}
 		return
 	}
 
 	token, err := h.generateToken(u)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "令牌生成失败"})
+		writeInternalError(w, "register_generate_token", err)
 		return
 	}
 
@@ -63,8 +61,7 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req model.LoginReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Contact == "" || req.Password == "" {
@@ -74,7 +71,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	u, err := h.store.GetUserByContact(req.Contact)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "login_get_user", err)
 		return
 	}
 	if u == nil {
@@ -89,7 +86,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.generateToken(u)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: "令牌生成失败"})
+		writeInternalError(w, "login_generate_token", err)
 		return
 	}
 
@@ -118,18 +115,26 @@ func UserAuth(next http.Handler) http.Handler {
 	cfg := config.Load()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
-		if auth == "" || !strings.HasPrefix(auth, "Bearer ") {
+		if auth == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if !strings.HasPrefix(auth, "Bearer ") {
+			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户认证失败，请重新登录"})
+			return
+		}
 
-		tokenStr := strings.TrimPrefix(auth, "Bearer ")
+		tokenStr := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		if tokenStr == "" {
+			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户认证失败，请重新登录"})
+			return
+		}
 		claims := &model.UserClaims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 			return []byte(cfg.JWTSecret), nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 		if err != nil || !token.Valid {
-			next.ServeHTTP(w, r)
+			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户认证失败，请重新登录"})
 			return
 		}
 

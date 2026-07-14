@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
@@ -21,12 +21,11 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req model.CreateTicketReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
-	if req.Name == "" {
+	if strings.TrimSpace(req.Name) == "" {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门票名称不能为空"})
 		return
 	}
@@ -46,7 +45,7 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		Stock:   req.Stock,
 	}
 	if err := h.store.CreateTicket(ticket); err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_ticket", err)
 		return
 	}
 
@@ -70,7 +69,7 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 
 	tickets, total, err := h.store.ListTickets(eventID, offset, pageSize)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_tickets", err)
 		return
 	}
 
@@ -78,19 +77,20 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
 	ticketID, err := parseTicketID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
 		return
 	}
 
-	ticket, err := h.store.GetTicket(ticketID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
-		return
-	}
-	if ticket == nil {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrTicketNotFound.Error()})
+	ticket, ok := h.getTicketForEventOr404(w, eventID, ticketID)
+	if !ok {
 		return
 	}
 
@@ -98,15 +98,37 @@ func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
 	ticketID, err := parseTicketID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
 		return
 	}
 
+	if _, ok := h.getTicketForEventOr404(w, eventID, ticketID); !ok {
+		return
+	}
+
 	var req model.UpdateTicketReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门票名称不能为空"})
+		return
+	}
+	if req.Price != nil && *req.Price < 0 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "价格不能为负数"})
+		return
+	}
+	if req.Stock != nil && *req.Stock < 0 {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "库存不能为负数"})
 		return
 	}
 
@@ -115,7 +137,7 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrTicketNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "update_ticket", err)
 		}
 		return
 	}
@@ -124,9 +146,19 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		return
+	}
+
 	ticketID, err := parseTicketID(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
+		return
+	}
+
+	if _, ok := h.getTicketForEventOr404(w, eventID, ticketID); !ok {
 		return
 	}
 
@@ -134,7 +166,7 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrTicketNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "delete_ticket", err)
 		}
 		return
 	}

@@ -1,20 +1,19 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
 	var req model.CreateOrganizerReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.Name == "" {
+	if strings.TrimSpace(req.Name) == "" {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门店名称不能为空"})
 		return
 	}
@@ -29,7 +28,7 @@ func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
 		Tags:        req.Tags,
 	}
 	if err := h.store.CreateOrganizer(o); err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "create_organizer", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "门店创建成功", Data: o})
@@ -43,7 +42,7 @@ func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
 	}
 	o, err := h.store.GetOrganizer(id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "get_organizer", err)
 		return
 	}
 	if o == nil {
@@ -58,7 +57,7 @@ func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * pageSize
 	organizers, total, err := h.store.ListOrganizers(offset, pageSize)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+		writeInternalError(w, "list_organizers", err)
 		return
 	}
 	paginatedOK(w, organizers, total, page, pageSize)
@@ -71,8 +70,11 @@ func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req model.UpdateOrganizerReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "请求体格式错误"})
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门店名称不能为空"})
 		return
 	}
 	o, err := h.store.UpdateOrganizer(id, req)
@@ -80,7 +82,7 @@ func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrOrganizerNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "update_organizer", err)
 		}
 		return
 	}
@@ -97,7 +99,7 @@ func (h *Handler) DeleteOrganizer(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, model.ErrOrganizerNotFound) {
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		} else {
-			writeJSON(w, http.StatusInternalServerError, model.APIResp{Code: 500, Message: err.Error()})
+			writeInternalError(w, "delete_organizer", err)
 		}
 		return
 	}

@@ -43,34 +43,7 @@ func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	s := store.NewStore(":memory:")
 	h := NewHandler(s)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/organizers", AdminAuth(http.HandlerFunc(h.CreateOrganizer)).ServeHTTP)
-	mux.HandleFunc("GET /api/organizers", h.ListOrganizers)
-	mux.HandleFunc("GET /api/organizers/{id}", h.GetOrganizer)
-	mux.HandleFunc("PUT /api/organizers/{id}", AdminAuth(http.HandlerFunc(h.UpdateOrganizer)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/organizers/{id}", AdminAuth(http.HandlerFunc(h.DeleteOrganizer)).ServeHTTP)
-	mux.HandleFunc("POST /api/events", AdminAuth(http.HandlerFunc(h.CreateEvent)).ServeHTTP)
-	mux.HandleFunc("GET /api/events", h.ListEvents)
-	mux.HandleFunc("GET /api/events/{id}", h.GetEvent)
-	mux.HandleFunc("PUT /api/events/{id}", AdminAuth(http.HandlerFunc(h.UpdateEvent)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}", AdminAuth(http.HandlerFunc(h.DeleteEvent)).ServeHTTP)
-	mux.HandleFunc("POST /api/events/{id}/register", UserAuth(http.HandlerFunc(h.Register)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}/register", UserAuth(http.HandlerFunc(h.CancelRegistration)).ServeHTTP)
-	mux.HandleFunc("GET /api/events/{id}/registrations", h.ListRegistrations)
-	mux.HandleFunc("POST /api/events/{id}/posts", h.CreatePost)
-	mux.HandleFunc("GET /api/events/{id}/posts", h.ListPosts)
-	mux.HandleFunc("GET /api/events/{id}/posts/{postId}", h.GetPost)
-	mux.HandleFunc("POST /api/events/{id}/posts/{postId}/replies", h.CreateReply)
-	mux.HandleFunc("POST /api/events/{id}/tickets", AdminAuth(http.HandlerFunc(h.CreateTicket)).ServeHTTP)
-	mux.HandleFunc("GET /api/events/{id}/tickets", h.ListTickets)
-	mux.HandleFunc("GET /api/events/{id}/tickets/{ticketId}", h.GetTicket)
-	mux.HandleFunc("PUT /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.UpdateTicket)).ServeHTTP)
-	mux.HandleFunc("DELETE /api/events/{id}/tickets/{ticketId}", AdminAuth(http.HandlerFunc(h.DeleteTicket)).ServeHTTP)
-	mux.HandleFunc("POST /api/auth/register", h.RegisterUser)
-	mux.HandleFunc("POST /api/auth/login", h.Login)
-	mux.HandleFunc("GET /health", h.HealthHandler)
-
-	server := httptest.NewServer(LoggingMiddleware(CORS(mux)))
+	server := httptest.NewServer(NewRouter(h, nil))
 	t.Cleanup(func() {
 		server.Close()
 		s.Close()
@@ -118,6 +91,22 @@ func makeEventBody(organizerID int64, extra ...string) string {
 	}
 	base += "}"
 	return base
+}
+
+func createStoreEvent(t *testing.T, s *store.Store, title string) *model.Event {
+	t.Helper()
+	e := &model.Event{
+		OrganizerID: 1,
+		Title:       title,
+		EventTime:   "2099-12-31T18:00:00+08:00",
+		Location:    "线上",
+		Capacity:    100,
+		Price:       0,
+	}
+	if err := s.CreateEvent(e); err != nil {
+		t.Fatalf("create store event: %v", err)
+	}
+	return e
 }
 
 func TestCreateEventHandler(t *testing.T) {
@@ -314,7 +303,7 @@ func TestUpdateEventInvalidStatus(t *testing.T) {
 func TestUpdateEventHandlerNotFound(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	updateBody := `{"organizer_id":1,"title":"新标题"}`
+	updateBody := `{"title":"新标题"}`
 	req, _ := http.NewRequest("PUT", srv.URL+"/api/events/999", strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -585,6 +574,50 @@ func TestGetPostHandlerWithReplies(t *testing.T) {
 	}
 }
 
+func TestPostRoutesRequireEventOwnership(t *testing.T) {
+	s, _, srv := setupTestServer(t)
+	eventA := createStoreEvent(t, s, "帖子所属活动")
+	eventB := createStoreEvent(t, s, "错误路径活动")
+
+	if err := s.Register(&model.Registration{EventID: eventA.ID, Name: "张三", Contact: "post-scope@test.com"}); err != nil {
+		t.Fatal(err)
+	}
+	post := &model.Post{
+		EventID:       eventA.ID,
+		AuthorName:    "张三",
+		AuthorContact: "post-scope@test.com",
+		Title:         "仅属于活动 A",
+		Content:       "内容",
+	}
+	if err := s.CreatePost(post); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/events/" + itoa64(eventB.ID) + "/posts/" + itoa64(post.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("wrong event get post: expected 404, got %d", resp.StatusCode)
+	}
+
+	req, _ := http.NewRequest(
+		"POST",
+		srv.URL+"/api/events/"+itoa64(eventB.ID)+"/posts/"+itoa64(post.ID)+"/replies",
+		strings.NewReader("{\"author_name\":\"张三\",\"author_contact\":\"post-scope@test.com\",\"content\":\"越权回复\"}"),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("wrong event create reply: expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestCreateReplyHandler(t *testing.T) {
 	s, _, srv := setupTestServer(t)
 
@@ -721,6 +754,123 @@ func TestDeleteTicketHandler(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestTicketRoutesRequireEventOwnership(t *testing.T) {
+	s, _, srv := setupTestServer(t)
+	eventA := createStoreEvent(t, s, "门票所属活动")
+	eventB := createStoreEvent(t, s, "错误路径活动")
+	ticket := &model.Ticket{EventID: eventA.ID, Name: "活动 A 门票", Price: 10, Stock: 5}
+	if err := s.CreateTicket(ticket); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/events/" + itoa64(eventB.ID) + "/tickets/" + itoa64(ticket.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("wrong event get ticket: expected 404, got %d", resp.StatusCode)
+	}
+
+	req, _ := http.NewRequest(
+		"PUT",
+		srv.URL+"/api/events/"+itoa64(eventB.ID)+"/tickets/"+itoa64(ticket.ID),
+		strings.NewReader("{\"name\":\"越权修改\"}"),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("wrong event update ticket: expected 404, got %d", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest(
+		"DELETE",
+		srv.URL+"/api/events/"+itoa64(eventB.ID)+"/tickets/"+itoa64(ticket.ID),
+		nil,
+	)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("wrong event delete ticket: expected 404, got %d", resp.StatusCode)
+	}
+
+	stored, err := s.GetTicket(ticket.ID)
+	if err != nil || stored == nil || stored.Name != "活动 A 门票" {
+		t.Fatalf("ticket changed through wrong event path: ticket=%+v err=%v", stored, err)
+	}
+}
+
+func TestUpdateValidationRejectsInvalidValues(t *testing.T) {
+	s, _, srv := setupTestServer(t)
+	event := createStoreEvent(t, s, "更新校验")
+	ticket := &model.Ticket{EventID: event.ID, Name: "有效门票", Price: 10, Stock: 5}
+	if err := s.CreateTicket(ticket); err != nil {
+		t.Fatal(err)
+	}
+
+	eventCases := []string{
+		"{\"organizer_id\":0}",
+		"{\"organizer_id\":999}",
+		"{\"title\":\" \"}",
+		"{\"event_time\":\"invalid\"}",
+		"{\"location\":\" \"}",
+		"{\"capacity\":0}",
+		"{\"price\":-1}",
+	}
+	for _, body := range eventCases {
+		req, _ := http.NewRequest("PUT", srv.URL+"/api/events/"+itoa64(event.ID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("event body %s: expected 400, got %d", body, resp.StatusCode)
+		}
+	}
+
+	ticketCases := []string{
+		"{\"name\":\" \"}",
+		"{\"price\":-1}",
+		"{\"stock\":-1}",
+	}
+	for _, body := range ticketCases {
+		req, _ := http.NewRequest(
+			"PUT",
+			srv.URL+"/api/events/"+itoa64(event.ID)+"/tickets/"+itoa64(ticket.ID),
+			strings.NewReader(body),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("ticket body %s: expected 400, got %d", body, resp.StatusCode)
+		}
+	}
+
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/organizers/1", strings.NewReader("{\"name\":\" \"}"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("empty organizer name: expected 400, got %d", resp.StatusCode)
 	}
 }
 
@@ -1003,8 +1153,111 @@ func TestHealthHandlerDBDisconnected(t *testing.T) {
 	if data["db"] != "disconnected" {
 		t.Errorf("expected db disconnected, got %v", data["db"])
 	}
-	if _, exists := data["db_error"]; !exists {
-		t.Errorf("expected db_error field in response")
+	if _, exists := data["db_error"]; exists {
+		t.Errorf("database error details must not be exposed")
+	}
+}
+
+func TestStrictJSONRequestBoundary(t *testing.T) {
+	s := store.NewStore(":memory:")
+	defer s.Close()
+	h := NewHandler(s)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "unknown field",
+			body:       `{"name":"测试","contact":"test@example.com","password":"123456","admin":true}`,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "INVALID_JSON",
+		},
+		{
+			name:       "trailing object",
+			body:       `{"name":"测试","contact":"test@example.com","password":"123456"}{}`,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "INVALID_JSON",
+		},
+		{
+			name:       "body too large",
+			body:       `{"name":"` + strings.Repeat("a", int(maxRequestBodyBytes)) + `","contact":"test@example.com","password":"123456"}`,
+			wantStatus: http.StatusRequestEntityTooLarge,
+			wantCode:   "REQUEST_TOO_LARGE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/register", strings.NewReader(tt.body))
+			w := httptest.NewRecorder()
+			h.RegisterUser(w, req)
+
+			resp := w.Result()
+			defer resp.Body.Close()
+			if resp.StatusCode != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, resp.StatusCode)
+			}
+			var apiResp model.APIResp
+			if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if apiResp.ErrorCode != tt.wantCode {
+				t.Fatalf("expected error code %s, got %s", tt.wantCode, apiResp.ErrorCode)
+			}
+		})
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+	SecurityHeaders(next).ServeHTTP(w, req)
+
+	for header, expected := range map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "strict-origin-when-cross-origin",
+		"Permissions-Policy":     "camera=(), microphone=(), geolocation=()",
+	} {
+		if got := w.Header().Get(header); got != expected {
+			t.Errorf("expected %s=%q, got %q", header, expected, got)
+		}
+	}
+	if got := w.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("unexpected Content-Security-Policy: %q", got)
+	}
+}
+
+func TestInternalErrorsDoNotLeak(t *testing.T) {
+	s := store.NewStore(":memory:")
+	h := NewHandler(s)
+	_ = s.Close()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	h.ListEvents(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if apiResp.ErrorCode != "INTERNAL_ERROR" || apiResp.Message != "服务器内部错误" {
+		t.Fatalf("unexpected public error: %+v", apiResp)
+	}
+	if strings.Contains(strings.ToLower(apiResp.Message), "sql") || strings.Contains(strings.ToLower(apiResp.Message), "database") {
+		t.Fatalf("internal details leaked: %q", apiResp.Message)
 	}
 }
 
@@ -1256,6 +1509,98 @@ func TestCancelRegistrationHandlerWithJWT(t *testing.T) {
 	}
 }
 
+func TestRegistrationStatusUsesAuthenticatedUser(t *testing.T) {
+	s, _, srv := setupTestServer(t)
+	event := createStoreEvent(t, s, "报名状态")
+	if err := s.Register(&model.Registration{
+		EventID: event.ID,
+		Name:    "已报名用户",
+		Contact: "registered-status@test.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	url := srv.URL + "/api/events/" + itoa64(event.ID) + "/registration"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous status: expected 401, got %d", resp.StatusCode)
+	}
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestJWT(t, 1, "已报名用户", "registered-status@test.com"))
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("registered status: expected 200, got %d", resp.StatusCode)
+	}
+	data := apiResp.Data.(map[string]interface{})
+	if registered, _ := data["registered"].(bool); !registered {
+		t.Fatal("expected registered=true")
+	}
+
+	req, _ = http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+makeTestJWT(t, 2, "其他用户", "other-status@test.com"))
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apiResp = model.APIResp{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	data = apiResp.Data.(map[string]interface{})
+	if registered, _ := data["registered"].(bool); registered {
+		t.Fatal("expected registered=false for another user")
+	}
+}
+
+func TestRegistrationListRequiresAdminToken(t *testing.T) {
+	t.Setenv("ADMIN_TOKEN", "registration-admin-token")
+	s, _, srv := setupTestServer(t)
+	event := createStoreEvent(t, s, "报名名单权限")
+	if err := s.Register(&model.Registration{
+		EventID: event.ID,
+		Name:    "隐私用户",
+		Contact: "private-registration@test.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	url := srv.URL + "/api/events/" + itoa64(event.ID) + "/registrations"
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous registration list: expected 401, got %d", resp.StatusCode)
+	}
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("X-Admin-Token", "registration-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin registration list: expected 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestCancelRegistrationHandlerWithBody(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
@@ -1359,10 +1704,6 @@ func TestUserAuthWithInvalidToken(t *testing.T) {
 	var captured bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = true
-		_, contact := getUserIdentity(r)
-		if contact != "" {
-			t.Error("expected empty contact with invalid token")
-		}
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -1371,8 +1712,11 @@ func TestUserAuthWithInvalidToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	UserAuth(next).ServeHTTP(w, req)
 
-	if !captured {
-		t.Error("next handler not called with invalid token")
+	if captured {
+		t.Error("next handler must not be called with invalid token")
+	}
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
 	}
 }
 

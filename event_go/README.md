@@ -1,5 +1,7 @@
 # 亦闻 event-go
 
+> 当前已发布能力与运行方式以本 README 为准。后续产品化目标、阶段门禁和迭代节奏统一维护在 [docs/goal.md](docs/goal.md)；v1–v5.1 的历史过程见 [docs/mvp_task.md](docs/mvp_task.md)。
+
 ## 项目想法
 
 亦闻是一个活动管理平台，目标是让活动的组织、报名和交流变得简单。
@@ -120,19 +122,20 @@ User (用户) — 注册/登录获得 JWT
 | contact      | string  | 联系方式（手机/邮箱） |
 | ticket\_id   | \*int64 | 可选，关联的门票    |
 | ticket\_name | string  | 报名时的门票名称快照  |
+| user\_id     | \*int64 | 可选，身份模型 v2 的用户 ID；当前处于 Expand 阶段 |
 
 ### Post & Reply — 讨论区
 
 | 实体    | 说明                       |
 | ----- | ------------------------ |
-| Post  | 帖子，关联 event\_id，仅已报名者可创建 |
-| Reply | 回复，关联 post\_id，仅已报名者可创建  |
+| Post  | 帖子，关联 event\_id；schema v3 已增加 nullable user\_id |
+| Reply | 回复，关联 post\_id；schema v3 已增加 nullable user\_id |
 
 ***
 
 ## 当前进度
 
-**v5.1** — 代码拆分重构，共 **25 个 API 接口**。
+**v5.2 开发基线** — 统一 Router 与首批安全修复，共 **26 个 API 接口**。
 
 ```
 POST   /api/auth/register                            用户注册
@@ -149,7 +152,8 @@ PUT    /api/events/{id}                               编辑活动 🔐
 DELETE /api/events/{id}                               删除活动 🔐
 POST   /api/events/{id}/register                      报名活动
 DELETE /api/events/{id}/register                      取消报名（活动开始前24h可取消，支持 JWT 自动识别）
-GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）
+GET    /api/events/{id}/registration                  当前登录用户的报名状态
+GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）🔐
 POST   /api/events/{id}/posts                         发帖（需已报名，支持 JWT 自动识别）
 GET    /api/events/{id}/posts[?page=&page_size=]      帖子列表（分页）
 GET    /api/events/{id}/posts/{postId}                帖子详情（含回复）
@@ -187,7 +191,9 @@ GET    /health                                        健康检查
 
 分页响应额外返回 `total`、`page`、`page_size` 字段。
 
-详细任务跟踪见 [mvp\_task.md](mvp_task.md)。
+所有 JSON 写请求最多 1 MiB，未知字段、多个连续 JSON 对象和尾随内容会返回 400/413。错误响应保留数字 `code`，并增加稳定字符串 `error_code`；HTTP 500 只返回通用信息，内部错误写入服务日志。
+
+详细历史任务见 [docs/mvp_task.md](docs/mvp_task.md)，后续路线见 [docs/goal.md](docs/goal.md)。
 
 ***
 
@@ -263,23 +269,25 @@ event_go/
 │   │   ├── handler_auth.go      # 用户认证（RegisterUser, Login, UserAuth, getUserIdentity）
 │   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
 │   │   ├── handler_test.go      # Handler 集成测试
-│   │   └── middleware.go        # 中间件：日志、CORS、管理员认证
+│   │   └── middleware.go        # 中间件：日志、CORS、安全响应头、管理员认证
 │   ├── store/
-│   │   ├── store.go             # 基础设施：Store 结构体, Close, Ping, NewStore, migrate
+│   │   ├── store.go             # Store、版本化事务迁移、schema_migrations
 │   │   ├── store_event.go       # 活动 CRUD
 │   │   ├── store_ticket.go      # 门票 CRUD
 │   │   ├── store_registration.go # 报名 CRUD
 │   │   ├── store_post.go        # 帖子/回复 CRUD
 │   │   ├── store_user.go        # 用户 CRUD
 │   │   ├── store_organizer.go   # 门店 CRUD
-│   │   └── store_test.go        # Store 单元测试
+│   │   ├── store_test.go        # Store 单元测试
+│   │   └── migration_test.go    # 空库、旧库、重复与失败迁移测试
 │   └── model/
 │       └── types.go             # 数据模型：结构体定义、哨兵错误、常量、ListEventsParams
 ├── data/                        # 数据库文件（运行时生成）
 ├── docs/
-│   ├── mvp_task.md              # 全量任务跟踪文档
-│   └── mvp_task_core.md         # 核心版任务跟踪
-├── test_reports/                # 阶段性测试报告
+│   ├── goal.md                  # 后续产品化目标、阶段门禁与迭代节奏
+│   ├── mvp_task.md              # v1–v5.1 历史任务记录
+│   └── mvp_task_core.md         # v1–v5.1 历史摘要
+├── test_reports/                # 本地/CI 原始测试产物（被忽略，不作为发布证据）
 ├── Dockerfile                   # 多阶段构建（Node.js → Go → Alpine）
 ├── go.mod / go.sum
 ├── web/                         # Vue 3 前端（Vite + Element Plus + Pinia）
@@ -295,7 +303,7 @@ cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallb
 internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证（7 文件）
          │
          v
-internal/store/*.go          数据层：SQLite CRUD、事务管理、6 表迁移（7 文件）
+internal/store/*.go          数据层：SQLite CRUD、事务管理、版本化迁移
          │
          v
 internal/model/types.go      模型层：类型定义、哨兵错误、常量、JWT Claims
@@ -345,27 +353,38 @@ main.go
 | 删除门店保护 | 事务内解绑旗下活动（organizer_id = 0），不级联删除 |
 | 密码安全 | bcrypt 哈希（`DefaultCost`），不存明文 |
 | 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |
+| Schema 漂移 | `schema_migrations` + 逐版本事务执行；迁移失败阻止启动 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
-| 测试文件 | `internal/store/store_test.go` + `internal/handler/handler_test.go` |
-| 测试用例 | **176**（Store + Handler） |
-| Store 覆盖率 | **80.0%** |
-| Handler 覆盖率 | **75.4%** |
+| 测试文件 | Config、Handler、Store、Migration 测试 |
+| 测试用例 | **192** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
-| 依赖状态 | 全部最新 |
+| 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
 
 **测试命令**：
 
 ```bash
 cd event_go && go test -v -count=1 ./...   # 运行所有测试
-cd event_go && go test -cover ./...         # 查看覆盖率
 cd event_go && go test -race ./...          # 数据竞争检测
 cd event_go && go vet ./...                 # 静态检查
 ```
+
+### 数据库迁移
+
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=3`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；失败时服务拒绝启动。
+
+升级生产数据前先停止旧进程并备份数据库：
+
+```bash
+cd event_go
+cp data/event_go.db data/event_go.db.pre-upgrade.bak
+```
+
+当前迁移仅新增表、nullable 字段和索引，不删除旧字段。详细回滚步骤见 [docs/releases/v5.2.0/migration-rollback.md](docs/releases/v5.2.0/migration-rollback.md)。
 
 ### API 速查
 
@@ -458,6 +477,7 @@ event_go/
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
+| `APP_ENV` | `development` | 运行环境：development / test / staging / production |
 | `PORT` | `8080` | 服务端口 |
 | `ADMIN_TOKEN` | 空（不校验） | 管理员令牌 |
 | `DATABASE_PATH` | `data/event_go.db` | SQLite 数据库路径 |
@@ -466,7 +486,11 @@ event_go/
 | `CORS_ORIGIN` | `*` | 允许的跨域来源 |
 | `CANCEL_DEADLINE_HOURS` | `24` | 取消报名截止小时数 |
 
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`，并将 `CORS_ORIGIN` 设置为明确来源。
+
 ### 环境准备
+
+前端开发和 CI 统一使用 Node.js 22、npm 10；`web/.nvmrc` 可用于切换版本。
 
 ```bash
 # 如果 nvm 装了但没加载（终端提示 npm: command not found）
@@ -477,7 +501,7 @@ export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
 ```bash
 # 终端1：启动 Go 后端（端口 8080）
-cd event_go && go run .
+cd event_go && go run ./cmd/event-go
 
 # 终端2：安装前端依赖 + 启动 Vite 开发服务器（端口 5173）
 cd event_go/web
