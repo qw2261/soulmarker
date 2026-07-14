@@ -1,6 +1,6 @@
 # v5.4.0 测试报告
 
-> 状态：Verification，本地完整门禁已通过，候选提交已推送，等待远端 CI
+> 状态：Verification，本地完整门禁与候选提交远端 CI 已通过，等待版本发布证据
 
 ## 版本身份
 
@@ -41,6 +41,14 @@
 
 本阶段继续不使用 covdata。
 
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [GitHub Actions Run 29377562401](https://github.com/qw2261/soulmarker/actions/runs/29377562401) | success |
+| backend | success |
+| frontend | success |
+
 ## Go/No-Go
 
-No-Go：需要完成远端 CI 和版本发布证据。
+No-Go：候选实现门禁已通过；仍需完成 Tag 与正式版本发布证据后才能将 G2 标记为 Done。
