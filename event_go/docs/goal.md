@@ -688,7 +688,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 |---|---|---|---|---|
 | G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 已推送，等待远端 CI、Tag 与最终发布证据 |
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现，等待完整门禁与远端 CI；身份兼容路径归 G2 收口 |
-| G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09 已实现且本地完整门禁通过，等待候选提交与远端 CI 证据 |
+| G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09 已实现且本地完整门禁通过；候选提交 63ff5b8 已推送，等待远端 CI 证据 |
 | G3 | Planned | v5.5 | — | 与 G2 后半段可小范围并行 |
 | G4 | Planned | v6.0 | — | M1 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |

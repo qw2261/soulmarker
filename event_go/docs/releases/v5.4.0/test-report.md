@@ -1,13 +1,13 @@
 # v5.4.0 测试报告
 
-> 状态：Verification，本地完整门禁已通过，等待候选提交与远端 CI
+> 状态：Verification，本地完整门禁已通过，候选提交已推送，等待远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 基线 Commit | 212300047252ce2913020d3b776fd25abeb20a50 |
-| 候选 Commit | 待提交 |
+| 候选 Commit | 63ff5b8f69d96314616c3fa882f98c9742a2e373 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，身份回填、legacy 标记、外键启用 |
 
@@ -43,4 +43,4 @@
 
 ## Go/No-Go
 
-No-Go：需要完成候选提交、远端 CI 和版本发布证据。
+No-Go：需要完成远端 CI 和版本发布证据。
