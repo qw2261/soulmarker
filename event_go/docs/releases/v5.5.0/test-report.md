@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01/R02/R05/R06 与 R03 报名/取消切片已远端验证；DiscussionService 切片本地完整门禁已通过，等待候选提交与远端 CI
+> 状态：In Progress，G3-R01–R03、R05–R06 的当前实现均已通过本地和远端门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | d40d24f61cd91208b31dbff120b1c95baaeffefd |
-| 当前候选 Commit | 待提交 |
+| 当前候选 Commit | 08fa3011397169de37b0d351ac7475e85ebc48e0 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -43,7 +43,8 @@
 | backend：format、vet、test、race | success |
 | frontend：build | success |
 | [GitHub Actions Run 29379040895](https://github.com/qw2261/soulmarker/actions/runs/29379040895) | service/依赖注入候选 success |
+| [GitHub Actions Run 29379725406](https://github.com/qw2261/soulmarker/actions/runs/29379725406) | DiscussionService 候选 success |
 
 ## Go/No-Go
 
-No-Go：DiscussionService 切片仍需候选提交与远端 CI；G3 仍有 DTO、OpenAPI 和业务错误码工作。
+No-Go：DiscussionService 切片已完成验证；G3 仍有 DTO、OpenAPI 和业务错误码工作。
