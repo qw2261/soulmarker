@@ -3,6 +3,11 @@ import type { ContentModerationAction, ContentReport, ContentReportStatus, Conte
 
 export interface AdminSession {
   authenticated: boolean
+  principal_type: 'platform_admin'
+}
+
+export function isPlatformAdminSession(session: AdminSession | null | undefined) {
+  return session?.authenticated === true && session.principal_type === 'platform_admin'
 }
 
 export function getAdminSession() {

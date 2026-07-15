@@ -153,7 +153,19 @@ type LoginResponse struct {
 }
 
 type AdminSessionResponse struct {
-	Authenticated bool `json:"authenticated"`
+	Authenticated bool   `json:"authenticated"`
+	PrincipalType string `json:"principal_type"`
+}
+
+type OrganizationContextResponse struct {
+	OrganizationID     int64    `json:"organization_id"`
+	OrganizationName   string   `json:"organization_name"`
+	OrganizationSlug   string   `json:"organization_slug"`
+	OrganizationStatus string   `json:"organization_status"`
+	MembershipStatus   string   `json:"membership_status"`
+	Role               string   `json:"role"`
+	PrincipalType      string   `json:"principal_type"`
+	Capabilities       []string `json:"capabilities"`
 }
 
 type OrganizerResponse struct {

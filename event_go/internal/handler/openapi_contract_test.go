@@ -139,6 +139,7 @@ func TestOpenAPISchemasMatchDTOJSONFields(t *testing.T) {
 		"UserResponse":                    dtoType(dto.UserResponse{}),
 		"LoginResponse":                   dtoType(dto.LoginResponse{}),
 		"AdminSessionResponse":            dtoType(dto.AdminSessionResponse{}),
+		"OrganizationContextResponse":     dtoType(dto.OrganizationContextResponse{}),
 		"OrganizerResponse":               dtoType(dto.OrganizerResponse{}),
 		"EventResponse":                   dtoType(dto.EventResponse{}),
 		"TicketResponse":                  dtoType(dto.TicketResponse{}),

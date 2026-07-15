@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/openapi"
 )
 
@@ -18,8 +19,11 @@ type apiRoute struct {
 }
 
 func (h *Handler) apiRoutes() []apiRoute {
-	admin := func(handler http.HandlerFunc) http.Handler {
-		return AdminAuth(handler, h.config.AdminToken)
+	platformAdmin := func(handler http.HandlerFunc) http.Handler {
+		return PlatformAdminAuth(handler, h.config.AdminToken)
+	}
+	tenant := func(capability authorization.Capability, handler http.HandlerFunc) http.Handler {
+		return h.OrganizationAuth(handler, capability)
 	}
 	plain := func(handler http.HandlerFunc) http.Handler {
 		return handler
@@ -40,48 +44,50 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodGet, "/me/notifications/unread-count", "getNotificationUnreadCount", "", plain(h.GetNotificationUnreadCount)},
 		{http.MethodPut, "/me/notifications/{notificationId}/read", "markNotificationRead", "", plain(h.MarkNotificationRead)},
 		{http.MethodPut, "/me/notifications/read-all", "markAllNotificationsRead", "", plain(h.MarkAllNotificationsRead)},
-		{http.MethodGet, "/admin/session", "getAdminSession", "", admin(h.GetAdminSession)},
-		{http.MethodGet, "/admin/identity-migration", "getIdentityMigrationReport", "", admin(h.GetIdentityMigrationReport)},
-		{http.MethodGet, "/admin/content-reports", "listContentReports", "", admin(h.ListContentReports)},
-		{http.MethodPut, "/admin/content-reports/{reportId}", "resolveContentReport", "ResolveContentReportRequest", admin(h.ResolveContentReport)},
-		{http.MethodGet, "/admin/content-actions", "listContentModerationActions", "", admin(h.ListContentModerationActions)},
+		{http.MethodGet, "/me/organizations", "listMyOrganizations", "", plain(h.ListMyOrganizations)},
+		{http.MethodGet, "/organizations/{organizationId}/session", "getOrganizationSession", "", tenant(authorization.CapabilityOrganizationRead, h.GetOrganizationSession)},
+		{http.MethodGet, "/admin/session", "getAdminSession", "", platformAdmin(h.GetAdminSession)},
+		{http.MethodGet, "/admin/identity-migration", "getIdentityMigrationReport", "", platformAdmin(h.GetIdentityMigrationReport)},
+		{http.MethodGet, "/admin/content-reports", "listContentReports", "", platformAdmin(h.ListContentReports)},
+		{http.MethodPut, "/admin/content-reports/{reportId}", "resolveContentReport", "ResolveContentReportRequest", platformAdmin(h.ResolveContentReport)},
+		{http.MethodGet, "/admin/content-actions", "listContentModerationActions", "", platformAdmin(h.ListContentModerationActions)},
 
-		{http.MethodPost, "/organizers", "createOrganizer", "CreateOrganizerRequest", admin(h.CreateOrganizer)},
+		{http.MethodPost, "/organizers", "createOrganizer", "CreateOrganizerRequest", platformAdmin(h.CreateOrganizer)},
 		{http.MethodGet, "/organizers", "listOrganizers", "", plain(h.ListOrganizers)},
 		{http.MethodGet, "/organizers/{id}", "getOrganizer", "", plain(h.GetOrganizer)},
-		{http.MethodPut, "/organizers/{id}", "updateOrganizer", "UpdateOrganizerRequest", admin(h.UpdateOrganizer)},
-		{http.MethodDelete, "/organizers/{id}", "deleteOrganizer", "", admin(h.DeleteOrganizer)},
+		{http.MethodPut, "/organizers/{id}", "updateOrganizer", "UpdateOrganizerRequest", platformAdmin(h.UpdateOrganizer)},
+		{http.MethodDelete, "/organizers/{id}", "deleteOrganizer", "", platformAdmin(h.DeleteOrganizer)},
 
-		{http.MethodPost, "/events", "createEvent", "CreateEventRequest", admin(h.CreateEvent)},
+		{http.MethodPost, "/events", "createEvent", "CreateEventRequest", platformAdmin(h.CreateEvent)},
 		{http.MethodGet, "/events", "listEvents", "", plain(h.ListEvents)},
 		{http.MethodGet, "/events/{id}", "getEvent", "", plain(h.GetEvent)},
-		{http.MethodPut, "/events/{id}", "updateEvent", "UpdateEventRequest", admin(h.UpdateEvent)},
-		{http.MethodDelete, "/events/{id}", "deleteEvent", "", admin(h.DeleteEvent)},
+		{http.MethodPut, "/events/{id}", "updateEvent", "UpdateEventRequest", platformAdmin(h.UpdateEvent)},
+		{http.MethodDelete, "/events/{id}", "deleteEvent", "", platformAdmin(h.DeleteEvent)},
 
 		{http.MethodPost, "/events/{id}/register", "registerForEvent", "RegisterEventRequest", plain(h.Register)},
 		{http.MethodDelete, "/events/{id}/register", "cancelEventRegistration", "", plain(h.CancelRegistration)},
 		{http.MethodGet, "/events/{id}/registration", "getEventRegistrationStatus", "", plain(h.GetRegistrationStatus)},
-		{http.MethodGet, "/events/{id}/registrations", "listEventRegistrations", "", admin(h.ListRegistrations)},
+		{http.MethodGet, "/events/{id}/registrations", "listEventRegistrations", "", platformAdmin(h.ListRegistrations)},
 		{http.MethodGet, "/events/{id}/admission", "getMyAdmission", "", plain(h.GetMyAdmission)},
-		{http.MethodPost, "/events/{id}/checkins", "checkInAdmission", "CheckinRequest", admin(h.CheckIn)},
-		{http.MethodGet, "/events/{id}/checkins", "listEventCheckins", "", admin(h.ListCheckins)},
+		{http.MethodPost, "/events/{id}/checkins", "checkInAdmission", "CheckinRequest", platformAdmin(h.CheckIn)},
+		{http.MethodGet, "/events/{id}/checkins", "listEventCheckins", "", platformAdmin(h.ListCheckins)},
 
 		{http.MethodPost, "/events/{id}/posts", "createPost", "CreatePostRequest", plain(h.CreatePost)},
 		{http.MethodGet, "/events/{id}/posts", "listPosts", "", plain(h.ListPosts)},
 		{http.MethodGet, "/events/{id}/posts/{postId}", "getPost", "", plain(h.GetPost)},
 		{http.MethodPost, "/events/{id}/posts/{postId}/reports", "reportPost", "CreateContentReportRequest", plain(h.ReportPost)},
-		{http.MethodDelete, "/events/{id}/posts/{postId}", "removePost", "ModerateContentRequest", admin(h.RemovePost)},
-		{http.MethodPut, "/events/{id}/posts/{postId}/restore", "restorePost", "ModerateContentRequest", admin(h.RestorePost)},
+		{http.MethodDelete, "/events/{id}/posts/{postId}", "removePost", "ModerateContentRequest", platformAdmin(h.RemovePost)},
+		{http.MethodPut, "/events/{id}/posts/{postId}/restore", "restorePost", "ModerateContentRequest", platformAdmin(h.RestorePost)},
 		{http.MethodPost, "/events/{id}/posts/{postId}/replies", "createReply", "CreateReplyRequest", plain(h.CreateReply)},
 		{http.MethodPost, "/events/{id}/posts/{postId}/replies/{replyId}/reports", "reportReply", "CreateContentReportRequest", plain(h.ReportReply)},
-		{http.MethodDelete, "/events/{id}/posts/{postId}/replies/{replyId}", "removeReply", "ModerateContentRequest", admin(h.RemoveReply)},
-		{http.MethodPut, "/events/{id}/posts/{postId}/replies/{replyId}/restore", "restoreReply", "ModerateContentRequest", admin(h.RestoreReply)},
+		{http.MethodDelete, "/events/{id}/posts/{postId}/replies/{replyId}", "removeReply", "ModerateContentRequest", platformAdmin(h.RemoveReply)},
+		{http.MethodPut, "/events/{id}/posts/{postId}/replies/{replyId}/restore", "restoreReply", "ModerateContentRequest", platformAdmin(h.RestoreReply)},
 
-		{http.MethodPost, "/events/{id}/tickets", "createTicket", "CreateTicketRequest", admin(h.CreateTicket)},
+		{http.MethodPost, "/events/{id}/tickets", "createTicket", "CreateTicketRequest", platformAdmin(h.CreateTicket)},
 		{http.MethodGet, "/events/{id}/tickets", "listTickets", "", plain(h.ListTickets)},
 		{http.MethodGet, "/events/{id}/tickets/{ticketId}", "getTicket", "", plain(h.GetTicket)},
-		{http.MethodPut, "/events/{id}/tickets/{ticketId}", "updateTicket", "UpdateTicketRequest", admin(h.UpdateTicket)},
-		{http.MethodDelete, "/events/{id}/tickets/{ticketId}", "deleteTicket", "", admin(h.DeleteTicket)},
+		{http.MethodPut, "/events/{id}/tickets/{ticketId}", "updateTicket", "UpdateTicketRequest", platformAdmin(h.UpdateTicket)},
+		{http.MethodDelete, "/events/{id}/tickets/{ticketId}", "deleteTicket", "", platformAdmin(h.DeleteTicket)},
 	}
 }
 

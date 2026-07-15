@@ -42,6 +42,7 @@ func main() {
 	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
 	moderation := service.NewContentModerationService(s, businessClock)
+	organizations := service.NewOrganizationAuthorizationService(s)
 	notifications := service.NewNotificationService(
 		s, businessClock, time.Duration(cfg.NotificationReminderHours)*time.Hour,
 	)
@@ -65,6 +66,7 @@ func main() {
 		Authentication: authentication,
 		Moderation:     moderation,
 		Notifications:  notifications,
+		Organizations:  organizations,
 	})
 	appContext, stopApp := context.WithCancel(context.Background())
 	defer stopApp()
@@ -103,6 +105,8 @@ func main() {
 	log.Printf("  GET    /api/v1/me/notifications/unread-count    当前用户未读通知数")
 	log.Printf("  PUT    /api/v1/me/notifications/{id}/read       标记通知已读")
 	log.Printf("  PUT    /api/v1/me/notifications/read-all        全部通知已读")
+	log.Printf("  GET    /api/v1/me/organizations                 当前用户组织与角色")
+	log.Printf("  GET    /api/v1/organizations/{id}/session       校验当前租户身份与能力")
 	log.Printf("  GET    /api/v1/admin/session                    校验平台管理员身份 🔐")
 	log.Printf("  GET    /api/v1/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/v1/organizers                       创建门店 🔐")

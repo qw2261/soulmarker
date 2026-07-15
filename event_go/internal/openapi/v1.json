@@ -3,7 +3,7 @@
   "info": {
     "title": "Soulmarker Event API",
     "version": "1.0.0",
-    "description": "Versioned API contract for authentication, organizers, events, registrations, admissions, checkins, discussions and tickets. Legacy /api routes remain available for one compatibility cycle."
+    "description": "Versioned API contract for authentication, organization authorization, organizers, events, registrations, admissions, checkins, discussions and tickets. Legacy /api routes remain available for one compatibility cycle."
   },
   "servers": [{ "url": "/api/v1" }],
   "tags": [
@@ -220,6 +220,33 @@
         "responses": {
           "200": { "$ref": "#/components/responses/OK" },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/organizations": {
+      "get": {
+        "operationId": "listMyOrganizations",
+        "tags": ["Me", "Organizations"],
+        "summary": "List the current user's active memberships and effective tenant capabilities",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/session": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
+      "get": {
+        "operationId": "getOrganizationSession",
+        "tags": ["Organizations"],
+        "summary": "Resolve a live tenant principal and its effective capabilities",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
@@ -611,11 +638,12 @@
   "components": {
     "securitySchemes": {
       "BearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
-      "AdminToken": { "type": "apiKey", "in": "header", "name": "X-Admin-Token" }
+      "AdminToken": { "type": "apiKey", "in": "header", "name": "X-Admin-Token", "description": "Platform administrator credential; it does not grant an organization membership or tenant capability." }
     },
     "parameters": {
       "Page": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
       "PageSize": { "name": "page_size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+      "OrganizationID": { "name": "organizationId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "OrganizerID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "EventID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "PostID": { "name": "postId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
@@ -661,7 +689,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -674,7 +702,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -699,7 +727,8 @@
       "CheckinRequest": { "type": "object", "additionalProperties": false, "required": ["credential"], "properties": { "credential": { "type": "string", "minLength": 1 } } },
       "UserResponse": { "type": "object", "required": ["id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "recovery_email": { "type": "string", "format": "email" }, "recovery_email_verified_at": { "type": "string", "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
       "LoginResponse": { "type": "object", "required": ["token", "user"], "properties": { "token": { "type": "string" }, "user": { "$ref": "#/components/schemas/UserResponse" } } },
-      "AdminSessionResponse": { "type": "object", "required": ["authenticated"], "properties": { "authenticated": { "type": "boolean" } } },
+      "AdminSessionResponse": { "type": "object", "required": ["authenticated", "principal_type"], "properties": { "authenticated": { "type": "boolean" }, "principal_type": { "type": "string", "enum": ["platform_admin"] } } },
+      "OrganizationContextResponse": { "type": "object", "required": ["organization_id", "organization_name", "organization_slug", "organization_status", "membership_status", "role", "principal_type", "capabilities"], "properties": { "organization_id": { "type": "integer", "format": "int64" }, "organization_name": { "type": "string" }, "organization_slug": { "type": "string" }, "organization_status": { "type": "string", "enum": ["unclaimed", "active", "suspended", "system"] }, "membership_status": { "type": "string", "enum": ["active", "revoked"] }, "role": { "type": "string", "enum": ["owner", "admin", "editor", "checker", "finance"] }, "principal_type": { "type": "string", "enum": ["organization_member"] }, "capabilities": { "type": "array", "items": { "type": "string", "enum": ["audit.read", "checkins.manage", "events.manage", "finance.read", "members.invite", "members.manage", "members.read", "organization.manage", "organization.read", "owner.transfer", "registrations.export", "registrations.read", "tickets.manage"] } } } },
       "OrganizerResponse": { "type": "object", "required": ["id", "name", "description", "contact", "logo_url", "address", "website", "tags", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" }, "event_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "EventResponse": { "type": "object", "required": ["id", "organizer_id", "title", "description", "cover_url", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "organizer_id": { "type": "integer", "format": "int64" }, "organizer_name": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "cover_url": { "type": "string", "format": "uri-reference" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer" }, "price": { "type": "number" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "TicketResponse": { "type": "object", "required": ["id", "event_id", "name", "price", "stock", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "price": { "type": "number" }, "stock": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },

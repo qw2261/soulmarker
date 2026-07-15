@@ -29,6 +29,8 @@
 - Schema v12 Organization、OrganizationMember 与 OrganizationInvitation 租户基础模型。
 - 组织与公开 OrganizerProfile 原子创建、用户组织查询，以及邀请创建/接受的 Store 能力。
 - [ADR-004](docs/adr/004-organization-tenant-boundary-and-migration.md) 固化租户边界、历史 unclaimed 回填、角色和分阶段切换策略。
+- platform_admin/organization_member 独立 principal、13 项集中 capability Policy 和实时 Membership 授权 Service。
+- 当前用户组织列表与租户 session API，以及 [ADR-005](docs/adr/005-platform-and-tenant-authorization.md) 授权和回退决策。
 
 ### Changed
 
@@ -58,6 +60,8 @@
 - 删除确认统一使用中文按钮，后台表格在移动端使用局部横向滚动。
 - 业务通知按 ADR-003 以站内持久化记录为事实源；外部业务邮件/短信和多实例投递延后到生产基础设施阶段。
 - `Organizer` 保留为 `OrganizerProfile` 的源码兼容别名，现有 `/organizers` API 暂不暴露租户授权字段。
+- 原 `AdminAuth` 路由明确迁移到 `PlatformAdminAuth`；旧名称只保留源码兼容，现有业务路由继续作为 platform 双轨等待 G5.3。
+- 管理前端除 `authenticated` 外同时校验 `principal_type=platform_admin`。
 
 ### Fixed
 
@@ -83,6 +87,8 @@
 - 将 Go 工具链基线从 1.25.0 提升到 1.25.12，消除首次远端漏洞扫描发现的可达标准库漏洞。
 - 组织邀请只允许 active owner/admin 创建，禁止普通邀请授予 owner；接受时必须匹配登录邮箱或已验证恢复邮箱，且 Token 单次使用并受过期约束。
 - 每个组织通过数据库部分唯一索引限制为最多一个 active owner。
+- 租户角色不写入 JWT；跨租户、revoked Membership、suspended Organization 和能力不足通过实时数据库上下文统一拒绝。
+- platform Token 与 tenant JWT 不能互相替代；新增 `ORGANIZATION_ACCESS_DENIED` 稳定错误码和可关闭租户入口的 fail-closed 配置。
 
 ### Migration
 

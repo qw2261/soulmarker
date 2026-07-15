@@ -144,3 +144,18 @@ func TestLoadRejectsInvalidNotificationSchedule(t *testing.T) {
 		t.Fatal("invalid notification scan interval must fail validation")
 	}
 }
+
+func TestLoadOrganizationAuthorizationFeatureFlag(t *testing.T) {
+	t.Setenv("ORGANIZATION_AUTH_ENABLED", "false")
+	if cfg := Load(); cfg.OrganizationAuthEnabled {
+		t.Fatal("organization authorization feature flag was not disabled")
+	}
+	t.Setenv("ORGANIZATION_AUTH_ENABLED", "true")
+	if cfg := Load(); !cfg.OrganizationAuthEnabled {
+		t.Fatal("organization authorization feature flag was not enabled")
+	}
+	t.Setenv("ORGANIZATION_AUTH_ENABLED", "maybe")
+	if cfg := Load(); cfg.Validate() == nil {
+		t.Fatal("invalid organization authorization feature flag must fail validation")
+	}
+}

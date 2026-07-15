@@ -28,15 +28,18 @@ type Config struct {
 	RecoveryEmailTTLMin         int
 	NotificationReminderHours   int
 	NotificationScanIntervalSec int
+	OrganizationAuthEnabled     bool
 	SMTPHost                    string
 	SMTPPort                    string
 	SMTPUsername                string
 	SMTPPassword                string
 	SMTPFrom                    string
+	organizationAuthFlagInvalid bool
 }
 
 func Load() *Config {
 	port := getEnv("PORT", "8080")
+	organizationAuthEnabled, organizationAuthFlagInvalid := getEnvBoolStrict("ORGANIZATION_AUTH_ENABLED", true)
 	return &Config{
 		Environment:                 getEnv("APP_ENV", "development"),
 		AdminToken:                  getEnv("ADMIN_TOKEN", ""),
@@ -54,15 +57,20 @@ func Load() *Config {
 		RecoveryEmailTTLMin:         getEnvIntStrict("RECOVERY_EMAIL_TTL_MINUTES", 30),
 		NotificationReminderHours:   getEnvIntStrict("NOTIFICATION_REMINDER_HOURS", 24),
 		NotificationScanIntervalSec: getEnvIntStrict("NOTIFICATION_SCAN_INTERVAL_SECONDS", 60),
+		OrganizationAuthEnabled:     organizationAuthEnabled,
 		SMTPHost:                    getEnv("SMTP_HOST", ""),
 		SMTPPort:                    getEnv("SMTP_PORT", "587"),
 		SMTPUsername:                getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                    getEnv("SMTP_FROM", ""),
+		organizationAuthFlagInvalid: organizationAuthFlagInvalid,
 	}
 }
 
 func (c *Config) Validate() error {
+	if c.organizationAuthFlagInvalid {
+		return fmt.Errorf("ORGANIZATION_AUTH_ENABLED 必须是 true 或 false")
+	}
 	if c.JWTExpireHours <= 0 {
 		return fmt.Errorf("JWT_EXPIRE_HOURS 必须大于 0")
 	}
@@ -140,4 +148,18 @@ func getEnvIntStrict(key string, defaultValue int) int {
 		return 0
 	}
 	return parsed
+}
+
+func getEnvBoolStrict(key string, defaultValue bool) (bool, bool) {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "":
+		return defaultValue, false
+	case "1", "true", "yes", "on":
+		return true, false
+	case "0", "false", "no", "off":
+		return false, false
+	default:
+		return defaultValue, true
+	}
 }

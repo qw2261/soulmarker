@@ -66,7 +66,7 @@
 - 已完成门店、活动、报名、门票、讨论、内容治理、站内通知、用户认证和管理接口，共 52 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧当前候选已有 293 个顶层测试，go test、race、vet、gofmt 与 govulncheck 均纳入门禁。
+- Go 侧 G5.2 当前候选已有 302 个顶层测试，go test、race、vet、gofmt 与 govulncheck 均纳入门禁。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -403,6 +403,18 @@ G5 每个切片使用“迁移/约束 → Store/Service → API 契约 → UI/E2
 - [x] **G5-F05** v6.1.0 基础候选通过完整本地与远端门禁；Commit `f548a29` / Run `29437366319`，迁移和回滚证据见 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
 
 G5.1 不包含组织自助 API、租户上下文、业务资源 scope、租户后台或完整角色授权，因此不能据此勾选 G5-R02、R04–R08，也不能把全局 Admin Token 描述为已被替换。
+
+### G5.2 当前授权内核验收
+
+- [x] **G5-A01** 通过 [ADR-005](adr/005-platform-and-tenant-authorization.md) 固化 platform_admin 与 organization_member 两类 principal、路径租户上下文、拒绝语义和回退开关。
+- [x] **G5-A02** 建立 13 项集中 capability Policy，自动覆盖 owner、admin、editor、checker、finance 的精确最小权限矩阵；未知角色不获得任何权限。
+- [x] **G5-A03** 租户角色不写入 JWT；每次请求按 user_id、organization_id 实时读取 Membership 与 Organization 状态，跨租户、revoked 和 suspended 统一拒绝。
+- [x] **G5-A04** 新增 `GET /me/organizations` 与 `GET /organizations/{organizationId}/session`，DTO、稳定 `ORGANIZATION_ACCESS_DENIED` 错误码、OpenAPI 和 `/api` 兼容路由一致。
+- [x] **G5-A05** `PlatformAdminAuth` 写入独立 principal；平台 Token 不能替代用户 JWT，租户 JWT 不能替代平台 Token，前端管理守卫同时验证 `authenticated` 与 `principal_type=platform_admin`。
+- [x] **G5-A06** `ORGANIZATION_AUTH_ENABLED=false` 可关闭只读租户入口，非法配置拒绝启动，不影响现有 platform admin 双轨运营。
+- [ ] **G5-A07** G5.2 候选通过完整本地与远端门禁，并回填 Commit、Run、授权矩阵与回退证据。
+
+G5.2 只证明授权内核和只读租户 session。现有 Event、Ticket、Registration、Admission、Checkin、Export 与治理路由尚未接入 tenant capability，G5-R04/R05 继续保持未完成；跨租户业务数据隔离必须由 G5.3 的资源级 Store/Service 测试证明。
 
 ### 完成门槛
 
@@ -774,7 +786,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 Schema v12 租户基础已由 Commit f548a29 / Run 29437366319 通过远端候选门禁；下一切片为 G5.2 授权内核 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 已通过远端门禁；G5.2 授权内核与 302 个 Go / 18 个 Vue 测试进入候选验证，资源 tenant scope 仍待 G5.3 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

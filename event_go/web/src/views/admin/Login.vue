@@ -30,7 +30,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getAdminSession } from '@/api/admin'
+import { getAdminSession, isPlatformAdminSession } from '@/api/admin'
 import NavBar from '@/components/NavBar.vue'
 
 const router = useRouter()
@@ -48,7 +48,7 @@ async function login() {
   auth.login(token.value)
   try {
     const response = await getAdminSession()
-    if (!response.data?.authenticated) return
+    if (!isPlatformAdminSession(response.data)) return
     ElMessage.success('管理身份验证成功')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin/events'
     await router.push(redirect.startsWith('/admin/') && !redirect.startsWith('//') ? redirect : '/admin/events')

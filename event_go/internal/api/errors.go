@@ -44,6 +44,7 @@ const (
 	CodeContentReportAlreadyResolved ErrorCode = "CONTENT_REPORT_ALREADY_RESOLVED"
 	CodeContentAlreadyRemoved        ErrorCode = "CONTENT_ALREADY_REMOVED"
 	CodeContentAlreadyVisible        ErrorCode = "CONTENT_ALREADY_VISIBLE"
+	CodeOrganizationAccessDenied     ErrorCode = "ORGANIZATION_ACCESS_DENIED"
 )
 
 var errorMessages = map[ErrorCode]string{
@@ -85,6 +86,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeContentReportAlreadyResolved: "举报记录已处理",
 	CodeContentAlreadyRemoved:        "内容已被移除",
 	CodeContentAlreadyVisible:        "内容已处于可见状态",
+	CodeOrganizationAccessDenied:     "无权访问该组织",
 }
 
 // ErrorCodes 返回错误码目录的副本，供契约生成和测试使用。

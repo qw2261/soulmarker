@@ -1,6 +1,9 @@
 package dto
 
-import "github.com/qw2261/soulmarker/event_go/internal/model"
+import (
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
+	"github.com/qw2261/soulmarker/event_go/internal/model"
+)
 
 func (r UpdateOrganizerRequest) Command() model.UpdateOrganizerReq {
 	return model.UpdateOrganizerReq(r)
@@ -34,6 +37,27 @@ func Notifications(notifications []*model.Notification) []NotificationResponse {
 	result := make([]NotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
 		result = append(result, Notification(notification))
+	}
+	return result
+}
+
+func OrganizationContext(value authorization.OrganizationContext) OrganizationContextResponse {
+	capabilities := make([]string, 0, len(value.Capabilities))
+	for _, capability := range value.Capabilities {
+		capabilities = append(capabilities, string(capability))
+	}
+	return OrganizationContextResponse{
+		OrganizationID: value.OrganizationID, OrganizationName: value.OrganizationName,
+		OrganizationSlug: value.OrganizationSlug, OrganizationStatus: value.OrganizationStatus,
+		MembershipStatus: value.MembershipStatus, Role: value.Role,
+		PrincipalType: authorization.PrincipalTypeOrganizationMember, Capabilities: capabilities,
+	}
+}
+
+func OrganizationContexts(values []authorization.OrganizationContext) []OrganizationContextResponse {
+	result := make([]OrganizationContextResponse, 0, len(values))
+	for _, value := range values {
+		result = append(result, OrganizationContext(value))
 	}
 	return result
 }

@@ -153,9 +153,9 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.requiresAdmin) {
     try {
-      const { getAdminSession } = await import('@/api/admin')
+      const { getAdminSession, isPlatformAdminSession } = await import('@/api/admin')
       const response = await getAdminSession()
-      if (!response.data?.authenticated) throw new Error('admin session was not confirmed')
+      if (!isPlatformAdminSession(response.data)) throw new Error('platform admin session was not confirmed')
     } catch {
       useAuthStore().logout()
       return { path: '/admin', query: { redirect: to.fullPath } }

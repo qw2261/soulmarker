@@ -10,6 +10,7 @@ import (
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/emailaddr"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
@@ -178,10 +179,14 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "已退出登录"})
 }
 
-func (h *Handler) GetAdminSession(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) GetAdminSession(w http.ResponseWriter, r *http.Request) {
+	if !authorization.IsPlatformAdmin(r.Context()) {
+		writeError(w, http.StatusUnauthorized, api.CodeAdminAuthInvalid, "")
+		return
+	}
 	writeJSON(w, http.StatusOK, dto.Response{
 		Code: http.StatusOK, Message: "管理员身份有效",
-		Data: dto.AdminSessionResponse{Authenticated: true},
+		Data: dto.AdminSessionResponse{Authenticated: true, PrincipalType: authorization.PrincipalTypePlatformAdmin},
 	})
 }
 

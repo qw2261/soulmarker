@@ -12,6 +12,7 @@ import (
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
@@ -35,6 +36,7 @@ type Handler struct {
 	authentication AuthenticationService
 	moderation     ContentModerationService
 	notifications  NotificationService
+	organizations  OrganizationAuthorizationService
 	startTime      time.Time
 	version        string
 }
@@ -88,6 +90,11 @@ type NotificationService interface {
 	MarkAllRead(userID int64) (int, error)
 }
 
+type OrganizationAuthorizationService interface {
+	ListForUser(userID int64) ([]authorization.OrganizationContext, error)
+	Authorize(userID, organizationID int64, capability authorization.Capability) (*authorization.OrganizationContext, error)
+}
+
 type Dependencies struct {
 	Clock          clock.Clock
 	Tokens         auth.TokenManager
@@ -97,6 +104,7 @@ type Dependencies struct {
 	Authentication AuthenticationService
 	Moderation     ContentModerationService
 	Notifications  NotificationService
+	Organizations  OrganizationAuthorizationService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -112,6 +120,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		authentication: dependencies.Authentication,
 		moderation:     dependencies.Moderation,
 		notifications:  dependencies.Notifications,
+		organizations:  dependencies.Organizations,
 		startTime:      dependencies.Clock.Now(),
 		version:        cfg.Version,
 	}
@@ -137,6 +146,10 @@ func parseReportID(r *http.Request) (int64, error) {
 
 func parseNotificationID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("notificationId"), 10, 64)
+}
+
+func parseOrganizationID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("organizationId"), 10, 64)
 }
 
 // parseTicketID 从URL路径中解析门票ID
@@ -287,17 +300,19 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	return true
 }
 
-// AdminAuth 中间件，验证管理员令牌，保护需要管理员权限的API
-func AdminAuth(next http.Handler, token string) http.Handler {
-	if token == "" {
-		return next
-	}
+// PlatformAdminAuth 验证平台管理员令牌并写入独立 principal，不授予任何租户角色。
+func PlatformAdminAuth(next http.Handler, token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("X-Admin-Token")
-		if auth != token {
+		if token != "" && r.Header.Get("X-Admin-Token") != token {
 			writeError(w, http.StatusUnauthorized, api.CodeAdminAuthInvalid, model.ErrUnauthorized.Error())
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := authorization.WithPlatformAdmin(r.Context())
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// AdminAuth 保留一个源码兼容周期；新路由必须使用 PlatformAdminAuth 明确语义。
+func AdminAuth(next http.Handler, token string) http.Handler {
+	return PlatformAdminAuth(next, token)
 }

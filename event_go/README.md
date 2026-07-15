@@ -88,7 +88,17 @@ Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员
 | `organization_members` | 用户在租户内的角色与 active/revoked 状态；每个组织最多一个 active owner |
 | `organization_invitations` | 只保存邀请 Token 摘要、规范化邮箱、非 owner 角色、过期和消费状态 |
 
-邀请只能由 active Organization 的 active owner/admin 创建；接受者的登录邮箱或已验证恢复邮箱必须与邀请一致。完整租户 API、资源 scope、后台 UI 和审计仍属于后续 G5 切片，当前全局 Admin Token 仍只代表 platform admin。
+邀请只能由 active Organization 的 active owner/admin 创建；接受者的登录邮箱或已验证恢复邮箱必须与邀请一致。G5.2 增加实时租户授权上下文，但业务资源 scope、后台 UI 和审计仍属于后续 G5 切片，当前全局 Admin Token 仍只代表 platform admin。
+
+### Tenant Authorization — 租户授权内核
+
+| 能力 | 说明 |
+|---|---|
+| Principal 分离 | `platform_admin` 与 `organization_member` 使用不同凭证和 context，不能互相替代 |
+| 实时角色 | JWT 不保存租户角色；每次请求从 Membership 和 Organization 状态解析，撤销/暂停立即生效 |
+| 最小权限 | owner/admin/editor/checker/finance 映射到集中 capability Policy，未知角色默认拒绝 |
+| 组织选择 | 租户 ID 来自 `/organizations/{organizationId}/...` 路径，跨租户和能力不足统一返回 403 |
+| 可控回退 | `ORGANIZATION_AUTH_ENABLED=false` 关闭只读租户入口，旧 platform admin 路由继续工作 |
 
 ### OrganizerProfile 字段
 
@@ -182,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 租户基础并行推进** — 免费活动自动化、JWT/Go 供应链安全与 P0/P1 清零已通过远端门禁；G4 仍待真实 staging SMTP 和两场受控活动。v6.1 Schema v12 租户基础、历史数据安全回填、成员/邀请存储不变量与 N/N-1 `/organizers` 写兼容已由 Commit `f548a29` / Run `29437366319` 通过远端候选门禁；尚未开放自助组织 API，也未宣称业务资源已经 tenant scoped。
+**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关正在候选验证。现有业务资源仍未 tenant scoped，G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -201,6 +211,8 @@ GET    /api/v1/me/notifications[?unread_only=&page=&page_size=] 当前用户通�
 GET    /api/v1/me/notifications/unread-count            当前用户未读通知数
 PUT    /api/v1/me/notifications/{notificationId}/read   标记自己的单条通知已读
 PUT    /api/v1/me/notifications/read-all                标记自己的全部通知已读
+GET    /api/v1/me/organizations                         当前用户组织、角色与实时 capability
+GET    /api/v1/organizations/{organizationId}/session   校验租户身份与 capability（需用户 JWT）
 GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
 GET    /api/v1/admin/content-reports                    举报队列（状态/内容类型筛选）🔐
 PUT    /api/v1/admin/content-reports/{reportId}         移除内容并处理或驳回举报 🔐
@@ -357,6 +369,8 @@ event_go/
 ├── internal/
 │   ├── auth/
 │   │   └── token.go             # JWT TokenManager：签发与验证
+│   ├── authorization/
+│   │   └── policy.go            # platform/tenant principal 与五角色 capability 矩阵
 │   ├── clock/
 │   │   └── clock.go             # 可注入业务时钟
 │   ├── config/
@@ -373,6 +387,7 @@ event_go/
 │   │   ├── handler_post.go      # 帖子/回复 API（CreatePost/Reply, ListPosts, GetPost）
 │   │   ├── handler_content_moderation.go # 举报、软删除、恢复与治理审计 API
 │   │   ├── handler_auth.go      # 用户认证、JWT 解析与持久化用户校验
+│   │   ├── handler_organization_authorization.go # 实时租户上下文与只读 session API
 │   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
 │   │   ├── handler_test.go      # Handler 集成测试
 │   │   ├── handler_identity.go  # 身份迁移报告 API
@@ -384,6 +399,7 @@ event_go/
 │   │   ├── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
 │   │   ├── admission.go         # 凭证查询、规范化、核销与审计用例
 │   │   ├── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
+│   │   ├── organization_authorization.go # Membership 实时授权与跨租户拒绝
 │   │   └── content_moderation.go # 举报权限、幂等处理与治理用例编排
 │   ├── identifier/
 │   │   └── credential.go        # 加密随机 Admission 凭证生成器
@@ -498,16 +514,17 @@ main.go
 | 内容治理 | Post/Reply 使用 `visible/removed` 软删除；举报处理与动作审计在事务内写入，公开查询只返回 visible 内容 |
 | 租户基础 | Organization 与 OrganizerProfile 分离；历史资料回填为 unclaimed；单 active owner、邀请邮箱/过期/单次消费由约束和事务保护 |
 | N/N-1 门店写兼容 | 旧应用省略 `organization_id` 创建资料时由触发器生成 unclaimed 租户；旧应用删除资料时自动暂停对应租户 |
+| 租户授权撤销 | capability 不写入 JWT；每次请求读取 Membership/Organization，revoked、suspended、跨租户和能力不足统一拒绝 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **293** 个顶层 Go 测试、17 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
+| 测试用例 | **302** 个顶层 Go 测试、18 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
-| 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
+| 前端构建 | Element Plus 按实际组件注册；主 JS 约 544 KB / 191 KB gzip；保留大于 500 KB 的既有 chunk 提示 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
 
 **测试命令**：
@@ -649,6 +666,7 @@ event_go/
 | `RECOVERY_EMAIL_TTL_MINUTES` | `30` | 恢复邮箱验证 Token 有效分钟数，允许 1–1440 |
 | `NOTIFICATION_REMINDER_HOURS` | `24` | published 活动临近提醒窗口，允许 1–168 小时 |
 | `NOTIFICATION_SCAN_INTERVAL_SECONDS` | `60` | 单实例提醒调度扫描间隔，允许 1–3600 秒 |
+| `ORGANIZATION_AUTH_ENABLED` | `true` | G5.2 只读租户授权入口开关；false 时返回 404，非法布尔值拒绝启动 |
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
 | `SMTP_FROM` | 空 | 密码重置与恢复邮箱验证邮件发件人 |

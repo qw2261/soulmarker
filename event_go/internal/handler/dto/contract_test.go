@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
@@ -109,6 +110,26 @@ func TestNotificationDTOExposesOnlyUserFacingFields(t *testing.T) {
 		if _, exists := decoded[forbidden]; exists {
 			t.Fatalf("%s must not be exposed by notification DTO", forbidden)
 		}
+	}
+}
+
+func TestAuthorizationDTOsExposePrincipalTypeAndStableCapabilities(t *testing.T) {
+	assertJSONKeys(t, AdminSessionResponse{
+		Authenticated: true, PrincipalType: authorization.PrincipalTypePlatformAdmin,
+	}, "authenticated", "principal_type")
+	decoded := assertJSONKeys(t, OrganizationContext(authorization.OrganizationContext{
+		OrganizationID: 7, OrganizationName: "组织", OrganizationSlug: "org",
+		OrganizationStatus: model.OrganizationStatusActive,
+		MembershipStatus:   model.OrganizationMemberStatusActive,
+		Role:               model.OrganizationRoleEditor,
+		Capabilities: []authorization.Capability{
+			authorization.CapabilityEventsManage,
+			authorization.CapabilityTicketsManage,
+		},
+	}), "organization_id", "organization_name", "organization_slug", "organization_status",
+		"membership_status", "role", "principal_type", "capabilities")
+	if decoded["principal_type"] != authorization.PrincipalTypeOrganizationMember {
+		t.Fatalf("unexpected principal type: %v", decoded["principal_type"])
 	}
 }
 
