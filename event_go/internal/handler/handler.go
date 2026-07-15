@@ -27,6 +27,7 @@ type Handler struct {
 	clock         clock.Clock
 	tokens        auth.TokenManager
 	registrations RegistrationService
+	discussions   DiscussionService
 	startTime     time.Time
 	version       string
 }
@@ -35,12 +36,21 @@ type RegistrationService interface {
 	GetEvent(eventID int64) (*model.Event, error)
 	Register(event *model.Event, user *model.User, ticketID *int64) (*model.Registration, error)
 	Cancel(event *model.Event, userID int64) error
+	IsRegistered(eventID, userID int64) (bool, error)
+}
+
+type DiscussionService interface {
+	GetEvent(eventID int64) (*model.Event, error)
+	GetPost(eventID, postID int64) (*model.Post, error)
+	CreatePost(eventID int64, user *model.User, title, content string) (*model.Post, error)
+	CreateReply(post *model.Post, user *model.User, content string) (*model.Reply, error)
 }
 
 type Dependencies struct {
 	Clock         clock.Clock
 	Tokens        auth.TokenManager
 	Registrations RegistrationService
+	Discussions   DiscussionService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -51,6 +61,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		clock:         dependencies.Clock,
 		tokens:        dependencies.Tokens,
 		registrations: dependencies.Registrations,
+		discussions:   dependencies.Discussions,
 		startTime:     dependencies.Clock.Now(),
 		version:       cfg.Version,
 	}
@@ -130,34 +141,6 @@ func (h *Handler) getTicketForEventOr404(w http.ResponseWriter, eventID, ticketI
 		return nil, false
 	}
 	return ticket, true
-}
-
-// getPostForEventOr404 确保帖子存在且属于 URL 指定的活动。
-func (h *Handler) getPostForEventOr404(w http.ResponseWriter, eventID, postID int64) (*model.Post, bool) {
-	post, err := h.store.GetPost(postID)
-	if err != nil {
-		writeInternalError(w, "get_post", err)
-		return nil, false
-	}
-	if post == nil || post.EventID != eventID {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: "帖子不存在"})
-		return nil, false
-	}
-	return post, true
-}
-
-// checkRegistration 验证用户是否已报名活动，未报名返回403响应
-func (h *Handler) checkRegistration(w http.ResponseWriter, eventID, userID int64) bool {
-	registered, err := h.store.IsRegisteredByUserID(eventID, userID)
-	if err != nil {
-		writeInternalError(w, "check_registration", err)
-		return false
-	}
-	if !registered {
-		writeJSON(w, http.StatusForbidden, model.APIResp{Code: 403, Message: model.ErrNotRegistered.Error()})
-		return false
-	}
-	return true
 }
 
 func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {

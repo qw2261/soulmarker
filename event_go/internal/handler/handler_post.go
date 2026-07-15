@@ -1,10 +1,38 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/service"
 )
+
+func (h *Handler) getDiscussionEventOr404(w http.ResponseWriter, eventID int64) (*model.Event, bool) {
+	event, err := h.discussions.GetEvent(eventID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrNotFound.Error()})
+		} else {
+			writeInternalError(w, "get_discussion_event", err)
+		}
+		return nil, false
+	}
+	return event, true
+}
+
+func (h *Handler) getDiscussionPostOr404(w http.ResponseWriter, eventID, postID int64) (*model.Post, bool) {
+	post, err := h.discussions.GetPost(eventID, postID)
+	if err != nil {
+		if errors.Is(err, service.ErrPostNotFound) {
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: service.ErrPostNotFound.Error()})
+		} else {
+			writeInternalError(w, "get_discussion_post", err)
+		}
+		return nil, false
+	}
+	return post, true
+}
 
 func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	user, authenticated := h.requireUser(w, r)
@@ -18,7 +46,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := h.getEventOr404(w, eventID)
+	_, ok := h.getDiscussionEventOr404(w, eventID)
 	if !ok {
 		return
 	}
@@ -28,29 +56,16 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.checkRegistration(w, eventID, user.ID) {
-		return
-	}
-	if req.Title == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "帖子标题不能为空"})
-		return
-	}
-	if req.Content == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "帖子内容不能为空"})
-		return
-	}
-
-	userID := user.ID
-	post := &model.Post{
-		EventID:       eventID,
-		UserID:        &userID,
-		AuthorName:    user.Name,
-		AuthorContact: user.Contact,
-		Title:         req.Title,
-		Content:       req.Content,
-	}
-	if err := h.store.CreatePost(post); err != nil {
-		writeInternalError(w, "create_post", err)
+	post, err := h.discussions.CreatePost(eventID, user, req.Title, req.Content)
+	if err != nil {
+		switch {
+		case errors.Is(err, model.ErrNotRegistered):
+			writeJSON(w, http.StatusForbidden, model.APIResp{Code: 403, Message: err.Error()})
+		case errors.Is(err, service.ErrPostTitleRequired), errors.Is(err, service.ErrPostContentRequired):
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: err.Error()})
+		default:
+			writeInternalError(w, "create_post", err)
+		}
 		return
 	}
 
@@ -94,7 +109,7 @@ func (h *Handler) GetPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post, ok := h.getPostForEventOr404(w, eventID, postID)
+	post, ok := h.getDiscussionPostOr404(w, eventID, postID)
 	if !ok {
 		return
 	}
@@ -131,7 +146,7 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post, ok := h.getPostForEventOr404(w, eventID, postID)
+	post, ok := h.getDiscussionPostOr404(w, eventID, postID)
 	if !ok {
 		return
 	}
@@ -141,24 +156,16 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.checkRegistration(w, post.EventID, user.ID) {
-		return
-	}
-	if req.Content == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "回复内容不能为空"})
-		return
-	}
-
-	userID := user.ID
-	reply := &model.Reply{
-		PostID:        postID,
-		UserID:        &userID,
-		AuthorName:    user.Name,
-		AuthorContact: user.Contact,
-		Content:       req.Content,
-	}
-	if err := h.store.CreateReply(reply); err != nil {
-		writeInternalError(w, "create_reply", err)
+	reply, err := h.discussions.CreateReply(post, user, req.Content)
+	if err != nil {
+		switch {
+		case errors.Is(err, model.ErrNotRegistered):
+			writeJSON(w, http.StatusForbidden, model.APIResp{Code: 403, Message: err.Error()})
+		case errors.Is(err, service.ErrReplyContentRequired):
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: err.Error()})
+		default:
+			writeInternalError(w, "create_reply", err)
+		}
 		return
 	}
 

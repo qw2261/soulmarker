@@ -36,10 +36,12 @@ func main() {
 	businessClock := clock.System{}
 	tokens := auth.NewJWTManager(cfg.JWTSecret)
 	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour)
+	discussions := service.NewDiscussionService(s)
 	h := handler.NewHandler(s, cfg, handler.Dependencies{
 		Clock:         businessClock,
 		Tokens:        tokens,
 		Registrations: registrations,
+		Discussions:   discussions,
 	})
 
 	port := cfg.Port

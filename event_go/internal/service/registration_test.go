@@ -26,6 +26,8 @@ type fakeRegistrationRepository struct {
 	cancelledUserID   int64
 	registrationCalls int
 	cancelCalls       int
+	registeredStatus  bool
+	registeredErr     error
 }
 
 func (r *fakeRegistrationRepository) GetEvent(int64) (*model.Event, error) {
@@ -43,6 +45,10 @@ func (r *fakeRegistrationRepository) CancelRegistrationByUserID(eventID, userID 
 	r.cancelledEventID = eventID
 	r.cancelledUserID = userID
 	return r.cancelErr
+}
+
+func (r *fakeRegistrationRepository) IsRegisteredByUserID(int64, int64) (bool, error) {
+	return r.registeredStatus, r.registeredErr
 }
 
 func TestRegistrationServiceGetEvent(t *testing.T) {
@@ -131,5 +137,19 @@ func TestRegistrationServiceCancelPropagatesFailures(t *testing.T) {
 	eventTime := time.Now().Add(72 * time.Hour).Format(model.TimeFormat)
 	if err := service.Cancel(&model.Event{ID: 1, EventTime: eventTime}, 2); !errors.Is(err, model.ErrNotRegistered) {
 		t.Fatalf("expected repository cancellation error, got %v", err)
+	}
+}
+
+func TestRegistrationServiceIsRegistered(t *testing.T) {
+	repository := &fakeRegistrationRepository{registeredStatus: true}
+	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour)
+	registered, err := service.IsRegistered(1, 2)
+	if err != nil || !registered {
+		t.Fatalf("expected registered result, registered=%v err=%v", registered, err)
+	}
+
+	repository.registeredErr = errors.New("lookup failed")
+	if _, err := service.IsRegistered(1, 2); err == nil {
+		t.Fatal("expected registration lookup failure")
 	}
 }

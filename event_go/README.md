@@ -280,7 +280,8 @@ event_go/
 │   │   ├── handler_identity.go  # 身份迁移报告 API
 │   │   └── middleware.go        # 中间件：日志、CORS、安全响应头、管理员认证
 │   ├── service/
-│   │   └── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
+│   │   ├── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
+│   │   └── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
 │   ├── store/
 │   │   ├── store.go             # Store、版本化事务迁移、schema_migrations
 │   │   ├── store_event.go       # 活动 CRUD
@@ -342,7 +343,7 @@ main.go
   ├──→ Store          ← 封装数据库操作和 SQLite 事务
   │      (CreateEvent, ListEvents, GetEvent, ...)
   │
-  ├──→ RegistrationService ← 报名/取消业务规则与用例编排
+  ├──→ Application Services ← 报名/取消、讨论写入的跨实体规则与用例编排
   │
   └──→ Handler        ← HTTP 参数、认证上下文与响应映射
          (h.CreateEvent, h.ListEvents, ...)
@@ -385,7 +386,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **212** 个顶层 Go 测试 |
+| 测试用例 | **220** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |

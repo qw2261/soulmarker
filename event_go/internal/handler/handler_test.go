@@ -67,6 +67,7 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		Clock:         businessClock,
 		Tokens:        appauth.NewJWTManager(cfg.JWTSecret),
 		Registrations: service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour),
+		Discussions:   service.NewDiscussionService(s),
 	})
 }
 
@@ -1203,6 +1204,7 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Clock:         businessClock,
 		Tokens:        tokens,
 		Registrations: service.NewRegistrationService(s, businessClock, 24*time.Hour),
+		Discussions:   service.NewDiscussionService(s),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 

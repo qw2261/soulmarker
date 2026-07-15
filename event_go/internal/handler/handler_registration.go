@@ -123,7 +123,7 @@ func (h *Handler) GetRegistrationStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	registered, err := h.store.IsRegisteredByUserID(eventID, user.ID)
+	registered, err := h.registrations.IsRegistered(eventID, user.ID)
 	if err != nil {
 		writeInternalError(w, "get_registration_status", err)
 		return

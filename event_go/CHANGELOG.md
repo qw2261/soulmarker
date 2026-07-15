@@ -32,6 +32,7 @@
 - NewStore 显式返回初始化 error，库层不再通过 panic 处理启动失败。
 - 报名与取消的跨实体规则进入 RegistrationService，Handler 只负责 HTTP 边界和错误映射。
 - JWT signer/verifier 与业务 Clock 改为显式依赖，取消截止边界和 Token 时间可确定性测试。
+- 讨论写入进入 DiscussionService，活动/帖子归属、报名资格和可信作者身份不再由 Handler 跨实体编排。
 
 ### Fixed
 

@@ -28,6 +28,7 @@ type RegistrationRepository interface {
 	GetEvent(id int64) (*model.Event, error)
 	Register(registration *model.Registration) error
 	CancelRegistrationByUserID(eventID, userID int64) error
+	IsRegisteredByUserID(eventID, userID int64) (bool, error)
 }
 
 type RegistrationService struct {
@@ -87,4 +88,8 @@ func (s *RegistrationService) Cancel(event *model.Event, userID int64) error {
 		return model.ErrCancelDeadlineExceeded
 	}
 	return s.repository.CancelRegistrationByUserID(event.ID, userID)
+}
+
+func (s *RegistrationService) IsRegistered(eventID, userID int64) (bool, error) {
+	return s.repository.IsRegisteredByUserID(eventID, userID)
 }
