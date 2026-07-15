@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关已由 Commit `780c496` / Run `29440070376` 通过远端门禁。G5.3 Schema v13 与业务资源 tenant scope 已进入候选门禁，尚未形成 Commit/Run 证据；G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
+**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 授权内核由 Commit `780c496` / Run `29440070376` 通过；G5.3 Schema v13 与业务资源 tenant scope 由 Commit `00ebef0` / Run `29443464930` 通过。G4 仍待真实 staging SMTP 和两场受控活动，G5.4–G5.5 仍待自助运营、审计与试点，因此 M1/M2 均未提前标记完成。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -532,7 +532,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **302** 个顶层 Go 测试、18 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
+| 测试用例 | **309** 个顶层 Go 测试、18 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 前端构建 | Element Plus 按实际组件注册；主 JS 约 544 KB / 191 KB gzip；保留大于 500 KB 的既有 chunk 提示 |

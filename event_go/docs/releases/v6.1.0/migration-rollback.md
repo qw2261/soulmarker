@@ -82,4 +82,4 @@ G5.2 代码候选证据：Commit `780c496`，GitHub Actions Run `29440070376` su
 
 G5.3 使用 Schema v13 和 [ADR-006](../../adr/006-stable-event-tenant-scope.md)。新 `/organizations/{organizationId}/events/...` 路由与 platform 兼容路由复用 `OrganizationOperationsService` 和 scoped Store；关闭 `ORGANIZATION_AUTH_ENABLED` 只关闭租户入口，不改变数据库或 platform 应急运营能力。
 
-候选 Commit、GitHub Actions Run 与最终门禁结果将在功能提交和 CI success 后按双提交证据流程回填，未回填前不得把 G5-R05 标记为完成。
+G5.3 候选证据：Commit `00ebef0`，GitHub Actions Run `29443464930` success；backend job `87447966246` 与 frontend job `87447966182` 均通过。Schema v13 上线仍需按本页记录真实备份路径、执行人和回滚判定。

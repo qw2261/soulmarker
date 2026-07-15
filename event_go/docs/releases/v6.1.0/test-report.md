@@ -1,6 +1,6 @@
 # v6.1.0 测试报告
 
-> 状态：G5.3 Local Candidate Pending Full Gate；G5.1/G5.2 已通过远端门禁
+> 状态：G5.3 Remote Candidate Pass；资源租户化完整远端门禁通过
 
 ## 版本身份
 
@@ -9,7 +9,7 @@
 | 上一远端安全基线 Commit | a5722da |
 | G5.1 已验证 Commit | f548a298ca7bc7c8695b15e3d986c33e767b295d |
 | G5.2 已验证 Commit | 780c4966cb20ce6384a4756db4443c4181d9161d |
-| G5.3 候选 Commit | 待功能提交后回填 |
+| G5.3 已验证 Commit | 00ebef05634467f5a5befb8c1de0303c82cb2a4d |
 | 候选分支 | origin/codex/update_project |
 | Schema | v13；v12 租户基础 + Event 稳定 tenant、索引/FK 与 `/events` N/N-1 写兼容 |
 
@@ -36,7 +36,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核。G5.3 候选增�
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 302 |
+| 顶层 Go Test 数量 | 309 |
 | `go test -count=1 ./...` | 通过 |
 | `go test -race -count=1 ./...` | 通过，零数据竞争 |
 | `go vet ./...` | 通过，无警告 |
@@ -47,7 +47,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核。G5.3 候选增�
 | `npm audit --omit=dev` | 0 vulnerabilities |
 | gofmt / `git diff --check` | 通过 |
 | G5.3 定向 Store 测试 | 通过；Schema v13、旧写兼容和跨租户资源负向矩阵 |
-| G5.3 定向 Handler 测试 | 上一轮通过；加入 CSV 导出后的完整回环复验因权限审查暂未执行，完整门禁待补 |
+| G5.3 Handler/契约测试 | 远端完整 Go Test 与 race 通过；跨租户 HTTP、五角色业务路由、CSV 安全与 OpenAPI/Router 双向契约均纳入 |
 
 本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
 
@@ -63,8 +63,11 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核。G5.3 候选增�
 | [GitHub Actions Run 29440070376](https://github.com/qw2261/soulmarker/actions/runs/29440070376) | success，与 780c4966cb20ce6384a4756db4443c4181d9161d 绑定 |
 | [backend job 87436433655](https://github.com/qw2261/soulmarker/actions/runs/29440070376/job/87436433655) | format、vet、govulncheck 0、302 tests、race success |
 | [frontend job 87436433616](https://github.com/qw2261/soulmarker/actions/runs/29440070376/job/87436433616) | build、18 unit/component tests、4 desktop/mobile E2E、浏览器证据上传 success |
-| G5.3 候选 Commit / Run | 待功能提交、推送和 CI success 后回填 |
+| [G5.3 Commit 00ebef0](https://github.com/qw2261/soulmarker/commit/00ebef05634467f5a5befb8c1de0303c82cb2a4d) | Schema v13、scoped Store/Service、tenant/platform 双轨 API、隔离矩阵、ADR-006 与候选文档 |
+| [GitHub Actions Run 29443464930](https://github.com/qw2261/soulmarker/actions/runs/29443464930) | success，与 00ebef05634467f5a5befb8c1de0303c82cb2a4d 绑定 |
+| [backend job 87447966246](https://github.com/qw2261/soulmarker/actions/runs/29443464930/job/87447966246) | format、vet、govulncheck 0、309 tests、race success |
+| [frontend job 87447966182](https://github.com/qw2261/soulmarker/actions/runs/29443464930/job/87447966182) | build、18 unit/component tests、4 desktop/mobile E2E 与浏览器证据上传 success |
 
 ## Go/No-Go
 
-No-Go（G5.3 候选）：实现与定向隔离测试已完成，但完整本地门禁、候选 Commit 和远端 Run 尚未形成证据。G5.1/G5.2 继续保持 Go。完整 G5、M2 与商业化仍为 No-Go；后续还必须完成公开业务面 platform Token 替换、自助运营、审计/PII 和生产基线。
+Go（仅 G5.3）：Schema v13、资源 tenant scope、五角色业务矩阵、双轨兼容和回滚证据已通过完整候选门禁，G5-R05 可以关闭。完整 G5、M2 与商业化仍为 No-Go；后续还必须完成公开业务面 platform Token 替换、自助运营、审计/PII、真实试点和生产基线。

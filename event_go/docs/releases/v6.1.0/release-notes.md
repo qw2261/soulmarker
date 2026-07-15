@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：G5.3 Local Candidate Pending Gate；G5.1/G5.2 已通过远端门禁
+> 状态：G5.3 Remote Candidate Pass（Commit 00ebef0 / Run 29443464930）；G5.1/G5.2 同样已通过远端门禁
 
 ## 当前切片
 
@@ -26,7 +26,7 @@
 ## 明确未完成
 
 - 没有新增组织自助创建、邀请接受或成员管理 HTTP API/UI。
-- G5.3 完整本地/远端门禁、候选 Commit 与 Run 尚待回填，因此 G5-R05 尚未最终关闭。
+- G5-R05 已由 Commit `00ebef0` / Run `29443464930` 关闭；G5-R04 仍待 G5.4 替换公开业务面的 platform Token。
 - platform admin 兼容路由仍使用全局 Admin Token；虽已复用 scoped Service，但租户自助后台尚未替换公开业务面的管理认证。
 - tenant API 已可按角色操作资源，但尚无 G5.4 自助入驻、邀请/成员管理与租户后台 UI。
 - actor/tenant/request_id 审计与 PII 按角色脱敏尚未实现。

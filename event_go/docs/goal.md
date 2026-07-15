@@ -66,7 +66,7 @@
 - 已完成门店、活动、报名、门票、讨论、内容治理、站内通知、用户认证和管理接口，共 52 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧 G5.2 当前候选已有 302 个顶层测试，go test、race、vet、gofmt 与 govulncheck 均纳入门禁。
+- Go 侧 G5.3 当前候选已有 309 个顶层测试，go test、race、vet、gofmt 与 govulncheck 均纳入门禁。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -377,7 +377,7 @@ G4-R09 当前拆分验收：
 - [x] **G5-R02** 建立 organization_members、invitation 和集中角色权限；Schema v12/ADR-004 固化成员与邀请，ADR-005 固化实时 capability Policy。
 - [x] **G5-R03** 固化最小角色集合：owner、admin、editor、checker、finance；角色能力按后续授权切片逐项开放。
 - [ ] **G5-R04** platform_admin 与租户角色分离，移除公开业务面的全局 Admin Token。
-- [ ] **G5-R05** event、ticket、registration、admission、checkin、export 全部强制 tenant scope。
+- [x] **G5-R05** event、ticket、registration、admission、checkin、export 管理入口全部强制 tenant scope；Commit `00ebef0` / Run `29443464930` 通过完整远端门禁。
 - [ ] **G5-R06** 组织者自助入驻、邀请成员、发布活动、配置票种、核销和导出。
 - [ ] **G5-R07** 审计日志记录 actor、tenant、action、resource、request_id、时间和结果。
 - [ ] **G5-R08** 组织者联系方式、参与者 PII 按角色最小授权和脱敏展示。
@@ -414,7 +414,7 @@ G5.1 不包含组织自助 API、租户上下文、业务资源 scope、租户�
 - [x] **G5-A06** `ORGANIZATION_AUTH_ENABLED=false` 可关闭只读租户入口，非法配置拒绝启动，不影响现有 platform admin 双轨运营。
 - [x] **G5-A07** G5.2 候选通过完整本地与远端门禁；Commit `780c496` / Run `29440070376`，授权矩阵与回退证据见 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
 
-G5.2 只证明授权内核和只读租户 session。现有 Event、Ticket、Registration、Admission、Checkin、Export 与治理路由尚未接入 tenant capability，G5-R04/R05 继续保持未完成；跨租户业务数据隔离必须由 G5.3 的资源级 Store/Service 测试证明。
+G5.2 本身只证明授权内核和只读租户 session；G5.3 已用资源级 Store/Service 与业务路由矩阵补齐 Event、Ticket、Registration、Admission/Checkin 和 Export tenant scope。内容治理仍属 platform 级职责，G5-R04 继续保持未完成。
 
 ### G5.3 当前资源租户化候选验收
 
@@ -425,9 +425,9 @@ G5.2 只证明授权内核和只读租户 session。现有 Event、Ticket、Regi
 - [x] **G5-T05** 新增 `/organizations/{organizationId}/events/...` Event/Ticket/Registration/Checkin/Export 路由并接入集中 capability；租户核销 actor 记录为 `organization_member:<userID>`。
 - [x] **G5-T06** Store 与 HTTP 负向测试覆盖 A 租户使用 B 的正确 Event/Ticket/Credential ID 仍无法读写，五角色业务路由允许/拒绝矩阵自动化。
 - [x] **G5-T07** OpenAPI 与 Router 目录同步；[ADR-006](adr/006-stable-event-tenant-scope.md) 固化稳定边界、子资源继承、双轨兼容和回滚策略。
-- [ ] **G5-T08** 完整本地门禁、候选 Commit 与远端 CI success 已回填到 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
+- [x] **G5-T08** Commit `00ebef0` / Run `29443464930` 完成 format、vet、govulncheck、309 tests、race、前端 build/unit/E2E 全量远端门禁并回填 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
 
-G5.3 候选尚未完成 G5-T08 前，G5-R05 保持未勾选。即使 G5-R05 通过，G5-R04 仍需 G5.4 用租户自助后台替换公开业务面的 platform Token；组织入驻/邀请 API/UI、审计、PII 最小授权和真实试点也不能提前宣称完成。
+G5.3 与 G5-R05 已完成。G5-R04 仍需 G5.4 用租户自助后台替换公开业务面的 platform Token；组织入驻/邀请 API/UI、审计、PII 最小授权和真实试点也不能提前宣称完成。
 
 ### 完成门槛
 
@@ -799,7 +799,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1/G5.2 已通过远端门禁；G5.3 资源 tenant scope 候选待完整本地/远端门禁，R04/R05 尚未最终关闭 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.3 已通过远端门禁并关闭 R05；下一切片 G5.4 自助运营负责替换公开业务面的 platform Token，R04/R06–R08 仍未完成 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
