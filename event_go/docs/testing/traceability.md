@@ -27,7 +27,7 @@
 | G3-R01 | v5.5 | High | Config 仅在启动入口加载校验，Handler 与中间件使用同一注入实例 | main、Handler、Router、Middleware | ARCH-CONFIG-001 | — | v5.5 test-report | Remote Pass |
 | G3-R02 | v5.5 | High | NewStore 初始化失败返回 error，不 panic 或退出进程 | internal/store/store.go | ARCH-STORE-001 | — | v5.5 test-report | Remote Pass |
 | G3-R03 | v5.5 | High | 报名/取消和讨论写入的跨实体规则由 application service 承载，Handler 只处理 HTTP 边界 | RegistrationService、DiscussionService、Handler | ARCH-SERVICE-001 | — | v5.5 test-report | Remote Pass |
-| G3-R04 | v5.5 | High | Handler 不直接解码 model 请求或序列化数据库实体，公开 JSON 字段由 DTO 契约固定 | handler/dto、全部 Handler | CT-DTO-001 | 前端 TypeScript build | v5.5 test-report | Local Pass |
+| G3-R04 | v5.5 | High | Handler 不直接解码 model 请求或序列化数据库实体，公开 JSON 字段由 DTO 契约固定 | handler/dto、全部 Handler | CT-DTO-001 | 前端 TypeScript build | v5.5 test-report | Remote Pass |
 | G3-R05 | v5.5 | Medium | Repository 接口仅包含报名用例需要的 GetEvent、Register、Cancel 方法 | service.RegistrationRepository | ARCH-REPO-001 | — | v5.5 test-report | Remote Pass |
 | G3-R06 | v5.5 | High | 业务时间和 JWT 签发/验证可注入并可使用确定时间测试 | Clock、TokenManager、Handler Dependencies | ARCH-DEPS-001 | — | v5.5 test-report | Remote Pass |
 
