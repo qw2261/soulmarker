@@ -30,6 +30,8 @@
 - 删除门票时保留报名票种快照并解除 ticket_id 引用；删除门店使用隐藏的系统占位门店保持历史活动完整。
 - Config 只在启动入口加载和校验一次，并显式注入 Handler、JWT、管理员认证、CORS 与日志配置。
 - NewStore 显式返回初始化 error，库层不再通过 panic 处理启动失败。
+- 报名与取消的跨实体规则进入 RegistrationService，Handler 只负责 HTTP 边界和错误映射。
+- JWT signer/verifier 与业务 Clock 改为显式依赖，取消截止边界和 Token 时间可确定性测试。
 
 ### Fixed
 

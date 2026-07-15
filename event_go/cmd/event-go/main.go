@@ -9,8 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler"
+	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
 
@@ -30,7 +33,14 @@ func main() {
 	defer s.Close()
 	log.Printf("📦 数据库已初始化: %s", cfg.DatabasePath)
 
-	h := handler.NewHandler(s, cfg)
+	businessClock := clock.System{}
+	tokens := auth.NewJWTManager(cfg.JWTSecret)
+	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour)
+	h := handler.NewHandler(s, cfg, handler.Dependencies{
+		Clock:         businessClock,
+		Tokens:        tokens,
+		Registrations: registrations,
+	})
 
 	port := cfg.Port
 	addr := ":" + port

@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,12 +16,41 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	appauth "github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
 
 var testServerStores sync.Map
+
+type testClock struct {
+	now time.Time
+}
+
+func (c testClock) Now() time.Time {
+	return c.now
+}
+
+type recordingTokenManager struct {
+	token    string
+	user     *model.User
+	issuedAt time.Time
+	ttl      time.Duration
+}
+
+func (m *recordingTokenManager) SignUser(user *model.User, issuedAt time.Time, ttl time.Duration) (string, error) {
+	m.user = user
+	m.issuedAt = issuedAt
+	m.ttl = ttl
+	return m.token, nil
+}
+
+func (m *recordingTokenManager) VerifyUser(string) (*model.UserClaims, error) {
+	return nil, errors.New("not implemented in recording token manager")
+}
 
 func mustNewStore(t *testing.T) *store.Store {
 	t.Helper()
@@ -29,6 +59,15 @@ func mustNewStore(t *testing.T) *store.Store {
 		t.Fatalf("NewStore: %v", err)
 	}
 	return s
+}
+
+func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
+	businessClock := clock.System{}
+	return NewHandler(s, cfg, Dependencies{
+		Clock:         businessClock,
+		Tokens:        appauth.NewJWTManager(cfg.JWTSecret),
+		Registrations: service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour),
+	})
 }
 
 func makeTestJWT(t *testing.T, userID int64, name, contact string) string {
@@ -90,7 +129,7 @@ func doUserJSON(t *testing.T, method, requestURL, body string, _ int64, name, co
 func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	t.Helper()
 	s := mustNewStore(t)
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 
 	server := httptest.NewServer(NewRouter(h, nil))
 	testServerStores.Store(server.URL, s)
@@ -1095,7 +1134,7 @@ func TestHealthHandler(t *testing.T) {
 func TestHealthHandlerResponseStructure(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -1130,7 +1169,7 @@ func TestHandlerUsesStartupConfigSnapshot(t *testing.T) {
 	cfg := config.Load()
 	cfg.Version = "injected-version"
 	cfg.CORSOrigin = "https://startup.example.com"
-	h := NewHandler(s, cfg)
+	h := newTestHandler(s, cfg)
 	router := NewRouter(h, nil)
 
 	t.Setenv("VERSION", "changed-after-startup")
@@ -1149,6 +1188,30 @@ func TestHandlerUsesStartupConfigSnapshot(t *testing.T) {
 	}
 	if origin := healthResp.Header().Get("Access-Control-Allow-Origin"); origin != "https://startup.example.com" {
 		t.Fatalf("expected injected CORS origin, got %q", origin)
+	}
+}
+
+func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
+	s := mustNewStore(t)
+	defer s.Close()
+	cfg := config.Load()
+	cfg.JWTExpireHours = 12
+	fixedTime := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	businessClock := testClock{now: fixedTime}
+	tokens := &recordingTokenManager{token: "signed-by-test-manager"}
+	h := NewHandler(s, cfg, Dependencies{
+		Clock:         businessClock,
+		Tokens:        tokens,
+		Registrations: service.NewRegistrationService(s, businessClock, 24*time.Hour),
+	})
+	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
+
+	token, err := h.generateToken(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != tokens.token || tokens.user != user || !tokens.issuedAt.Equal(fixedTime) || tokens.ttl != 12*time.Hour {
+		t.Fatalf("injected dependencies were not used: %+v", tokens)
 	}
 }
 
@@ -1201,7 +1264,7 @@ func TestLoggingMiddlewarePassesThrough(t *testing.T) {
 
 func TestHealthHandlerDBDisconnected(t *testing.T) {
 	s := mustNewStore(t)
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 	s.Close()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -1233,7 +1296,7 @@ func TestHealthHandlerDBDisconnected(t *testing.T) {
 func TestStrictJSONRequestBoundary(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 
 	tests := []struct {
 		name       string
@@ -1309,7 +1372,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 func TestInternalErrorsDoNotLeak(t *testing.T) {
 	s := mustNewStore(t)
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 	_ = s.Close()
 
 	w := httptest.NewRecorder()
@@ -1336,7 +1399,7 @@ func TestInternalErrorsDoNotLeak(t *testing.T) {
 func TestMiddlewareChainOrder(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	handler := NewHandler(s, config.Load())
+	handler := newTestHandler(s, config.Load())
 
 	_ = s.CreateOrganizer(&model.Organizer{Name: "测试门店"})
 
@@ -1720,7 +1783,7 @@ func TestUserAuthNoToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
-	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
+	UserAuth(next, appauth.NewJWTManager(config.DefaultJWTSecret)).ServeHTTP(w, req)
 
 	if !captured {
 		t.Error("next handler not called")
@@ -1749,7 +1812,7 @@ func TestUserAuthWithValidToken(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
+	UserAuth(next, appauth.NewJWTManager(config.DefaultJWTSecret)).ServeHTTP(w, req)
 
 	if !captured {
 		t.Error("next handler not called with valid token")
@@ -1766,7 +1829,7 @@ func TestUserAuthWithInvalidToken(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer invalid.token.here")
 	w := httptest.NewRecorder()
-	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
+	UserAuth(next, appauth.NewJWTManager(config.DefaultJWTSecret)).ServeHTTP(w, req)
 
 	if captured {
 		t.Error("next handler must not be called with invalid token")
@@ -2207,7 +2270,7 @@ func TestLoginHandlerNotFound(t *testing.T) {
 func TestGetTicketInvalidID(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 
 	req := httptest.NewRequest("GET", "/api/events/abc/tickets/1", nil)
 	w := httptest.NewRecorder()
@@ -2241,7 +2304,7 @@ func TestUpdateTicketNotFound(t *testing.T) {
 func TestUpdateTicketInvalidBody(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 	ticket := &model.Ticket{EventID: 1, Name: "原始", Price: 10, Stock: 5}
 	s.CreateTicket(ticket)
 
@@ -2277,7 +2340,7 @@ func TestDeleteTicketNotFound(t *testing.T) {
 func TestDeleteTicketInvalidID(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 
 	req := httptest.NewRequest("DELETE", "/api/events/abc/tickets/1", nil)
 	w := httptest.NewRecorder()
@@ -2333,7 +2396,7 @@ func TestCreateReplyNotFound(t *testing.T) {
 func TestCreateReplyInvalidBody(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 	user := &model.User{Name: "testuser", Contact: "test@test.com", PasswordHash: "hash"}
 	if err := s.CreateUser(user); err != nil {
 		t.Fatal(err)
@@ -2348,7 +2411,7 @@ func TestCreateReplyInvalidBody(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+makeTestJWT(t, user.ID, "testuser", "test@test.com"))
 	w := httptest.NewRecorder()
-	UserAuth(http.HandlerFunc(h.CreateReply), config.DefaultJWTSecret).ServeHTTP(w, req)
+	UserAuth(http.HandlerFunc(h.CreateReply), appauth.NewJWTManager(config.DefaultJWTSecret)).ServeHTTP(w, req)
 
 	resp := w.Result()
 	defer resp.Body.Close()
@@ -2432,7 +2495,7 @@ func TestListRegistrationsEmpty(t *testing.T) {
 func TestUpdateEventInvalidBody(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s, config.Load())
+	h := newTestHandler(s, config.Load())
 	e := &model.Event{Title: "test", EventTime: "2026-12-31T18:00:00+08:00", Location: "线上", Capacity: 10, Status: "draft"}
 	s.CreateEvent(e)
 

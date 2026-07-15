@@ -2,12 +2,24 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/service"
 )
+
+func (h *Handler) getRegistrationEventOr404(w http.ResponseWriter, eventID int64) (*model.Event, bool) {
+	event, err := h.registrations.GetEvent(eventID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrNotFound.Error()})
+		} else {
+			writeInternalError(w, "get_registration_event", err)
+		}
+		return nil, false
+	}
+	return event, true
+}
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	user, authenticated := h.requireUser(w, r)
@@ -21,12 +33,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, ok := h.getEventOr404(w, eventID)
+	event, ok := h.getRegistrationEventOr404(w, eventID)
 	if !ok {
-		return
-	}
-	if event.Status != "published" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "活动未发布，暂无法报名"})
 		return
 	}
 
@@ -35,22 +43,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := user.ID
-	reg := &model.Registration{
-		EventID:  eventID,
-		UserID:   &userID,
-		Name:     user.Name,
-		Contact:  user.Contact,
-		TicketID: req.TicketID,
-	}
-	if err := h.store.Register(reg); err != nil {
+	registration, err := h.registrations.Register(event, user, req.TicketID)
+	if err != nil {
+		var fullError *service.RegistrationFullError
 		switch {
 		case errors.Is(err, model.ErrNotFound):
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+		case errors.Is(err, service.ErrEventNotPublished):
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: err.Error()})
 		case errors.Is(err, model.ErrDuplicate):
 			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: err.Error()})
-		case errors.Is(err, model.ErrFull):
-			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: fmt.Sprintf("活动报名已满（上限 %d 人）", event.Capacity)})
+		case errors.As(err, &fullError):
+			writeJSON(w, http.StatusConflict, model.APIResp{Code: 409, Message: fullError.Error()})
 		case errors.Is(err, model.ErrTicketNotFound):
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		case errors.Is(err, model.ErrTicketSoldOut):
@@ -61,7 +65,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "报名成功", Data: reg})
+	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "报名成功", Data: registration})
 }
 
 func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +80,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, ok := h.getEventOr404(w, eventID)
+	event, ok := h.getRegistrationEventOr404(w, eventID)
 	if !ok {
 		return
 	}
@@ -88,20 +92,10 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	eventTime, err := time.Parse(model.TimeFormat, event.EventTime)
-	if err != nil {
-		writeInternalError(w, "cancel_registration_parse_event_time", err)
-		return
-	}
-
-	deadline := eventTime.Add(-time.Duration(h.config.CancelDeadlineHours) * time.Hour)
-	if time.Now().After(deadline) {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: model.ErrCancelDeadlineExceeded.Error()})
-		return
-	}
-
-	if err := h.store.CancelRegistrationByUserID(eventID, user.ID); err != nil {
+	if err := h.registrations.Cancel(event, user.ID); err != nil {
 		switch {
+		case errors.Is(err, model.ErrCancelDeadlineExceeded):
+			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: err.Error()})
 		case errors.Is(err, model.ErrNotRegistered):
 			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
 		default:

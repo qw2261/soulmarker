@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01/R02 本地与远端门禁已通过
+> 状态：In Progress，G3-R01/R02 已远端验证，R03/R05/R06 当前切片本地完整门禁已通过，等待候选提交与远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
-| 基线 Commit | b4e97a8f6b20dfaa85bc3f1cdfea2c2242076a7d |
-| 候选 Commit | fb6e0075925ca126086f6872ea3f68740f1ef550 |
+| 已验证基线 Commit | 67d56976e7e5120d9605cdc6cd56b6510a6c78f3 |
+| 当前候选 Commit | 待提交 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -17,17 +17,21 @@
 |---|---|---|
 | G3-R01 | ARCH-CONFIG-001 | TestHandlerUsesStartupConfigSnapshot、既有 Config.Validate 与认证测试 |
 | G3-R02 | ARCH-STORE-001 | TestNewStoreReturnsInitializationError、既有迁移失败返回测试 |
+| G3-R03 | ARCH-SERVICE-REG-001 | TestRegistrationServiceRegisterCopiesTrustedIdentity、TestRegistrationServiceCancelDeadlineBoundary、既有 Handler 契约回归 |
+| G3-R05 | ARCH-REPO-001 | fakeRegistrationRepository 编译期契约与 service 正常/拒绝/故障测试 |
+| G3-R06 | ARCH-DEPS-001 | TestJWTManagerSignAndVerifyUser、TestGenerateTokenUsesInjectedClockAndSigner、取消截止确定时间测试 |
 
 ## 本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 204 |
+| 顶层 Go Test 数量 | 212 |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
 | gofmt / diff check | 通过 |
 | npm run build | 通过；主包约 1.02 MB，保留 Vite chunk size 告警 |
+| Markdown 本地链接 | 通过，排除被忽略的 node_modules/test_reports 原始产物 |
 
 本阶段继续不使用 covdata。
 
@@ -41,4 +45,4 @@
 
 ## Go/No-Go
 
-No-Go：G3 尚有 R03–R08；R01/R02 已完成本地与远端验证。
+No-Go：当前切片仍需候选提交与远端 CI；G3 仍有讨论 service、DTO、OpenAPI 和业务错误码工作。

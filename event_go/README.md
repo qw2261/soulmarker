@@ -262,6 +262,10 @@ event_go/
 │   └── event-go/
 │       └── main.go              # 入口：组装依赖、注册路由、启动服务、优雅关闭
 ├── internal/
+│   ├── auth/
+│   │   └── token.go             # JWT TokenManager：签发与验证
+│   ├── clock/
+│   │   └── clock.go             # 可注入业务时钟
 │   ├── config/
 │   │   └── config.go            # 配置管理：环境变量统一加载
 │   ├── handler/
@@ -275,6 +279,8 @@ event_go/
 │   │   ├── handler_test.go      # Handler 集成测试
 │   │   ├── handler_identity.go  # 身份迁移报告 API
 │   │   └── middleware.go        # 中间件：日志、CORS、安全响应头、管理员认证
+│   ├── service/
+│   │   └── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
 │   ├── store/
 │   │   ├── store.go             # Store、版本化事务迁移、schema_migrations
 │   │   ├── store_event.go       # 活动 CRUD
@@ -310,12 +316,16 @@ cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallb
 internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证
          │
          v
+internal/service/*.go        应用层：跨实体用例、业务边界、调用方定义的 Repository 接口
+         │
+         v
 internal/store/*.go          数据层：SQLite CRUD、事务管理、版本化迁移
          │
          v
 internal/model/types.go      模型层：类型定义、哨兵错误、常量、JWT Claims
 
 internal/config/config.go    配置层：环境变量统一管理（横向）
+internal/auth + clock        可注入安全与时间依赖（横向）
 web/                         Vue 3 前端：Vite + Element Plus + Pinia（横向）
 ```
 
@@ -325,13 +335,16 @@ web/                         Vue 3 前端：Vite + Element Plus + Pinia（横向
 main.go
   │  加载并校验 Config（一次）
   │  创建 Store（数据层，显式处理 error）
-  │  创建 Handler（HTTP 层），注入 Store 与 Config
+  │  创建 RegistrationService、Clock、TokenManager
+  │  创建 Handler（HTTP 层），注入显式依赖
   │  注册路由，启动服务（监听 SIGINT/SIGTERM 优雅关闭）
   │
-  ├──→ Store          ← 封装所有数据库操作
+  ├──→ Store          ← 封装数据库操作和 SQLite 事务
   │      (CreateEvent, ListEvents, GetEvent, ...)
   │
-  └──→ Handler        ← 封装所有 HTTP 处理器
+  ├──→ RegistrationService ← 报名/取消业务规则与用例编排
+  │
+  └──→ Handler        ← HTTP 参数、认证上下文与响应映射
          (h.CreateEvent, h.ListEvents, ...)
 ```
 
@@ -339,8 +352,9 @@ main.go
 
 - `main.go` 一次性加载并校验 `Config`，再创建 `Store` 与 `Handler`；请求处理不重复读取环境变量
 - `NewStore` / `OpenStore` 返回初始化错误，调用方显式决定启动失败策略
-- `Handler` 的方法直接调用 `h.store.Xxx()`，不走全局变量
-- 加新功能时：`model/` 加结构体 → `store/` 在对应文件加方法 → `handler/` 在对应文件加处理器 → `cmd/` 加路由
+- 跨实体规则通过最小 service 协调；简单查询和单实体 CRUD 仍可直接调用 Store
+- Repository 接口由 service 按实际用例定义，不为所有 CRUD 预建抽象
+- 加新功能时先判断是否存在跨实体不变量，再决定是否需要 service，避免机械分层
 
 ### 技术选型
 
@@ -371,7 +385,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **204** 个顶层 Go 测试 |
+| 测试用例 | **212** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |

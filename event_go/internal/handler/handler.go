@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
@@ -20,15 +22,38 @@ const maxRequestBodyBytes int64 = 1 << 20
 
 // Handler 负责处理HTTP请求，协调store层进行数据操作
 type Handler struct {
-	store     *store.Store
-	config    *config.Config
-	startTime time.Time
-	version   string
+	store         *store.Store
+	config        *config.Config
+	clock         clock.Clock
+	tokens        auth.TokenManager
+	registrations RegistrationService
+	startTime     time.Time
+	version       string
 }
 
-// NewHandler 创建 Handler，并注入启动时已加载和校验的配置。
-func NewHandler(s *store.Store, cfg *config.Config) *Handler {
-	return &Handler{store: s, config: cfg, startTime: time.Now(), version: cfg.Version}
+type RegistrationService interface {
+	GetEvent(eventID int64) (*model.Event, error)
+	Register(event *model.Event, user *model.User, ticketID *int64) (*model.Registration, error)
+	Cancel(event *model.Event, userID int64) error
+}
+
+type Dependencies struct {
+	Clock         clock.Clock
+	Tokens        auth.TokenManager
+	Registrations RegistrationService
+}
+
+// NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
+func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *Handler {
+	return &Handler{
+		store:         s,
+		config:        cfg,
+		clock:         dependencies.Clock,
+		tokens:        dependencies.Tokens,
+		registrations: dependencies.Registrations,
+		startTime:     dependencies.Clock.Now(),
+		version:       cfg.Version,
+	}
 }
 
 // parseEventID 从URL路径中解析活动ID
@@ -150,7 +175,7 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	data := map[string]interface{}{
 		"status":         status,
 		"version":        h.version,
-		"uptime_seconds": int64(time.Since(h.startTime).Seconds()),
+		"uptime_seconds": int64(h.clock.Now().Sub(h.startTime).Seconds()),
 		"db":             dbStatus,
 	}
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: data})

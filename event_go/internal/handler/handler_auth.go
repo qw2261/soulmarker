@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -96,20 +96,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) generateToken(u *model.User) (string, error) {
-	claims := &model.UserClaims{
-		UserID:  u.ID,
-		Name:    u.Name,
-		Contact: u.Contact,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(h.config.JWTExpireHours) * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(h.config.JWTSecret))
+	return h.tokens.SignUser(u, h.clock.Now(), time.Duration(h.config.JWTExpireHours)*time.Hour)
 }
 
-func UserAuth(next http.Handler, jwtSecret string) http.Handler {
+func UserAuth(next http.Handler, tokens auth.TokenManager) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth == "" {
@@ -126,11 +116,8 @@ func UserAuth(next http.Handler, jwtSecret string) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户认证失败，请重新登录"})
 			return
 		}
-		claims := &model.UserClaims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-		if err != nil || !token.Valid {
+		claims, err := tokens.VerifyUser(tokenStr)
+		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: "用户认证失败，请重新登录"})
 			return
 		}

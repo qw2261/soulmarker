@@ -49,5 +49,5 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	mux.HandleFunc("GET /health", h.HealthHandler)
 	mux.Handle("/", fallback)
 
-	return LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.config.JWTSecret), h.config.CORSOrigin)))
+	return LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.tokens), h.config.CORSOrigin)))
 }
