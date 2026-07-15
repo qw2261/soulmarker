@@ -33,6 +33,10 @@
 - 当前用户组织列表与租户 session API，以及 [ADR-005](docs/adr/005-platform-and-tenant-authorization.md) 授权和回退决策。
 - Schema v13 Event 稳定 tenant、`OrganizationOperationsService`、租户 Event/Ticket/Registration/Checkin/Export API 与 [ADR-006](docs/adr/006-stable-event-tenant-scope.md)。
 - 服务端 tenant-scoped 报名 CSV 导出，保留 UTF-8 BOM 与表格公式注入防护。
+- 组织自助创建、邀请接受、成员/邀请管理 API，以及不依赖 platform Admin Token 的租户工作台。
+- 256 位组织邀请 Token 生成与 SMTP 投递；数据库仅保存 SHA-256 摘要，投递失败自动撤销邀请。
+- desktop/Pixel 7 自助组织角色旅程与隔离本地 SMTP 捕获器。
+- [ADR-007](docs/adr/007-organization-self-service-and-invitation-delivery.md) 固化自助运营和邀请投递边界。
 
 ### Changed
 
@@ -65,6 +69,8 @@
 - 原 `AdminAuth` 路由明确迁移到 `PlatformAdminAuth`；旧名称只保留源码兼容，现有业务路由作为 scoped platform 双轨保留到 G5.4 自助运营替换。
 - 管理前端除 `authenticated` 外同时校验 `principal_type=platform_admin`。
 - platform 兼容管理路由与 tenant 路由复用同一 scoped Service；无作用域 Store 写方法解析现有 tenant 后再进入 scoped SQL。
+- 登录用户导航新增组织工作台；组织页面按实时 capability 展示活动、票种、成员、报名、导出和核销能力。
+- 登录/注册保留经过同源校验的邀请 redirect，未注册收件人完成注册后自动返回邀请接受页。
 
 ### Fixed
 
@@ -93,6 +99,7 @@
 - 租户角色不写入 JWT；跨租户、revoked Membership、suspended Organization 和能力不足通过实时数据库上下文统一拒绝。
 - platform Token 与 tenant JWT 不能互相替代；新增 `ORGANIZATION_ACCESS_DENIED` 稳定错误码和可关闭租户入口的 fail-closed 配置。
 - Event/Ticket/Registration/Admission/Checkin/Export 的租户管理 SQL 显式绑定 `organization_id`；正确资源 ID、跨组织 OrganizerProfile 或凭证均不能绕过路径 tenant。
+- 组织邀请明文 Token 不落库也不进入 HTTP 响应；owner、自我撤销和 admin 越权角色变更由事务内规则阻断。
 
 ### Migration
 

@@ -215,6 +215,73 @@ func TestOrganizationInvitationSupportsVerifiedRecoveryEmailAndExpiresPendingInv
 	}
 }
 
+func TestOrganizationMemberManagementProtectsOwnerAndSupportsReinvite(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	owner := &model.User{Name: "成员管理所有者", Contact: "manage-owner@example.com", PasswordHash: "hash"}
+	admin := &model.User{Name: "成员管理员", Contact: "manage-admin@example.com", PasswordHash: "hash"}
+	editor := &model.User{Name: "成员编辑", Contact: "manage-editor@example.com", PasswordHash: "hash"}
+	for _, user := range []*model.User{owner, admin, editor} {
+		if err := s.CreateUser(user); err != nil {
+			t.Fatal(err)
+		}
+	}
+	organization := &model.Organization{Name: "成员管理组织", Slug: "member-management"}
+	profile := &model.OrganizerProfile{Name: "成员管理门店"}
+	if err := s.CreateOrganizationWithOwner(organization, profile, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	adminMember := &model.OrganizationMember{OrganizationID: organization.ID, UserID: admin.ID, Role: model.OrganizationRoleAdmin}
+	editorMember := &model.OrganizationMember{OrganizationID: organization.ID, UserID: editor.ID, Role: model.OrganizationRoleEditor}
+	if err := s.AddOrganizationMember(adminMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddOrganizationMember(editorMember); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := s.UpdateOrganizationMemberRole(organization.ID, admin.ID, editorMember.ID, model.OrganizationRoleChecker, now); err != nil {
+		t.Fatalf("admin could not manage editor: %v", err)
+	}
+	if err := s.UpdateOrganizationMemberRole(organization.ID, admin.ID, editorMember.ID, model.OrganizationRoleAdmin, now); !errors.Is(err, model.ErrOrganizationMemberChangeDenied) {
+		t.Fatalf("admin granted admin role: %v", err)
+	}
+	ownerMember, err := s.GetOrganizationMember(organization.ID, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevokeOrganizationMember(organization.ID, admin.ID, ownerMember.ID, now); !errors.Is(err, model.ErrOrganizationMemberChangeDenied) {
+		t.Fatalf("admin revoked owner: %v", err)
+	}
+	if err := s.RevokeOrganizationMember(organization.ID, admin.ID, adminMember.ID, now); !errors.Is(err, model.ErrOrganizationMemberChangeDenied) {
+		t.Fatalf("admin revoked self: %v", err)
+	}
+	if err := s.RevokeOrganizationMember(organization.ID, owner.ID, adminMember.ID, now); err != nil {
+		t.Fatalf("owner could not revoke admin: %v", err)
+	}
+	reinvite := &model.OrganizationInvitation{
+		OrganizationID: organization.ID, Email: admin.Contact, Role: model.OrganizationRoleFinance,
+		TokenHash: "reinvite-revoked-admin", ExpiresAt: now.Add(time.Hour), InvitedByUserID: owner.ID,
+	}
+	if err := s.CreateOrganizationInvitation(reinvite); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AcceptOrganizationInvitation(reinvite.TokenHash, admin.ID, now.Add(time.Minute)); err != nil {
+		t.Fatalf("revoked member could not accept reinvite: %v", err)
+	}
+	restored, err := s.GetOrganizationMember(organization.ID, admin.ID)
+	if err != nil || restored == nil || restored.Status != model.OrganizationMemberStatusActive || restored.Role != model.OrganizationRoleFinance {
+		t.Fatalf("reinvited member mismatch: member=%+v err=%v", restored, err)
+	}
+	members, err := s.ListOrganizationMembers(organization.ID)
+	if err != nil || len(members) != 3 || members[0].UserName == "" || members[0].UserContact == "" {
+		t.Fatalf("member list missing user projection: members=%+v err=%v", members, err)
+	}
+}
+
 func TestOrganizationInvitationRejectsSuspendedOrganization(t *testing.T) {
 	s, err := NewStore(":memory:")
 	if err != nil {

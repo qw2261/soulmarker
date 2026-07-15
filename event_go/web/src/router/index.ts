@@ -83,6 +83,60 @@ const router = createRouter({
       meta: { requiresUser: true },
     },
     {
+      path: '/workspace',
+      name: 'workspace-list',
+      component: () => import('@/views/workspace/WorkspaceList.vue'),
+      meta: { requiresUser: true },
+    },
+    {
+      path: '/workspace/new',
+      name: 'workspace-new',
+      component: () => import('@/views/workspace/WorkspaceCreate.vue'),
+      meta: { requiresUser: true },
+    },
+    {
+      path: '/workspace/:organizationId',
+      name: 'workspace-dashboard',
+      component: () => import('@/views/workspace/WorkspaceDashboard.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/workspace/:organizationId/members',
+      name: 'workspace-members',
+      component: () => import('@/views/workspace/WorkspaceMembers.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/workspace/:organizationId/events/new',
+      name: 'workspace-event-new',
+      component: () => import('@/views/workspace/WorkspaceEventForm.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/workspace/:organizationId/events/:id/edit',
+      name: 'workspace-event-edit',
+      component: () => import('@/views/workspace/WorkspaceEventForm.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/workspace/:organizationId/events/:id/tickets',
+      name: 'workspace-tickets',
+      component: () => import('@/views/workspace/WorkspaceTickets.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/workspace/:organizationId/events/:id/operations',
+      name: 'workspace-operations',
+      component: () => import('@/views/workspace/WorkspaceOperations.vue'),
+      meta: { requiresUser: true, requiresOrganization: true },
+    },
+    {
+      path: '/organization-invitations/accept',
+      name: 'organization-invitation-accept',
+      component: () => import('@/views/workspace/InvitationAccept.vue'),
+      meta: { requiresUser: true },
+    },
+    {
       path: '/admin/events',
       name: 'admin-events',
       component: () => import('@/views/admin/EventManage.vue'),
@@ -159,6 +213,16 @@ router.beforeEach(async (to) => {
     } catch {
       useAuthStore().logout()
       return { path: '/admin', query: { redirect: to.fullPath } }
+    }
+  }
+  if (to.meta.requiresOrganization) {
+    const organizationId = Number(to.params.organizationId)
+    if (!Number.isInteger(organizationId) || organizationId <= 0) return { path: '/workspace' }
+    try {
+      const { useWorkspaceStore } = await import('@/stores/workspace')
+      await useWorkspaceStore().loadSession(organizationId)
+    } catch {
+      return { path: '/workspace' }
     }
   }
 })

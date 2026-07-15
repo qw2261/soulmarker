@@ -122,6 +122,10 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 		Organizations:  service.NewOrganizationAuthorizationService(s),
 		Operations:     service.NewOrganizationOperationsService(s, businessClock),
+		SelfService: service.NewOrganizationSelfService(
+			s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{},
+			cfg.PublicBaseURL, 72*time.Hour,
+		),
 	})
 }
 
@@ -1467,6 +1471,10 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 		Organizations:  service.NewOrganizationAuthorizationService(s),
 		Operations:     service.NewOrganizationOperationsService(s, businessClock),
+		SelfService: service.NewOrganizationSelfService(
+			s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{},
+			cfg.PublicBaseURL, 72*time.Hour,
+		),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 

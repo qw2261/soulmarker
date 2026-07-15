@@ -37,6 +37,31 @@ type RecoveryEmailConfirmRequest struct {
 	Token string `json:"token"`
 }
 
+type CreateOrganizationRequest struct {
+	Name               string `json:"name"`
+	Slug               string `json:"slug"`
+	ProfileName        string `json:"profile_name"`
+	ProfileDescription string `json:"profile_description"`
+	ProfileContact     string `json:"profile_contact"`
+	ProfileLogoURL     string `json:"profile_logo_url"`
+	ProfileAddress     string `json:"profile_address"`
+	ProfileWebsite     string `json:"profile_website"`
+	ProfileTags        string `json:"profile_tags"`
+}
+
+type CreateOrganizationInvitationRequest struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+type AcceptOrganizationInvitationRequest struct {
+	Token string `json:"token"`
+}
+
+type UpdateOrganizationMemberRequest struct {
+	Role string `json:"role"`
+}
+
 type CreateOrganizerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -166,6 +191,40 @@ type OrganizationContextResponse struct {
 	Role               string   `json:"role"`
 	PrincipalType      string   `json:"principal_type"`
 	Capabilities       []string `json:"capabilities"`
+}
+
+type OrganizationWorkspaceResponse struct {
+	ID        int64             `json:"id"`
+	Name      string            `json:"name"`
+	Slug      string            `json:"slug"`
+	Status    string            `json:"status"`
+	Profile   OrganizerResponse `json:"profile"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+type OrganizationMemberResponse struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Name      string    `json:"name"`
+	Contact   string    `json:"contact"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type OrganizationInvitationResponse struct {
+	ID              int64      `json:"id"`
+	Email           string     `json:"email"`
+	Role            string     `json:"role"`
+	Status          string     `json:"status"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+	AcceptedAt      *time.Time `json:"accepted_at,omitempty"`
+	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
+	InvitedByUserID int64      `json:"invited_by_user_id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type OrganizerResponse struct {

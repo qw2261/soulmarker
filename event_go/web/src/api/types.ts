@@ -12,6 +12,65 @@ export interface Organizer {
   updated_at: string
 }
 
+export type OrganizationRole = 'owner' | 'admin' | 'editor' | 'checker' | 'finance'
+
+export interface OrganizationContext {
+  organization_id: number
+  organization_name: string
+  organization_slug: string
+  organization_status: string
+  membership_status: 'active' | 'revoked'
+  role: OrganizationRole
+  principal_type: 'organization_member'
+  capabilities: string[]
+}
+
+export interface OrganizationWorkspace {
+  id: number
+  name: string
+  slug: string
+  status: string
+  profile: Organizer
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationMember {
+  id: number
+  user_id: number
+  name: string
+  contact: string
+  role: OrganizationRole
+  status: 'active' | 'revoked'
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationInvitation {
+  id: number
+  email: string
+  role: Exclude<OrganizationRole, 'owner'>
+  status: 'pending' | 'accepted' | 'revoked' | 'expired'
+  expires_at: string
+  accepted_at?: string
+  revoked_at?: string
+  invited_by_user_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateOrganizationReq {
+  name: string
+  slug: string
+  profile_name: string
+  profile_description: string
+  profile_contact: string
+  profile_logo_url: string
+  profile_address: string
+  profile_website: string
+  profile_tags: string
+}
+
 export interface Event {
   id: number
   organizer_id: number

@@ -140,6 +140,27 @@ func (s *Store) GetOrganization(id int64) (*model.Organization, error) {
 	return organization, nil
 }
 
+func (s *Store) GetOrganizerProfileForOrganization(organizationID int64) (*model.OrganizerProfile, error) {
+	profile := &model.OrganizerProfile{}
+	var createdAt, updatedAt string
+	err := s.db.QueryRow(
+		`SELECT id, organization_id, name, description, contact, logo_url, address, website, tags, created_at, updated_at
+		 FROM organizers WHERE organization_id = ?`, organizationID,
+	).Scan(
+		&profile.ID, &profile.OrganizationID, &profile.Name, &profile.Description, &profile.Contact,
+		&profile.LogoURL, &profile.Address, &profile.Website, &profile.Tags, &createdAt, &updatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询组织公开资料失败: %w", err)
+	}
+	profile.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+	profile.UpdatedAt, _ = time.Parse(model.TimeFormat, updatedAt)
+	return profile, nil
+}
+
 func (s *Store) AddOrganizationMember(member *model.OrganizationMember) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -208,6 +229,151 @@ func (s *Store) ListOrganizationsForUser(userID int64) ([]*model.OrganizationMem
 		return nil, fmt.Errorf("遍历用户组织列表失败: %w", err)
 	}
 	return result, nil
+}
+
+func (s *Store) ListOrganizationMembers(organizationID int64) ([]*model.OrganizationMember, error) {
+	rows, err := s.db.Query(
+		`SELECT m.id, m.organization_id, o.name, o.slug, o.status, m.user_id, m.role, m.status,
+		 u.name, u.contact, m.created_at, m.updated_at
+		 FROM organization_members m
+		 JOIN organizations o ON o.id = m.organization_id
+		 JOIN users u ON u.id = m.user_id
+		 WHERE m.organization_id = ?
+		 ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, m.created_at ASC, m.id ASC`,
+		organizationID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询组织成员列表失败: %w", err)
+	}
+	defer rows.Close()
+	members := make([]*model.OrganizationMember, 0)
+	for rows.Next() {
+		member := &model.OrganizationMember{}
+		var createdAt, updatedAt string
+		if err := rows.Scan(
+			&member.ID, &member.OrganizationID, &member.OrganizationName, &member.OrganizationSlug,
+			&member.OrganizationStatus, &member.UserID, &member.Role, &member.Status,
+			&member.UserName, &member.UserContact, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("读取组织成员列表失败: %w", err)
+		}
+		member.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+		member.UpdatedAt, _ = time.Parse(model.TimeFormat, updatedAt)
+		members = append(members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("遍历组织成员列表失败: %w", err)
+	}
+	return members, nil
+}
+
+func organizationManagementActorTx(tx *sql.Tx, organizationID, actorUserID int64) (*model.OrganizationMember, error) {
+	actor := &model.OrganizationMember{}
+	if err := tx.QueryRow(
+		`SELECT m.role, m.status, o.status
+		 FROM organization_members m JOIN organizations o ON o.id = m.organization_id
+		 WHERE m.organization_id = ? AND m.user_id = ?`, organizationID, actorUserID,
+	).Scan(&actor.Role, &actor.Status, &actor.OrganizationStatus); errors.Is(err, sql.ErrNoRows) {
+		return nil, model.ErrOrganizationPermissionDenied
+	} else if err != nil {
+		return nil, err
+	}
+	if actor.Status != model.OrganizationMemberStatusActive || actor.OrganizationStatus != model.OrganizationStatusActive ||
+		(actor.Role != model.OrganizationRoleOwner && actor.Role != model.OrganizationRoleAdmin) {
+		return nil, model.ErrOrganizationPermissionDenied
+	}
+	return actor, nil
+}
+
+func canManageOrganizationMember(actorRole, targetRole, newRole string) bool {
+	if targetRole == model.OrganizationRoleOwner || newRole == model.OrganizationRoleOwner {
+		return false
+	}
+	if actorRole == model.OrganizationRoleOwner {
+		return true
+	}
+	return targetRole != model.OrganizationRoleAdmin && newRole != model.OrganizationRoleAdmin
+}
+
+func (s *Store) UpdateOrganizationMemberRole(organizationID, actorUserID, memberID int64, role string, updatedAt time.Time) error {
+	if !canInviteOrganizationRole(role) {
+		return model.ErrOrganizationMemberChangeDenied
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启成员角色更新事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	actor, err := organizationManagementActorTx(tx, organizationID, actorUserID)
+	if err != nil {
+		return err
+	}
+	var targetUserID int64
+	var targetRole, targetStatus string
+	if err := tx.QueryRow(
+		`SELECT user_id, role, status FROM organization_members WHERE id = ? AND organization_id = ?`,
+		memberID, organizationID,
+	).Scan(&targetUserID, &targetRole, &targetStatus); errors.Is(err, sql.ErrNoRows) {
+		return model.ErrOrganizationMemberNotFound
+	} else if err != nil {
+		return fmt.Errorf("查询待更新组织成员失败: %w", err)
+	}
+	if targetStatus != model.OrganizationMemberStatusActive || targetUserID == actorUserID ||
+		!canManageOrganizationMember(actor.Role, targetRole, role) {
+		return model.ErrOrganizationMemberChangeDenied
+	}
+	result, err := tx.Exec(
+		`UPDATE organization_members SET role = ?, updated_at = ?
+		 WHERE id = ? AND organization_id = ? AND status = 'active'`,
+		role, updatedAt.UTC().Format(model.TimeFormat), memberID, organizationID,
+	)
+	if err != nil {
+		return fmt.Errorf("更新组织成员角色失败: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return model.ErrOrganizationMemberNotFound
+	}
+	return tx.Commit()
+}
+
+func (s *Store) RevokeOrganizationMember(organizationID, actorUserID, memberID int64, revokedAt time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启成员撤销事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	actor, err := organizationManagementActorTx(tx, organizationID, actorUserID)
+	if err != nil {
+		return err
+	}
+	var targetUserID int64
+	var targetRole, targetStatus string
+	if err := tx.QueryRow(
+		`SELECT user_id, role, status FROM organization_members WHERE id = ? AND organization_id = ?`,
+		memberID, organizationID,
+	).Scan(&targetUserID, &targetRole, &targetStatus); errors.Is(err, sql.ErrNoRows) {
+		return model.ErrOrganizationMemberNotFound
+	} else if err != nil {
+		return fmt.Errorf("查询待撤销组织成员失败: %w", err)
+	}
+	if targetStatus != model.OrganizationMemberStatusActive || targetUserID == actorUserID ||
+		!canManageOrganizationMember(actor.Role, targetRole, targetRole) {
+		return model.ErrOrganizationMemberChangeDenied
+	}
+	result, err := tx.Exec(
+		`UPDATE organization_members SET status = 'revoked', updated_at = ?
+		 WHERE id = ? AND organization_id = ? AND status = 'active'`,
+		revokedAt.UTC().Format(model.TimeFormat), memberID, organizationID,
+	)
+	if err != nil {
+		return fmt.Errorf("撤销组织成员失败: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return model.ErrOrganizationMemberNotFound
+	}
+	return tx.Commit()
 }
 
 func canInviteOrganizationRole(role string) bool {
@@ -335,6 +501,65 @@ func (s *Store) GetOrganizationInvitationByTokenHash(tokenHash string) (*model.O
 	return invitation, nil
 }
 
+func (s *Store) ListOrganizationInvitations(organizationID int64, now time.Time) ([]*model.OrganizationInvitation, error) {
+	now = now.UTC()
+	if _, err := s.db.Exec(
+		`UPDATE organization_invitations SET status = 'expired', updated_at = ?
+		 WHERE organization_id = ? AND status = 'pending' AND expires_at <= ?`,
+		now.Format(model.TimeFormat), organizationID, now.Format(model.TimeFormat),
+	); err != nil {
+		return nil, fmt.Errorf("更新组织过期邀请失败: %w", err)
+	}
+	rows, err := s.db.Query(
+		`SELECT id, organization_id, email, role, token_hash, status, expires_at,
+		 accepted_at, revoked_at, invited_by_user_id, created_at, updated_at
+		 FROM organization_invitations WHERE organization_id = ?
+		 ORDER BY created_at DESC, id DESC`, organizationID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询组织邀请列表失败: %w", err)
+	}
+	defer rows.Close()
+	invitations := make([]*model.OrganizationInvitation, 0)
+	for rows.Next() {
+		invitation, err := scanOrganizationInvitation(rows)
+		if err != nil {
+			return nil, fmt.Errorf("读取组织邀请列表失败: %w", err)
+		}
+		invitations = append(invitations, invitation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("遍历组织邀请列表失败: %w", err)
+	}
+	return invitations, nil
+}
+
+func (s *Store) RevokeOrganizationInvitation(organizationID, actorUserID, invitationID int64, revokedAt time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启邀请撤销事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := organizationManagementActorTx(tx, organizationID, actorUserID); err != nil {
+		return err
+	}
+	revokedAt = revokedAt.UTC()
+	result, err := tx.Exec(
+		`UPDATE organization_invitations
+		 SET status = 'revoked', revoked_at = ?, updated_at = ?
+		 WHERE id = ? AND organization_id = ? AND status = 'pending'`,
+		revokedAt.Format(model.TimeFormat), revokedAt.Format(model.TimeFormat), invitationID, organizationID,
+	)
+	if err != nil {
+		return fmt.Errorf("撤销组织邀请失败: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return model.ErrOrganizationInvitationInvalid
+	}
+	return tx.Commit()
+}
+
 func (s *Store) AcceptOrganizationInvitation(tokenHash string, userID int64, acceptedAt time.Time) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -394,13 +619,32 @@ func (s *Store) AcceptOrganizationInvitation(tokenHash string, userID int64, acc
 		(!recoveryIsEmail || !recoveryVerifiedAt.Valid || recovery != invitation.Email) {
 		return model.ErrOrganizationInvitationInvalid
 	}
-	member := &model.OrganizationMember{
-		OrganizationID: invitation.OrganizationID,
-		UserID:         userID,
-		Role:           invitation.Role,
-	}
-	if err := insertOrganizationMemberTx(tx, member, acceptedAt); err != nil {
-		return err
+	var existingMemberID int64
+	var existingStatus string
+	err = tx.QueryRow(
+		`SELECT id, status FROM organization_members WHERE organization_id = ? AND user_id = ?`,
+		invitation.OrganizationID, userID,
+	).Scan(&existingMemberID, &existingStatus)
+	if errors.Is(err, sql.ErrNoRows) {
+		member := &model.OrganizationMember{
+			OrganizationID: invitation.OrganizationID,
+			UserID:         userID,
+			Role:           invitation.Role,
+		}
+		if err := insertOrganizationMemberTx(tx, member, acceptedAt); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return fmt.Errorf("查询现有组织成员失败: %w", err)
+	} else if existingStatus == model.OrganizationMemberStatusRevoked {
+		if _, err := tx.Exec(
+			`UPDATE organization_members SET role = ?, status = 'active', updated_at = ? WHERE id = ?`,
+			invitation.Role, acceptedAt.Format(model.TimeFormat), existingMemberID,
+		); err != nil {
+			return fmt.Errorf("恢复组织成员失败: %w", err)
+		}
+	} else {
+		return model.ErrOrganizationMemberExists
 	}
 	result, err := tx.Exec(
 		`UPDATE organization_invitations

@@ -6,6 +6,7 @@
     </div>
     <div class="navbar-right">
       <template v-if="user.isLoggedIn">
+        <router-link to="/workspace">组织工作台</router-link>
         <router-link to="/me/registrations">我的活动</router-link>
         <el-badge :value="notifications.unreadCount" :hidden="notifications.unreadCount === 0" :max="99">
           <router-link to="/me/notifications">通知</router-link>
@@ -38,6 +39,7 @@
         <router-link to="/" @click="mobileMenuOpen = false">活动</router-link>
         <router-link to="/organizers" @click="mobileMenuOpen = false">门店</router-link>
         <template v-if="user.isLoggedIn">
+          <router-link to="/workspace" @click="mobileMenuOpen = false">组织工作台</router-link>
           <router-link to="/me/registrations" @click="mobileMenuOpen = false">我的活动</router-link>
           <router-link to="/me/notifications" @click="mobileMenuOpen = false">
             通知<span v-if="notifications.unreadCount">（{{ notifications.unreadCount }}）</span>

@@ -88,7 +88,7 @@ Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员
 | `organization_members` | 用户在租户内的角色与 active/revoked 状态；每个组织最多一个 active owner |
 | `organization_invitations` | 只保存邀请 Token 摘要、规范化邮箱、非 owner 角色、过期和消费状态 |
 
-邀请只能由 active Organization 的 active owner/admin 创建；接受者的登录邮箱或已验证恢复邮箱必须与邀请一致。G5.2 增加实时租户授权上下文，但业务资源 scope、后台 UI 和审计仍属于后续 G5 切片，当前全局 Admin Token 仍只代表 platform admin。
+邀请只能由 active Organization 的 active owner/admin 创建；接受者的登录邮箱或已验证恢复邮箱必须与邀请一致。G5.4 自助入口使用 256 位随机 Token，数据库只存 SHA-256 摘要，明文只进入一次 SMTP 链接；投递失败会撤销邀请。组织者日常工作台只使用用户 JWT 和 tenant capability，platform Admin Token 仅保留应急与治理兼容。
 
 ### Tenant Authorization — 租户授权内核
 
@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 授权内核由 Commit `780c496` / Run `29440070376` 通过；G5.3 Schema v13 与业务资源 tenant scope 由 Commit `00ebef0` / Run `29443464930` 通过。G4 仍待真实 staging SMTP 和两场受控活动，G5.4–G5.5 仍待自助运营、审计与试点，因此 M1/M2 均未提前标记完成。
+**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础、G5.2 授权内核和 G5.3 资源 tenant scope 已通过远端门禁。G5.4 自助入驻、邀请/成员管理和租户工作台已达到 Local Candidate，待功能提交远端 CI success 后回填 Commit/Run 并关闭 G5-R04/R06。G4 仍待真实 staging SMTP 和两场受控活动，G5.5 仍待审计、PII 与三组织试点，因此 M1/M2 不提前标记完成。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -212,7 +212,16 @@ GET    /api/v1/me/notifications/unread-count            当前用户未读通知
 PUT    /api/v1/me/notifications/{notificationId}/read   标记自己的单条通知已读
 PUT    /api/v1/me/notifications/read-all                标记自己的全部通知已读
 GET    /api/v1/me/organizations                         当前用户组织、角色与实时 capability
+POST   /api/v1/organizations                            自助创建 Organization/Profile/owner
+POST   /api/v1/organization-invitations/accept          当前用户接受一次性组织邀请
 GET    /api/v1/organizations/{organizationId}/session   校验租户身份与 capability（需用户 JWT）
+GET    /api/v1/organizations/{organizationId}           租户工作台与公开资料
+GET    /api/v1/organizations/{organizationId}/members   成员列表（members.read）
+PUT    /api/v1/organizations/{organizationId}/members/{memberId} 调整成员角色（members.manage）
+DELETE /api/v1/organizations/{organizationId}/members/{memberId} 撤销成员（members.manage）
+GET    /api/v1/organizations/{organizationId}/invitations 邀请列表（members.read）
+POST   /api/v1/organizations/{organizationId}/invitations 创建并投递邀请（members.invite）
+DELETE /api/v1/organizations/{organizationId}/invitations/{invitationId} 撤销邀请（members.invite）
 POST   /api/v1/organizations/{organizationId}/events   在租户内创建活动（events.manage）
 GET    /api/v1/organizations/{organizationId}/events   租户活动列表（organization.read）
 GET    /api/v1/organizations/{organizationId}/events/{id} 租户活动详情（organization.read）
@@ -647,6 +656,12 @@ event_go/
 | `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
 | `/me/security` | 账户安全 | 查看登录标识、恢复邮箱状态并用当前密码申请验证 |
 | `/me/notifications` | 通知中心 | 全部/未读筛选、分页、单条或全部已读，并跳转到关联活动 |
+| `/workspace`、`/workspace/new` | 组织工作台 | 选择或自助创建组织，不需要 platform Admin Token |
+| `/workspace/:organizationId` | 租户活动运营 | 按实时 capability 列出、发布和维护租户活动 |
+| `/workspace/:organizationId/members` | 成员与邀请 | owner/admin 邀请、改角色和撤销成员，owner 受保护 |
+| `/workspace/:organizationId/events/:id/tickets` | 租户票种 | editor 及以上按 tenant scope 维护票种 |
+| `/workspace/:organizationId/events/:id/operations` | 租户报名与核销 | checker 只核销，finance 只查看/导出报名 |
+| `/organization-invitations/accept?token=...` | 接受组织邀请 | 当前登录邮箱匹配后单次消费邀请 |
 | `/admin` | 管理登录 | 通过服务端 `/admin/session` 验证 X-Admin-Token |
 | `/admin/organizers` | 门店管理 | 门店列表、创建、编辑和保留历史活动的安全删除 |
 | `/admin/organizers/new`、`/:id/edit` | 门店表单 | 维护名称、联系方式、地址、官网、Logo 和标签 |
@@ -678,11 +693,12 @@ event_go/
 | `NOTIFICATION_REMINDER_HOURS` | `24` | published 活动临近提醒窗口，允许 1–168 小时 |
 | `NOTIFICATION_SCAN_INTERVAL_SECONDS` | `60` | 单实例提醒调度扫描间隔，允许 1–3600 秒 |
 | `ORGANIZATION_AUTH_ENABLED` | `true` | 租户授权与业务入口开关；false 时 `/me/organizations` 和 `/organizations/...` 返回 404，非法布尔值拒绝启动 |
+| `ORGANIZATION_INVITATION_TTL_HOURS` | `72` | 组织邀请有效小时数，允许 1–168 |
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
-| `SMTP_FROM` | 空 | 密码重置与恢复邮箱验证邮件发件人 |
+| `SMTP_FROM` | 空 | 密码重置、恢复邮箱验证和组织邀请邮件发件人 |
 
-staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置/邮箱验证链接写入服务日志，不发送邮件；业务通知不依赖 SMTP。
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、组织邀请 TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置、邮箱验证和组织邀请链接写入服务日志，不发送邮件；普通业务通知不依赖 SMTP。
 
 ### 环境准备
 

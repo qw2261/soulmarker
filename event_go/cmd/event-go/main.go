@@ -48,15 +48,22 @@ func main() {
 		s, businessClock, time.Duration(cfg.NotificationReminderHours)*time.Hour,
 	)
 	var resetSender notification.AuthenticationEmailSender = notification.LogPasswordResetSender{}
+	var invitationSender notification.OrganizationInvitationSender = notification.LogPasswordResetSender{}
 	if cfg.SMTPHost != "" {
-		resetSender = notification.NewSMTPPasswordResetSender(
+		smtpSender := notification.NewSMTPPasswordResetSender(
 			cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom,
 		)
+		resetSender = smtpSender
+		invitationSender = smtpSender
 	}
 	authentication := service.NewAuthenticationService(
 		s, businessClock, identifier.CryptoResetTokenGenerator{}, resetSender,
 		cfg.PublicBaseURL, time.Duration(cfg.PasswordResetTTLMin)*time.Minute,
 		time.Duration(cfg.RecoveryEmailTTLMin)*time.Minute,
+	)
+	selfService := service.NewOrganizationSelfService(
+		s, businessClock, identifier.CryptoResetTokenGenerator{}, invitationSender,
+		cfg.PublicBaseURL, time.Duration(cfg.OrganizationInvitationTTLHours)*time.Hour,
 	)
 	h := handler.NewHandler(s, cfg, handler.Dependencies{
 		Clock:          businessClock,
@@ -69,6 +76,7 @@ func main() {
 		Notifications:  notifications,
 		Organizations:  organizations,
 		Operations:     operations,
+		SelfService:    selfService,
 	})
 	appContext, stopApp := context.WithCancel(context.Background())
 	defer stopApp()

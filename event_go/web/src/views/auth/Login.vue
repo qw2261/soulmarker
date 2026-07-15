@@ -19,7 +19,7 @@
         </el-form>
         <p class="reset-link"><router-link to="/forgot-password">忘记密码？</router-link></p>
         <p class="switch">
-          还没有账号？<router-link to="/register">去注册</router-link>
+          还没有账号？<router-link :to="registerTarget">去注册</router-link>
         </p>
       </el-card>
     </el-main>
@@ -27,12 +27,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { computed, ref, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { loginUser } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import NavBar from '@/components/NavBar.vue'
+import { safeRedirectPath } from '@/auth/redirect'
 
 const router = useRouter()
 const route = useRoute()
@@ -40,6 +41,11 @@ const userStore = useUserStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const redirect = computed(() => safeRedirectPath(route.query.redirect, ''))
+const registerTarget = computed(() => ({
+  path: '/register',
+  query: redirect.value ? { redirect: redirect.value } : {},
+}))
 
 const form = reactive({
   contact: '',
@@ -60,8 +66,7 @@ async function submit() {
     if (res.code === 200 && res.data) {
       userStore.setAuth(res.data.token, res.data.user)
       ElMessage.success('登录成功')
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-      router.push(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/')
+      router.push(safeRedirectPath(route.query.redirect))
     }
   } finally {
     loading.value = false

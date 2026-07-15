@@ -21,7 +21,7 @@
           </el-form-item>
         </el-form>
         <p class="switch">
-          已有账号？<router-link to="/login">去登录</router-link>
+          已有账号？<router-link :to="loginTarget">去登录</router-link>
         </p>
       </el-card>
     </el-main>
@@ -29,18 +29,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { registerUser } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import NavBar from '@/components/NavBar.vue'
+import { safeRedirectPath } from '@/auth/redirect'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const redirect = computed(() => safeRedirectPath(route.query.redirect, ''))
+const loginTarget = computed(() => ({
+  path: '/login',
+  query: redirect.value ? { redirect: redirect.value } : {},
+}))
 
 const form = reactive({
   name: '',
@@ -69,7 +76,7 @@ async function submit() {
     if (res.code === 201 && res.data) {
       userStore.setAuth(res.data.token, res.data.user)
       ElMessage.success('注册成功')
-      router.push('/')
+      router.push(safeRedirectPath(route.query.redirect))
     }
   } finally {
     loading.value = false

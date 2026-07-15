@@ -39,6 +39,7 @@ type Handler struct {
 	notifications  NotificationService
 	organizations  OrganizationAuthorizationService
 	operations     OrganizationOperationsService
+	selfService    OrganizationSelfService
 	startTime      time.Time
 	version        string
 }
@@ -113,6 +114,18 @@ type OrganizationOperationsService interface {
 	ListCheckins(organizationID, eventID int64, offset, limit int) ([]*model.Checkin, int, error)
 }
 
+type OrganizationSelfService interface {
+	Create(ownerUserID int64, organization *model.Organization, profile *model.OrganizerProfile) error
+	Get(organizationID int64) (*model.Organization, *model.OrganizerProfile, error)
+	ListMembers(organizationID int64) ([]*model.OrganizationMember, error)
+	UpdateMemberRole(organizationID, actorUserID, memberID int64, role string) error
+	RevokeMember(organizationID, actorUserID, memberID int64) error
+	Invite(ctx context.Context, organizationID, actorUserID int64, email, role string) (*model.OrganizationInvitation, error)
+	ListInvitations(organizationID int64) ([]*model.OrganizationInvitation, error)
+	RevokeInvitation(organizationID, actorUserID, invitationID int64) error
+	Accept(rawToken string, userID int64) error
+}
+
 type Dependencies struct {
 	Clock          clock.Clock
 	Tokens         auth.TokenManager
@@ -124,6 +137,7 @@ type Dependencies struct {
 	Notifications  NotificationService
 	Organizations  OrganizationAuthorizationService
 	Operations     OrganizationOperationsService
+	SelfService    OrganizationSelfService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -141,6 +155,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		notifications:  dependencies.Notifications,
 		organizations:  dependencies.Organizations,
 		operations:     dependencies.Operations,
+		selfService:    dependencies.SelfService,
 		startTime:      dependencies.Clock.Now(),
 		version:        cfg.Version,
 	}
@@ -170,6 +185,14 @@ func parseNotificationID(r *http.Request) (int64, error) {
 
 func parseOrganizationID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("organizationId"), 10, 64)
+}
+
+func parseOrganizationMemberID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("memberId"), 10, 64)
+}
+
+func parseOrganizationInvitationID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("invitationId"), 10, 64)
 }
 
 // parseTicketID 从URL路径中解析门票ID

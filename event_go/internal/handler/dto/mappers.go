@@ -62,6 +62,44 @@ func OrganizationContexts(values []authorization.OrganizationContext) []Organiza
 	return result
 }
 
+func OrganizationWorkspace(organization *model.Organization, profile *model.OrganizerProfile) OrganizationWorkspaceResponse {
+	return OrganizationWorkspaceResponse{
+		ID: organization.ID, Name: organization.Name, Slug: organization.Slug, Status: organization.Status,
+		Profile: Organizer(profile), CreatedAt: organization.CreatedAt, UpdatedAt: organization.UpdatedAt,
+	}
+}
+
+func OrganizationMember(member *model.OrganizationMember) OrganizationMemberResponse {
+	return OrganizationMemberResponse{
+		ID: member.ID, UserID: member.UserID, Name: member.UserName, Contact: member.UserContact,
+		Role: member.Role, Status: member.Status, CreatedAt: member.CreatedAt, UpdatedAt: member.UpdatedAt,
+	}
+}
+
+func OrganizationMembers(members []*model.OrganizationMember) []OrganizationMemberResponse {
+	result := make([]OrganizationMemberResponse, 0, len(members))
+	for _, member := range members {
+		result = append(result, OrganizationMember(member))
+	}
+	return result
+}
+
+func OrganizationInvitation(invitation *model.OrganizationInvitation) OrganizationInvitationResponse {
+	return OrganizationInvitationResponse{
+		ID: invitation.ID, Email: invitation.Email, Role: invitation.Role, Status: invitation.Status,
+		ExpiresAt: invitation.ExpiresAt, AcceptedAt: invitation.AcceptedAt, RevokedAt: invitation.RevokedAt,
+		InvitedByUserID: invitation.InvitedByUserID, CreatedAt: invitation.CreatedAt, UpdatedAt: invitation.UpdatedAt,
+	}
+}
+
+func OrganizationInvitations(invitations []*model.OrganizationInvitation) []OrganizationInvitationResponse {
+	result := make([]OrganizationInvitationResponse, 0, len(invitations))
+	for _, invitation := range invitations {
+		result = append(result, OrganizationInvitation(invitation))
+	}
+	return result
+}
+
 func Organizer(organizer *model.Organizer) OrganizerResponse {
 	return OrganizerResponse{
 		ID: organizer.ID, Name: organizer.Name, Description: organizer.Description,

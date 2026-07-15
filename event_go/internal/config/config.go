@@ -12,58 +12,60 @@ import (
 const DefaultJWTSecret = "event-go-dev-secret-change-in-production"
 
 type Config struct {
-	Environment                 string
-	AdminToken                  string
-	CORSOrigin                  string
-	LogFormat                   string
-	LogLevel                    string
-	DatabasePath                string
-	Port                        string
-	Version                     string
-	CancelDeadlineHours         int
-	JWTSecret                   string
-	JWTExpireHours              int
-	PublicBaseURL               string
-	PasswordResetTTLMin         int
-	RecoveryEmailTTLMin         int
-	NotificationReminderHours   int
-	NotificationScanIntervalSec int
-	OrganizationAuthEnabled     bool
-	SMTPHost                    string
-	SMTPPort                    string
-	SMTPUsername                string
-	SMTPPassword                string
-	SMTPFrom                    string
-	organizationAuthFlagInvalid bool
+	Environment                    string
+	AdminToken                     string
+	CORSOrigin                     string
+	LogFormat                      string
+	LogLevel                       string
+	DatabasePath                   string
+	Port                           string
+	Version                        string
+	CancelDeadlineHours            int
+	JWTSecret                      string
+	JWTExpireHours                 int
+	PublicBaseURL                  string
+	PasswordResetTTLMin            int
+	RecoveryEmailTTLMin            int
+	NotificationReminderHours      int
+	NotificationScanIntervalSec    int
+	OrganizationAuthEnabled        bool
+	OrganizationInvitationTTLHours int
+	SMTPHost                       string
+	SMTPPort                       string
+	SMTPUsername                   string
+	SMTPPassword                   string
+	SMTPFrom                       string
+	organizationAuthFlagInvalid    bool
 }
 
 func Load() *Config {
 	port := getEnv("PORT", "8080")
 	organizationAuthEnabled, organizationAuthFlagInvalid := getEnvBoolStrict("ORGANIZATION_AUTH_ENABLED", true)
 	return &Config{
-		Environment:                 getEnv("APP_ENV", "development"),
-		AdminToken:                  getEnv("ADMIN_TOKEN", ""),
-		CORSOrigin:                  getEnv("CORS_ORIGIN", "*"),
-		LogFormat:                   getEnv("LOG_FORMAT", "json"),
-		LogLevel:                    getEnv("LOG_LEVEL", "info"),
-		DatabasePath:                getEnv("DATABASE_PATH", "data/event_go.db"),
-		Port:                        port,
-		Version:                     getEnv("VERSION", "dev"),
-		CancelDeadlineHours:         getEnvInt("CANCEL_DEADLINE_HOURS", 24),
-		JWTSecret:                   getEnv("JWT_SECRET", DefaultJWTSecret),
-		JWTExpireHours:              getEnvInt("JWT_EXPIRE_HOURS", 168),
-		PublicBaseURL:               getEnv("PUBLIC_BASE_URL", "http://localhost:"+port),
-		PasswordResetTTLMin:         getEnvIntStrict("PASSWORD_RESET_TTL_MINUTES", 30),
-		RecoveryEmailTTLMin:         getEnvIntStrict("RECOVERY_EMAIL_TTL_MINUTES", 30),
-		NotificationReminderHours:   getEnvIntStrict("NOTIFICATION_REMINDER_HOURS", 24),
-		NotificationScanIntervalSec: getEnvIntStrict("NOTIFICATION_SCAN_INTERVAL_SECONDS", 60),
-		OrganizationAuthEnabled:     organizationAuthEnabled,
-		SMTPHost:                    getEnv("SMTP_HOST", ""),
-		SMTPPort:                    getEnv("SMTP_PORT", "587"),
-		SMTPUsername:                getEnv("SMTP_USERNAME", ""),
-		SMTPPassword:                getEnv("SMTP_PASSWORD", ""),
-		SMTPFrom:                    getEnv("SMTP_FROM", ""),
-		organizationAuthFlagInvalid: organizationAuthFlagInvalid,
+		Environment:                    getEnv("APP_ENV", "development"),
+		AdminToken:                     getEnv("ADMIN_TOKEN", ""),
+		CORSOrigin:                     getEnv("CORS_ORIGIN", "*"),
+		LogFormat:                      getEnv("LOG_FORMAT", "json"),
+		LogLevel:                       getEnv("LOG_LEVEL", "info"),
+		DatabasePath:                   getEnv("DATABASE_PATH", "data/event_go.db"),
+		Port:                           port,
+		Version:                        getEnv("VERSION", "dev"),
+		CancelDeadlineHours:            getEnvInt("CANCEL_DEADLINE_HOURS", 24),
+		JWTSecret:                      getEnv("JWT_SECRET", DefaultJWTSecret),
+		JWTExpireHours:                 getEnvInt("JWT_EXPIRE_HOURS", 168),
+		PublicBaseURL:                  getEnv("PUBLIC_BASE_URL", "http://localhost:"+port),
+		PasswordResetTTLMin:            getEnvIntStrict("PASSWORD_RESET_TTL_MINUTES", 30),
+		RecoveryEmailTTLMin:            getEnvIntStrict("RECOVERY_EMAIL_TTL_MINUTES", 30),
+		NotificationReminderHours:      getEnvIntStrict("NOTIFICATION_REMINDER_HOURS", 24),
+		NotificationScanIntervalSec:    getEnvIntStrict("NOTIFICATION_SCAN_INTERVAL_SECONDS", 60),
+		OrganizationAuthEnabled:        organizationAuthEnabled,
+		OrganizationInvitationTTLHours: getEnvIntStrict("ORGANIZATION_INVITATION_TTL_HOURS", 72),
+		SMTPHost:                       getEnv("SMTP_HOST", ""),
+		SMTPPort:                       getEnv("SMTP_PORT", "587"),
+		SMTPUsername:                   getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:                   getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:                       getEnv("SMTP_FROM", ""),
+		organizationAuthFlagInvalid:    organizationAuthFlagInvalid,
 	}
 }
 
@@ -85,6 +87,9 @@ func (c *Config) Validate() error {
 	}
 	if c.NotificationScanIntervalSec <= 0 || c.NotificationScanIntervalSec > 3600 {
 		return fmt.Errorf("NOTIFICATION_SCAN_INTERVAL_SECONDS 必须在 1 到 3600 之间")
+	}
+	if c.OrganizationInvitationTTLHours <= 0 || c.OrganizationInvitationTTLHours > 168 {
+		return fmt.Errorf("ORGANIZATION_INVITATION_TTL_HOURS 必须在 1 到 168 之间")
 	}
 	env := strings.ToLower(strings.TrimSpace(c.Environment))
 	switch env {

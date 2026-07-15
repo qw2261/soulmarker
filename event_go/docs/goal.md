@@ -429,6 +429,19 @@ G5.2 本身只证明授权内核和只读租户 session；G5.3 已用资源级 S
 
 G5.3 与 G5-R05 已完成。G5-R04 仍需 G5.4 用租户自助后台替换公开业务面的 platform Token；组织入驻/邀请 API/UI、审计、PII 最小授权和真实试点也不能提前宣称完成。
 
+### G5.4 当前自助运营候选验收
+
+- [x] **G5-S01** 登录用户可原子创建 active Organization、OrganizerProfile 和 owner；工作台可列出并切换当前用户组织，全旅程不需要 `platform_admin` 或人工改库。
+- [x] **G5-S02** 邀请使用 256 位随机 Token，数据库只存 SHA-256 摘要，HTTP 响应不返回明文或摘要；SMTP 投递失败自动撤销邀请，TTL 通过 `ORGANIZATION_INVITATION_TTL_HOURS` 控制。
+- [x] **G5-S03** 邀请接受要求登录邮箱匹配并单次消费；未注册收件人的登录/注册 redirect 保留邀请且拒绝外站路径；revoked 成员可通过新邀请恢复 active，重复、过期和已撤销邀请稳定拒绝。
+- [x] **G5-S04** owner/admin 成员管理规则在事务内二次校验：owner 不可通过普通 API 变更，自我撤销禁止，admin 不能管理或授予 admin/owner。
+- [x] **G5-S05** 新增 tenant workspace UI，覆盖活动发布、票种、成员/邀请、报名、CSV 导出和核销；每次进入组织路由重新校验 session，页面按实时 capability 展示操作。
+- [x] **G5-S06** OpenAPI、Router、DTO 和 45 个稳定错误码双向一致；Store/Service/Handler 测试覆盖 Token 边界、投递失败、owner 保护、撤销即时生效和 feature flag fail closed。
+- [x] **G5-S07** `E2E-ORG-SELF-SERVICE-001` 在 desktop Chromium 与 Pixel 7 证明 owner/editor/checker/finance 完成正反向权限旅程，浏览器 localStorage 始终没有 `admin_token`；邀请链接由隔离的本地 SMTP 捕获器取得。
+- [ ] **G5-S08** 功能候选提交与远端 CI Run success 绑定后，回填 [v6.1 测试报告](releases/v6.1.0/test-report.md)，再关闭 G5-R04/G5-R06 和对应追溯行。
+
+G5.4 当前为 Local Candidate。platform 管理路由只保留应急和治理兼容，不再是组织者日常入口；G5-R04/G5-R06 必须等待远端完整门禁后关闭。审计、PII 脱敏、所有权转移和三组织试点仍属于 G5.5，不能由本地 E2E 替代。
+
 ### 完成门槛
 
 - [ ] 权限矩阵自动覆盖全部组织者管理接口。
@@ -799,7 +812,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.3 已通过远端门禁并关闭 R05；下一切片 G5.4 自助运营负责替换公开业务面的 platform Token，R04/R06–R08 仍未完成 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.3 已通过远端门禁；G5.4 自助运营为 Local Candidate，待远端门禁后关闭 R04/R06；R07/R08 与三组织试点仍属 G5.5 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

@@ -52,24 +52,33 @@ func TestValidateSecureEnvironmentRequiresSecrets(t *testing.T) {
 
 func TestValidateProductionConfig(t *testing.T) {
 	cfg := Config{
-		Environment:                 "production",
-		AdminToken:                  "admin-token",
-		JWTSecret:                   "12345678901234567890123456789012",
-		JWTExpireHours:              168,
-		CORSOrigin:                  "https://events.example.com",
-		PublicBaseURL:               "https://events.example.com",
-		PasswordResetTTLMin:         30,
-		RecoveryEmailTTLMin:         30,
-		NotificationReminderHours:   24,
-		NotificationScanIntervalSec: 60,
-		SMTPHost:                    "smtp.example.com",
-		SMTPPort:                    "587",
-		SMTPUsername:                "mailer",
-		SMTPPassword:                "secret",
-		SMTPFrom:                    "Soulmark <no-reply@example.com>",
+		Environment:                    "production",
+		AdminToken:                     "admin-token",
+		JWTSecret:                      "12345678901234567890123456789012",
+		JWTExpireHours:                 168,
+		CORSOrigin:                     "https://events.example.com",
+		PublicBaseURL:                  "https://events.example.com",
+		PasswordResetTTLMin:            30,
+		RecoveryEmailTTLMin:            30,
+		NotificationReminderHours:      24,
+		NotificationScanIntervalSec:    60,
+		OrganizationInvitationTTLHours: 72,
+		SMTPHost:                       "smtp.example.com",
+		SMTPPort:                       "587",
+		SMTPUsername:                   "mailer",
+		SMTPPassword:                   "secret",
+		SMTPFrom:                       "Soulmark <no-reply@example.com>",
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("valid production config rejected: %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidOrganizationInvitationTTL(t *testing.T) {
+	t.Setenv("ORGANIZATION_INVITATION_TTL_HOURS", "0")
+	cfg := Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("invalid organization invitation TTL must fail validation")
 	}
 }
 

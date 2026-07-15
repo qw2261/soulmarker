@@ -235,6 +235,36 @@
         }
       }
     },
+    "/organizations": {
+      "post": {
+        "operationId": "createOrganization",
+        "tags": ["Organizations"],
+        "summary": "Create an organization workspace owned by the current user",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateOrganizationRequest" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/organization-invitations/accept": {
+      "post": {
+        "operationId": "acceptOrganizationInvitation",
+        "tags": ["Organizations"],
+        "summary": "Accept an organization invitation as the current user",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/AcceptOrganizationInvitationRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/organizations/{organizationId}/session": {
       "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
       "get": {
@@ -247,6 +277,109 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/organizations/{organizationId}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
+      "get": {
+        "operationId": "getOrganizationWorkspace",
+        "tags": ["Organizations"],
+        "summary": "Get the current tenant workspace and organizer profile",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/members": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
+      "get": {
+        "operationId": "listOrganizationMembers",
+        "tags": ["Organizations"],
+        "summary": "List members visible to the current tenant principal",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/members/{memberId}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/OrganizationMemberID" }],
+      "put": {
+        "operationId": "updateOrganizationMember",
+        "tags": ["Organizations"],
+        "summary": "Change an organization member role within tenant policy",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateOrganizationMemberRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "revokeOrganizationMember",
+        "tags": ["Organizations"],
+        "summary": "Revoke an organization member within tenant policy",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/invitations": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
+      "get": {
+        "operationId": "listOrganizationInvitations",
+        "tags": ["Organizations"],
+        "summary": "List organization invitations without secret token material",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "createOrganizationInvitation",
+        "tags": ["Organizations"],
+        "summary": "Invite a user to the organization and deliver a one-time link",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateOrganizationInvitationRequest" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/organizations/{organizationId}/invitations/{invitationId}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/OrganizationInvitationID" }],
+      "delete": {
+        "operationId": "revokeOrganizationInvitation",
+        "tags": ["Organizations"],
+        "summary": "Revoke a pending organization invitation",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
@@ -739,6 +872,8 @@
       "Page": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
       "PageSize": { "name": "page_size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
       "OrganizationID": { "name": "organizationId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "OrganizationMemberID": { "name": "memberId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "OrganizationInvitationID": { "name": "invitationId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "OrganizerID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "EventID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "PostID": { "name": "postId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
@@ -754,6 +889,10 @@
       "PasswordResetConfirmRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetConfirmRequest" } } } },
       "RecoveryEmailRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecoveryEmailRequest" } } } },
       "RecoveryEmailConfirmRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RecoveryEmailConfirmRequest" } } } },
+      "CreateOrganizationRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrganizationRequest" } } } },
+      "CreateOrganizationInvitationRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrganizationInvitationRequest" } } } },
+      "AcceptOrganizationInvitationRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AcceptOrganizationInvitationRequest" } } } },
+      "UpdateOrganizationMemberRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateOrganizationMemberRequest" } } } },
       "CreateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrganizerRequest" } } } },
       "UpdateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateOrganizerRequest" } } } },
       "CreateEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEventRequest" } } } },
@@ -784,7 +923,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -797,7 +936,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -807,6 +946,10 @@
       "PasswordResetConfirmRequest": { "type": "object", "additionalProperties": false, "required": ["token", "password"], "properties": { "token": { "type": "string", "minLength": 1 }, "password": { "type": "string", "minLength": 8, "maxLength": 72 } } },
       "RecoveryEmailRequest": { "type": "object", "additionalProperties": false, "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "minLength": 1 } } },
       "RecoveryEmailConfirmRequest": { "type": "object", "additionalProperties": false, "required": ["token"], "properties": { "token": { "type": "string", "minLength": 1 } } },
+      "CreateOrganizationRequest": { "type": "object", "additionalProperties": false, "required": ["name", "slug", "profile_name"], "properties": { "name": { "type": "string" }, "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" }, "profile_name": { "type": "string" }, "profile_description": { "type": "string" }, "profile_contact": { "type": "string" }, "profile_logo_url": { "type": "string", "format": "uri-reference" }, "profile_address": { "type": "string" }, "profile_website": { "type": "string", "format": "uri-reference" }, "profile_tags": { "type": "string" } } },
+      "CreateOrganizationInvitationRequest": { "type": "object", "additionalProperties": false, "required": ["email", "role"], "properties": { "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["admin", "editor", "checker", "finance"] } } },
+      "AcceptOrganizationInvitationRequest": { "type": "object", "additionalProperties": false, "required": ["token"], "properties": { "token": { "type": "string", "minLength": 1 } } },
+      "UpdateOrganizationMemberRequest": { "type": "object", "additionalProperties": false, "required": ["role"], "properties": { "role": { "type": "string", "enum": ["admin", "editor", "checker", "finance"] } } },
       "CreateOrganizerRequest": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
       "UpdateOrganizerRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
       "CreateEventRequest": { "type": "object", "additionalProperties": false, "required": ["organizer_id", "title", "event_time", "location", "capacity", "price"], "properties": { "organizer_id": { "type": "integer", "format": "int64", "minimum": 1 }, "title": { "type": "string" }, "description": { "type": "string" }, "cover_url": { "type": "string", "format": "uri-reference" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer", "minimum": 1 }, "price": { "type": "number", "minimum": 0 } } },
@@ -824,6 +967,9 @@
       "LoginResponse": { "type": "object", "required": ["token", "user"], "properties": { "token": { "type": "string" }, "user": { "$ref": "#/components/schemas/UserResponse" } } },
       "AdminSessionResponse": { "type": "object", "required": ["authenticated", "principal_type"], "properties": { "authenticated": { "type": "boolean" }, "principal_type": { "type": "string", "enum": ["platform_admin"] } } },
       "OrganizationContextResponse": { "type": "object", "required": ["organization_id", "organization_name", "organization_slug", "organization_status", "membership_status", "role", "principal_type", "capabilities"], "properties": { "organization_id": { "type": "integer", "format": "int64" }, "organization_name": { "type": "string" }, "organization_slug": { "type": "string" }, "organization_status": { "type": "string", "enum": ["unclaimed", "active", "suspended", "system"] }, "membership_status": { "type": "string", "enum": ["active", "revoked"] }, "role": { "type": "string", "enum": ["owner", "admin", "editor", "checker", "finance"] }, "principal_type": { "type": "string", "enum": ["organization_member"] }, "capabilities": { "type": "array", "items": { "type": "string", "enum": ["audit.read", "checkins.manage", "events.manage", "finance.read", "members.invite", "members.manage", "members.read", "organization.manage", "organization.read", "owner.transfer", "registrations.export", "registrations.read", "tickets.manage"] } } } },
+      "OrganizationWorkspaceResponse": { "type": "object", "required": ["id", "name", "slug", "status", "profile", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "slug": { "type": "string" }, "status": { "type": "string", "enum": ["active", "suspended"] }, "profile": { "$ref": "#/components/schemas/OrganizerResponse" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "OrganizationMemberResponse": { "type": "object", "required": ["id", "user_id", "name", "contact", "role", "status", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "user_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "role": { "type": "string", "enum": ["owner", "admin", "editor", "checker", "finance"] }, "status": { "type": "string", "enum": ["active", "revoked"] }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "OrganizationInvitationResponse": { "type": "object", "required": ["id", "email", "role", "status", "expires_at", "invited_by_user_id", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "email": { "type": "string", "format": "email" }, "role": { "type": "string", "enum": ["admin", "editor", "checker", "finance"] }, "status": { "type": "string", "enum": ["pending", "accepted", "revoked", "expired"] }, "expires_at": { "type": "string", "format": "date-time" }, "accepted_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": "string", "format": "date-time" }, "invited_by_user_id": { "type": "integer", "format": "int64" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "OrganizerResponse": { "type": "object", "required": ["id", "name", "description", "contact", "logo_url", "address", "website", "tags", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" }, "event_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "EventResponse": { "type": "object", "required": ["id", "organizer_id", "title", "description", "cover_url", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "organizer_id": { "type": "integer", "format": "int64" }, "organizer_name": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "cover_url": { "type": "string", "format": "uri-reference" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer" }, "price": { "type": "number" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "TicketResponse": { "type": "object", "required": ["id", "event_id", "name", "price", "stock", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "price": { "type": "number" }, "stock": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },

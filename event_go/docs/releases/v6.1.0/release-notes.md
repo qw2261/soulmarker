@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：G5.3 Remote Candidate Pass（Commit 00ebef0 / Run 29443464930）；G5.1/G5.2 同样已通过远端门禁
+> 状态：G5.4 Local Candidate；G5.1–G5.3 已通过远端门禁，G5.4 Commit/Run 待回填
 
 ## 当前切片
 
@@ -22,13 +22,21 @@
 - 新增 tenant-scoped Event、Ticket、Registration、Checkin 与 CSV Export API；五角色通过 capability 进入各自最小业务路由。
 - `OrganizationOperationsService` 与 scoped Store SQL 同时服务 tenant 和 platform 兼容路由；正确资源 ID 不能绕过 URL organization scope。
 - 租户核销 actor 记录为 `organization_member:<userID>`；服务端 CSV 导出继续使用 UTF-8 BOM 与公式注入防护。
+- 新增组织自助创建、邀请接受、成员列表/改角色/撤销与邀请列表/撤销 API；OpenAPI、DTO 和 45 个稳定错误码同步。
+- 邀请使用 256 位随机 Token，数据库只存 SHA-256 摘要，明文只进入一次 SMTP 链接；投递失败自动撤销 pending 邀请。
+- revoked 成员可以通过新邀请恢复；owner、自我撤销和 admin 越权管理由事务内规则阻断。
+- 新增用户 JWT 驱动的组织工作台，覆盖组织选择/创建、活动发布、票种、报名、导出、核销和成员邀请，不依赖 `X-Admin-Token`。
+- 工作台按实时 capability 区分 editor、checker、finance；每次进入组织路由重新验证 tenant session。
+- 登录/注册在只允许站内路径的前提下保留邀请 redirect，未注册收件人可从邮件链接直接完成注册和接受。
+- Playwright 通过隔离本地 SMTP 捕获器在 desktop Chromium 与 Pixel 7 验证完整邀请和四角色运营旅程，且 localStorage 始终不存在 `admin_token`。
+- [ADR-007](../../adr/007-organization-self-service-and-invitation-delivery.md) 固化自助运营、邀请投递失败语义、成员保护和回退边界。
 
 ## 明确未完成
 
-- 没有新增组织自助创建、邀请接受或成员管理 HTTP API/UI。
-- G5-R05 已由 Commit `00ebef0` / Run `29443464930` 关闭；G5-R04 仍待 G5.4 替换公开业务面的 platform Token。
-- platform admin 兼容路由仍使用全局 Admin Token；虽已复用 scoped Service，但租户自助后台尚未替换公开业务面的管理认证。
-- tenant API 已可按角色操作资源，但尚无 G5.4 自助入驻、邀请/成员管理与租户后台 UI。
-- actor/tenant/request_id 审计与 PII 按角色脱敏尚未实现。
+- G5.4 当前只完成本地候选，必须等待功能提交远端 CI success 并回填 Commit/Run，才能关闭 G5-R04/G5-R06。
+- platform admin 兼容路由仍使用全局 Token，但仅保留应急和治理；移除兼容面需要单独的使用量审计与弃用计划。
+- actor/tenant/request_id 审计、成员操作审计和 PII 脱敏仍属于 G5.5。
+- 所有权转移、邀请限流/异步重试/退信处理和三个真实组织试点尚未完成。
+- G4 的真实 staging SMTP 与两场受控活动仍是独立上线门禁；本地 SMTP 捕获器不能替代外部投递验收。
 
 因此本版本是 G5 的可回滚基础迁移，不是完整多租户发布，也不改变 G4 真实 SMTP 与受控活动的待验收状态。
