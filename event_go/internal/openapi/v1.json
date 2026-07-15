@@ -335,7 +335,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string" },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -348,7 +348,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string" },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },

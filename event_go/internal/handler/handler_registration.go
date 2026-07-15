@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
@@ -13,7 +14,7 @@ func (h *Handler) getRegistrationEventOr404(w http.ResponseWriter, eventID int64
 	event, err := h.registrations.GetEvent(eventID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrNotFound.Error()})
+			writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
 		} else {
 			writeInternalError(w, "get_registration_event", err)
 		}
@@ -30,7 +31,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -49,17 +50,17 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		var fullError *service.RegistrationFullError
 		switch {
 		case errors.Is(err, model.ErrNotFound):
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeEventNotFound, err.Error())
 		case errors.Is(err, service.ErrEventNotPublished):
-			writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: err.Error()})
+			writeError(w, http.StatusBadRequest, api.CodeEventNotPublished, err.Error())
 		case errors.Is(err, model.ErrDuplicate):
-			writeJSON(w, http.StatusConflict, dto.Response{Code: 409, Message: err.Error()})
+			writeError(w, http.StatusConflict, api.CodeRegistrationDuplicate, err.Error())
 		case errors.As(err, &fullError):
-			writeJSON(w, http.StatusConflict, dto.Response{Code: 409, Message: fullError.Error()})
+			writeError(w, http.StatusConflict, api.CodeEventCapacityFull, fullError.Error())
 		case errors.Is(err, model.ErrTicketNotFound):
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeTicketNotFound, err.Error())
 		case errors.Is(err, model.ErrTicketSoldOut):
-			writeJSON(w, http.StatusConflict, dto.Response{Code: 409, Message: err.Error()})
+			writeError(w, http.StatusConflict, api.CodeTicketSoldOut, err.Error())
 		default:
 			writeInternalError(w, "register_event", err)
 		}
@@ -77,7 +78,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -96,9 +97,9 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 	if err := h.registrations.Cancel(event, user.ID); err != nil {
 		switch {
 		case errors.Is(err, model.ErrCancelDeadlineExceeded):
-			writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: err.Error()})
+			writeError(w, http.StatusBadRequest, api.CodeCancellationDeadlineExceeded, err.Error())
 		case errors.Is(err, model.ErrNotRegistered):
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeRegistrationNotFound, err.Error())
 		default:
 			writeInternalError(w, "cancel_registration", err)
 		}
@@ -111,7 +112,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetRegistrationStatus(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -155,7 +156,7 @@ func (h *Handler) ListMyRegistrations(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 

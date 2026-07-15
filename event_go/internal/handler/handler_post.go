@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
@@ -13,7 +14,7 @@ func (h *Handler) getDiscussionEventOr404(w http.ResponseWriter, eventID int64) 
 	event, err := h.discussions.GetEvent(eventID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrNotFound.Error()})
+			writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
 		} else {
 			writeInternalError(w, "get_discussion_event", err)
 		}
@@ -26,7 +27,7 @@ func (h *Handler) getDiscussionPostOr404(w http.ResponseWriter, eventID, postID 
 	post, err := h.discussions.GetPost(eventID, postID)
 	if err != nil {
 		if errors.Is(err, service.ErrPostNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: service.ErrPostNotFound.Error()})
+			writeError(w, http.StatusNotFound, api.CodePostNotFound, service.ErrPostNotFound.Error())
 		} else {
 			writeInternalError(w, "get_discussion_post", err)
 		}
@@ -43,7 +44,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -61,9 +62,9 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrNotRegistered):
-			writeJSON(w, http.StatusForbidden, dto.Response{Code: 403, Message: err.Error()})
+			writeError(w, http.StatusForbidden, api.CodeParticipationRequired, err.Error())
 		case errors.Is(err, service.ErrPostTitleRequired), errors.Is(err, service.ErrPostContentRequired):
-			writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: err.Error()})
+			writeError(w, http.StatusBadRequest, api.CodeValidationError, err.Error())
 		default:
 			writeInternalError(w, "create_post", err)
 		}
@@ -76,7 +77,7 @@ func (h *Handler) CreatePost(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListPosts(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -100,13 +101,13 @@ func (h *Handler) ListPosts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPost(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
 	postID, err := parsePostID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的帖子 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的帖子 ID")
 		return
 	}
 
@@ -132,13 +133,13 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
 	postID, err := parsePostID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的帖子 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的帖子 ID")
 		return
 	}
 
@@ -156,9 +157,9 @@ func (h *Handler) CreateReply(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrNotRegistered):
-			writeJSON(w, http.StatusForbidden, dto.Response{Code: 403, Message: err.Error()})
+			writeError(w, http.StatusForbidden, api.CodeParticipationRequired, err.Error())
 		case errors.Is(err, service.ErrReplyContentRequired):
-			writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: err.Error()})
+			writeError(w, http.StatusBadRequest, api.CodeValidationError, err.Error())
 		default:
 			writeInternalError(w, "create_reply", err)
 		}

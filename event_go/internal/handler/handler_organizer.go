@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
@@ -15,7 +16,7 @@ func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门店名称不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "门店名称不能为空")
 		return
 	}
 
@@ -38,7 +39,7 @@ func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
 	id, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门店 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门店 ID")
 		return
 	}
 	o, err := h.store.GetOrganizer(id)
@@ -47,7 +48,7 @@ func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if o == nil {
-		writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrOrganizerNotFound.Error()})
+		writeError(w, http.StatusNotFound, api.CodeOrganizerNotFound, model.ErrOrganizerNotFound.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.Organizer(o)})
@@ -67,7 +68,7 @@ func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 	id, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门店 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门店 ID")
 		return
 	}
 	var req dto.UpdateOrganizerRequest
@@ -75,13 +76,13 @@ func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门店名称不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "门店名称不能为空")
 		return
 	}
 	o, err := h.store.UpdateOrganizer(id, req.Command())
 	if err != nil {
 		if errors.Is(err, model.ErrOrganizerNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeOrganizerNotFound, err.Error())
 		} else {
 			writeInternalError(w, "update_organizer", err)
 		}
@@ -93,12 +94,12 @@ func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteOrganizer(w http.ResponseWriter, r *http.Request) {
 	id, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门店 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门店 ID")
 		return
 	}
 	if err := h.store.DeleteOrganizer(id); err != nil {
 		if errors.Is(err, model.ErrOrganizerNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeOrganizerNotFound, err.Error())
 		} else {
 			writeInternalError(w, "delete_organizer", err)
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/openapi"
 )
@@ -160,6 +161,33 @@ func TestOpenAPISchemasMatchDTOJSONFields(t *testing.T) {
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("schema fields mismatch for %s: OpenAPI=%v Go=%v", schemaName, actual, expected)
 		}
+	}
+}
+
+func TestOpenAPIErrorCodesMatchCatalog(t *testing.T) {
+	document := parseOpenAPIDocument(t)
+	schema, exists := document.Components.Schemas["ErrorResponse"]
+	if !exists {
+		t.Fatal("OpenAPI ErrorResponse schema missing")
+	}
+	rawProperty, exists := schema.Properties["error_code"]
+	if !exists {
+		t.Fatal("OpenAPI ErrorResponse.error_code missing")
+	}
+	var property struct {
+		Enum []string `json:"enum"`
+	}
+	if err := json.Unmarshal(rawProperty, &property); err != nil {
+		t.Fatalf("parse error_code schema: %v", err)
+	}
+	want := make([]string, 0, len(api.ErrorCodes()))
+	for _, code := range api.ErrorCodes() {
+		want = append(want, string(code))
+	}
+	sort.Strings(property.Enum)
+	sort.Strings(want)
+	if !reflect.DeepEqual(property.Enum, want) {
+		t.Fatalf("OpenAPI error codes differ from catalog: OpenAPI=%v Go=%v", property.Enum, want)
 	}
 }
 

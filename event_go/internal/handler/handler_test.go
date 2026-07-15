@@ -1449,11 +1449,89 @@ func TestErrorResponseFormat(t *testing.T) {
 	if apiResp.Code != 404 {
 		t.Errorf("expected code 404, got %d", apiResp.Code)
 	}
+	if apiResp.ErrorCode != "EVENT_NOT_FOUND" {
+		t.Errorf("expected EVENT_NOT_FOUND, got %q", apiResp.ErrorCode)
+	}
 	if apiResp.Message == "" {
 		t.Errorf("expected non-empty message, got %q", apiResp.Message)
 	}
 	if apiResp.Data != nil {
 		t.Errorf("expected nil data for error response, got %v", apiResp.Data)
+	}
+}
+
+func TestSameHTTPStatusUsesDistinctBusinessErrorCodes(t *testing.T) {
+	invalidUserToken := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	request.Header.Set("Authorization", "Basic invalid")
+	UserAuth(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("invalid user token reached handler")
+	}), appauth.NewJWTManager("test-secret")).ServeHTTP(invalidUserToken, request)
+
+	invalidAdminToken := httptest.NewRecorder()
+	AdminAuth(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("invalid admin token reached handler")
+	}), "admin-secret").ServeHTTP(invalidAdminToken, httptest.NewRequest(http.MethodGet, "/api/events", nil))
+
+	responses := []struct {
+		name     string
+		recorder *httptest.ResponseRecorder
+		wantCode string
+	}{
+		{"user token", invalidUserToken, "USER_TOKEN_INVALID"},
+		{"admin token", invalidAdminToken, "ADMIN_AUTH_INVALID"},
+	}
+	for _, tt := range responses {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("expected HTTP 401, got %d", tt.recorder.Code)
+			}
+			var response model.APIResp
+			if err := json.NewDecoder(tt.recorder.Body).Decode(&response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("legacy numeric code changed: got %d", response.Code)
+			}
+			if response.ErrorCode != tt.wantCode {
+				t.Fatalf("expected %s, got %s", tt.wantCode, response.ErrorCode)
+			}
+		})
+	}
+}
+
+func TestAPIFallbackReturnsStructuredErrors(t *testing.T) {
+	s := mustNewStore(t)
+	defer s.Close()
+	router := NewRouter(newTestHandler(s, config.Load()), nil)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantCode   string
+	}{
+		{"unknown route", http.MethodGet, "/api/v1/unknown", http.StatusNotFound, "API_ROUTE_NOT_FOUND"},
+		{"unsupported method", http.MethodPatch, "/api/v1/events/1", http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED"},
+		{"OpenAPI unsupported method", http.MethodPost, "/api/v1/openapi.json", http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED"},
+		{"legacy unknown route", http.MethodGet, "/api/unknown", http.StatusNotFound, "API_ROUTE_NOT_FOUND"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(tt.method, tt.path, nil))
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, recorder.Code)
+			}
+			var response model.APIResp
+			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+				t.Fatalf("expected JSON error response: %v", err)
+			}
+			if response.Code != tt.wantStatus || response.ErrorCode != tt.wantCode {
+				t.Fatalf("unexpected error response: %+v", response)
+			}
+		})
 	}
 }
 

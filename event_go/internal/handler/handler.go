@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
@@ -124,7 +125,7 @@ func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Ev
 		return nil, false
 	}
 	if event == nil {
-		writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrNotFound.Error()})
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
 		return nil, false
 	}
 	return event, true
@@ -138,7 +139,7 @@ func (h *Handler) getTicketForEventOr404(w http.ResponseWriter, eventID, ticketI
 		return nil, false
 	}
 	if ticket == nil || ticket.EventID != eventID {
-		writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrTicketNotFound.Error()})
+		writeError(w, http.StatusNotFound, api.CodeTicketNotFound, model.ErrTicketNotFound.Error())
 		return nil, false
 	}
 	return ticket, true
@@ -185,7 +186,8 @@ func CORS(next http.Handler, allowedOrigin string) http.Handler {
 // writeJSON 统一JSON响应格式，设置Content-Type和响应状态码
 func writeJSON(w http.ResponseWriter, status int, resp dto.Response) {
 	if status >= http.StatusBadRequest && resp.ErrorCode == "" {
-		resp.ErrorCode = defaultErrorCode(status)
+		slog.Error("error response missing business error code", "status", status)
+		resp = api.NewErrorResponse(status, api.CodeInternalError, "")
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -194,32 +196,13 @@ func writeJSON(w http.ResponseWriter, status int, resp dto.Response) {
 	}
 }
 
-func defaultErrorCode(status int) string {
-	switch status {
-	case http.StatusBadRequest:
-		return "BAD_REQUEST"
-	case http.StatusUnauthorized:
-		return "UNAUTHORIZED"
-	case http.StatusForbidden:
-		return "FORBIDDEN"
-	case http.StatusNotFound:
-		return "NOT_FOUND"
-	case http.StatusConflict:
-		return "CONFLICT"
-	case http.StatusRequestEntityTooLarge:
-		return "REQUEST_TOO_LARGE"
-	default:
-		return "INTERNAL_ERROR"
-	}
+func writeError(w http.ResponseWriter, status int, code api.ErrorCode, message string) {
+	writeJSON(w, status, api.NewErrorResponse(status, code, message))
 }
 
 func writeInternalError(w http.ResponseWriter, operation string, err error) {
 	slog.Error("request failed", "operation", operation, "error", err)
-	writeJSON(w, http.StatusInternalServerError, dto.Response{
-		Code:      http.StatusInternalServerError,
-		ErrorCode: "INTERNAL_ERROR",
-		Message:   "服务器内部错误",
-	})
+	writeError(w, http.StatusInternalServerError, api.CodeInternalError, "")
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
@@ -230,27 +213,15 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	if err := decoder.Decode(dst); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeJSON(w, http.StatusRequestEntityTooLarge, dto.Response{
-				Code:      http.StatusRequestEntityTooLarge,
-				ErrorCode: "REQUEST_TOO_LARGE",
-				Message:   "请求体过大",
-			})
+			writeError(w, http.StatusRequestEntityTooLarge, api.CodeRequestTooLarge, "")
 			return false
 		}
-		writeJSON(w, http.StatusBadRequest, dto.Response{
-			Code:      http.StatusBadRequest,
-			ErrorCode: "INVALID_JSON",
-			Message:   "请求体格式错误",
-		})
+		writeError(w, http.StatusBadRequest, api.CodeInvalidJSON, "")
 		return false
 	}
 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeJSON(w, http.StatusBadRequest, dto.Response{
-			Code:      http.StatusBadRequest,
-			ErrorCode: "INVALID_JSON",
-			Message:   "请求体只能包含一个 JSON 对象",
-		})
+		writeError(w, http.StatusBadRequest, api.CodeInvalidJSON, "请求体只能包含一个 JSON 对象")
 		return false
 	}
 	return true
@@ -264,7 +235,7 @@ func AdminAuth(next http.Handler, token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("X-Admin-Token")
 		if auth != token {
-			writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: model.ErrUnauthorized.Error()})
+			writeError(w, http.StatusUnauthorized, api.CodeAdminAuthInvalid, model.ErrUnauthorized.Error())
 			return
 		}
 		next.ServeHTTP(w, r)

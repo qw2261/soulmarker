@@ -2,7 +2,10 @@ package handler
 
 import (
 	"net/http"
+	"sort"
+	"strings"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/openapi"
 )
 
@@ -64,6 +67,51 @@ func registerAPIRoutes(mux *http.ServeMux, prefix string, routes []apiRoute) {
 	}
 }
 
+func routePathMatches(pattern, actual string) bool {
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	actualParts := strings.Split(strings.Trim(actual, "/"), "/")
+	if len(patternParts) != len(actualParts) {
+		return false
+	}
+	for i := range patternParts {
+		if strings.HasPrefix(patternParts[i], "{") && strings.HasSuffix(patternParts[i], "}") {
+			if actualParts[i] == "" {
+				return false
+			}
+			continue
+		}
+		if patternParts[i] != actualParts[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func apiFallback(prefix string, routes []apiRoute) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, prefix)
+		allowed := make([]string, 0)
+		for _, route := range routes {
+			if routePathMatches(route.Path, path) {
+				allowed = append(allowed, route.Method)
+			}
+		}
+		if len(allowed) == 0 {
+			writeError(w, http.StatusNotFound, api.CodeAPIRouteNotFound, "")
+			return
+		}
+		sort.Strings(allowed)
+		w.Header().Set("Allow", strings.Join(allowed, ", "))
+		writeError(w, http.StatusMethodNotAllowed, api.CodeMethodNotAllowed, "")
+	})
+}
+
+func registerAPIFallback(mux *http.ServeMux, prefix string, routes []apiRoute) {
+	fallback := apiFallback(prefix, routes)
+	mux.Handle(prefix, fallback)
+	mux.Handle(prefix+"/", fallback)
+}
+
 // NewRouter 创建生产与集成测试共用的唯一路由和中间件组合。
 func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	if fallback == nil {
@@ -75,6 +123,9 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	registerAPIRoutes(mux, "/api", routes)
 	registerAPIRoutes(mux, "/api/v1", routes)
 	mux.HandleFunc("GET /api/v1/openapi.json", openapi.ServeV1)
+	v1FallbackRoutes := append([]apiRoute{{Method: http.MethodGet, Path: "/openapi.json"}}, routes...)
+	registerAPIFallback(mux, "/api/v1", v1FallbackRoutes)
+	registerAPIFallback(mux, "/api", routes)
 	mux.HandleFunc("GET /health", h.HealthHandler)
 	mux.Handle("/", fallback)
 

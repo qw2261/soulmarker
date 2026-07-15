@@ -136,7 +136,7 @@ User (用户) — 注册/登录获得 JWT
 
 ## 当前进度
 
-**v5.5 契约稳定候选版** — 27 个业务操作进入 `/api/v1`，前端默认使用 v1；旧 `/api` 路径保留一个兼容周期。
+**v5.5 契约稳定验证版** — 27 个业务操作进入 `/api/v1`，前端默认使用 v1；旧 `/api` 路径保留一个兼容周期；稳定业务错误码已进入候选验证。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -196,7 +196,17 @@ GET    /health                                        健康检查
 
 分页响应额外返回 `total`、`page`、`page_size` 字段。
 
-所有 JSON 写请求最多 1 MiB，未知字段、多个连续 JSON 对象和尾随内容会返回 400/413。错误响应保留数字 `code`，并增加稳定字符串 `error_code`；HTTP 500 只返回通用信息，内部错误写入服务日志。
+所有 JSON 写请求最多 1 MiB，未知字段、多个连续 JSON 对象和尾随内容会返回 400/413。错误响应保留数字 `code`，并增加与 HTTP 状态独立的稳定字符串 `error_code`；HTTP 500 只返回通用信息，内部错误写入服务日志。
+
+业务错误码按用途分组如下，机器可读完整枚举以 OpenAPI `ErrorResponse` 为准：
+
+| 类别 | `error_code` |
+|---|---|
+| 请求边界 | `VALIDATION_ERROR`、`INVALID_JSON`、`REQUEST_TOO_LARGE`、`API_ROUTE_NOT_FOUND`、`METHOD_NOT_ALLOWED` |
+| 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS` |
+| 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND` |
+| 报名与讨论 | `EVENT_NOT_PUBLISHED`、`REGISTRATION_DUPLICATE`、`EVENT_CAPACITY_FULL`、`TICKET_SOLD_OUT`、`REGISTRATION_NOT_FOUND`、`CANCELLATION_DEADLINE_EXCEEDED`、`PARTICIPATION_REQUIRED` |
+| 服务端 | `INTERNAL_ERROR` |
 
 详细历史任务见 [docs/mvp_task.md](docs/mvp_task.md)，后续路线见 [docs/goal.md](docs/goal.md)。
 

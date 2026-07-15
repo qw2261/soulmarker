@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01–R07 当前实现均已通过本地和远端门禁
+> 状态：Verification，G3-R01–R07 已通过远端门禁，G3-R08 已通过本地门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
-| 已验证基线 Commit | 95df8c98d16b3dd3fcd1d5967dd18e0deabe1dd2 |
-| 当前候选 Commit | f145e61cdbe75cecbf9621cb76611119b49aeaab |
+| 已验证基线 Commit | f1b7227846cb6aa48e4e234523d77460b588999a |
+| 当前候选 Commit | 待提交与远端验证 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -22,12 +22,13 @@
 | G3-R06 | ARCH-DEPS-001 | TestJWTManagerSignAndVerifyUser、TestGenerateTokenUsesInjectedClockAndSigner、取消截止确定时间测试 |
 | G3-R04 | CT-DTO-001 | TestResponseEnvelopeContract、TestUserAndLoginResponseDoNotExposePassword、TestEntityMappersFixPublicFieldSets、TestPostDetailUsesStableEmptyArray、既有 Handler 契约回归 |
 | G3-R07 | CT-OPENAPI-001 | TestOpenAPIRoutesMatchRouterCatalog、TestOpenAPISchemasMatchDTOJSONFields、TestVersionedAndLegacyRoutesAreEquivalent、TestOpenAPISpecIsServedFromVersionedAPI |
+| G3-R08 | CT-ERROR-CODE-001、SEC-ERROR-002 | TestErrorCodeCatalog、TestNewErrorResponsePreservesLegacyNumericCode、TestNewErrorResponseRejectsUnknownCode、TestSameHTTPStatusUsesDistinctBusinessErrorCodes、TestAPIFallbackReturnsStructuredErrors、TestErrorResponseFormat、TestInternalErrorsDoNotLeak、TestOpenAPIErrorCodesMatchCatalog |
 
 ## 本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 228 |
+| 顶层 Go Test 数量 | 234 |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
@@ -51,4 +52,4 @@
 
 ## Go/No-Go
 
-No-Go：R07 切片已完成验证；G3 仍有稳定业务错误码工作。
+No-Go：G3 实现范围已冻结并进入验证；稳定业务错误码候选仍需远端 CI、候选 SHA、Tag 与正式发布证据。

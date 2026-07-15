@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
@@ -12,7 +13,7 @@ import (
 func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -27,15 +28,15 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.TrimSpace(req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门票名称不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "门票名称不能为空")
 		return
 	}
 	if req.Price < 0 {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "价格不能为负数"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "价格不能为负数")
 		return
 	}
 	if req.Stock <= 0 {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "库存必须大于 0"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "库存必须大于 0")
 		return
 	}
 
@@ -56,7 +57,7 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
@@ -80,13 +81,13 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门票 ID")
 		return
 	}
 
@@ -101,13 +102,13 @@ func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门票 ID")
 		return
 	}
 
@@ -121,22 +122,22 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门票名称不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "门票名称不能为空")
 		return
 	}
 	if req.Price != nil && *req.Price < 0 {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "价格不能为负数"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "价格不能为负数")
 		return
 	}
 	if req.Stock != nil && *req.Stock < 0 {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "库存不能为负数"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "库存不能为负数")
 		return
 	}
 
 	ticket, err := h.store.UpdateTicket(ticketID, req.Command())
 	if err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeTicketNotFound, err.Error())
 		} else {
 			writeInternalError(w, "update_ticket", err)
 		}
@@ -149,13 +150,13 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门票 ID")
 		return
 	}
 
@@ -165,7 +166,7 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.DeleteTicket(ticketID); err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
-			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
+			writeError(w, http.StatusNotFound, api.CodeTicketNotFound, err.Error())
 		} else {
 			writeInternalError(w, "delete_ticket", err)
 		}

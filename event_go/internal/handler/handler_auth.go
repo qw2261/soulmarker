@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
@@ -19,11 +20,11 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" || req.Contact == "" || req.Password == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "姓名、联系方式、密码不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "姓名、联系方式、密码不能为空")
 		return
 	}
 	if len(req.Password) < 6 {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "密码至少 6 位"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "密码至少 6 位")
 		return
 	}
 
@@ -40,7 +41,7 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.CreateUser(u); err != nil {
 		if errors.Is(err, model.ErrUserExists) {
-			writeJSON(w, http.StatusConflict, dto.Response{Code: 409, Message: err.Error()})
+			writeError(w, http.StatusConflict, api.CodeUserAlreadyExists, err.Error())
 		} else {
 			writeInternalError(w, "register_user", err)
 		}
@@ -65,7 +66,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Contact == "" || req.Password == "" {
-		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "联系方式、密码不能为空"})
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "联系方式、密码不能为空")
 		return
 	}
 
@@ -75,12 +76,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: model.ErrInvalidCreds.Error()})
+		writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, model.ErrInvalidCreds.Error())
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
-		writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: model.ErrInvalidCreds.Error()})
+		writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, model.ErrInvalidCreds.Error())
 		return
 	}
 
@@ -108,18 +109,18 @@ func UserAuth(next http.Handler, tokens auth.TokenManager) http.Handler {
 			return
 		}
 		if !strings.HasPrefix(auth, "Bearer ") {
-			writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: "用户认证失败，请重新登录"})
+			writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "")
 			return
 		}
 
 		tokenStr := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
 		if tokenStr == "" {
-			writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: "用户认证失败，请重新登录"})
+			writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "")
 			return
 		}
 		claims, err := tokens.VerifyUser(tokenStr)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: "用户认证失败，请重新登录"})
+			writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "")
 			return
 		}
 
@@ -131,7 +132,7 @@ func UserAuth(next http.Handler, tokens auth.TokenManager) http.Handler {
 func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (*model.User, bool) {
 	claims, ok := model.UserFromContext(r.Context())
 	if !ok || claims.UserID <= 0 {
-		writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: "请先登录"})
+		writeError(w, http.StatusUnauthorized, api.CodeUserAuthRequired, "")
 		return nil, false
 	}
 	user, err := h.store.GetUserByID(claims.UserID)
@@ -140,7 +141,7 @@ func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (*model.Us
 		return nil, false
 	}
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: "用户不存在或登录已失效"})
+		writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "用户不存在或登录已失效")
 		return nil, false
 	}
 	return user, true
