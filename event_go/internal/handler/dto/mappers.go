@@ -68,11 +68,57 @@ func Tickets(tickets []*model.Ticket) []TicketResponse {
 }
 
 func Registration(registration *model.Registration) RegistrationResponse {
-	return RegistrationResponse{
+	response := RegistrationResponse{
 		ID: registration.ID, EventID: registration.EventID, Name: registration.Name,
 		Contact: registration.Contact, TicketID: registration.TicketID, TicketName: registration.TicketName,
 		IdentityStatus: registration.IdentityStatus, CreatedAt: registration.CreatedAt,
 	}
+	if registration.Admission != nil {
+		admission := Admission(registration.Admission)
+		response.Admission = &admission
+	}
+	return response
+}
+
+func Admission(admission *model.Admission) AdmissionResponse {
+	return AdmissionResponse{
+		ID: admission.ID, EventID: admission.EventID, TicketName: admission.TicketName,
+		CredentialCode: admission.CredentialCode,
+		Credential:     model.AdmissionCredentialPrefix + admission.CredentialCode,
+		Status:         admission.Status, IssuedAt: admission.IssuedAt, RevokedAt: admission.RevokedAt,
+		CheckedInAt: admission.CheckedInAt,
+	}
+}
+
+func MyAdmission(admission *model.MyAdmission) MyAdmissionResponse {
+	return MyAdmissionResponse{
+		AdmissionResponse: Admission(&admission.Admission), EventTitle: admission.EventTitle,
+		EventTime: admission.EventTime, Location: admission.Location, EventStatus: admission.EventStatus,
+	}
+}
+
+func MyAdmissions(admissions []*model.MyAdmission) []MyAdmissionResponse {
+	result := make([]MyAdmissionResponse, 0, len(admissions))
+	for _, admission := range admissions {
+		result = append(result, MyAdmission(admission))
+	}
+	return result
+}
+
+func Checkin(checkin *model.Checkin) CheckinResponse {
+	return CheckinResponse{
+		ID: checkin.ID, AdmissionID: checkin.AdmissionID, EventID: checkin.EventID,
+		CredentialCode: checkin.CredentialCode, UserName: checkin.UserName,
+		UserContact: checkin.UserContact, CheckedInAt: checkin.CheckedInAt, CheckedInBy: checkin.CheckedInBy,
+	}
+}
+
+func Checkins(checkins []*model.Checkin) []CheckinResponse {
+	result := make([]CheckinResponse, 0, len(checkins))
+	for _, checkin := range checkins {
+		result = append(result, Checkin(checkin))
+	}
+	return result
 }
 
 func Registrations(registrations []*model.Registration) []RegistrationResponse {

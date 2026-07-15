@@ -137,18 +137,60 @@ type TicketResponse struct {
 }
 
 type RegistrationResponse struct {
+	ID             int64              `json:"id"`
+	EventID        int64              `json:"event_id"`
+	Name           string             `json:"name"`
+	Contact        string             `json:"contact"`
+	TicketID       *int64             `json:"ticket_id,omitempty"`
+	TicketName     string             `json:"ticket_name,omitempty"`
+	IdentityStatus string             `json:"identity_status,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	Admission      *AdmissionResponse `json:"admission,omitempty"`
+}
+
+type AdmissionResponse struct {
+	ID             int64      `json:"id"`
+	EventID        int64      `json:"event_id"`
+	TicketName     string     `json:"ticket_name,omitempty"`
+	CredentialCode string     `json:"credential_code"`
+	Credential     string     `json:"credential"`
+	Status         string     `json:"status"`
+	IssuedAt       time.Time  `json:"issued_at"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
+	CheckedInAt    *time.Time `json:"checked_in_at,omitempty"`
+}
+
+type MyAdmissionResponse struct {
+	AdmissionResponse
+	EventTitle  string `json:"event_title"`
+	EventTime   string `json:"event_time"`
+	Location    string `json:"location"`
+	EventStatus string `json:"event_status"`
+}
+
+type CheckinRequest struct {
+	Credential string `json:"credential"`
+}
+
+type CheckinResponse struct {
 	ID             int64     `json:"id"`
+	AdmissionID    int64     `json:"admission_id"`
 	EventID        int64     `json:"event_id"`
-	Name           string    `json:"name"`
-	Contact        string    `json:"contact"`
-	TicketID       *int64    `json:"ticket_id,omitempty"`
-	TicketName     string    `json:"ticket_name,omitempty"`
-	IdentityStatus string    `json:"identity_status,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	CredentialCode string    `json:"credential_code,omitempty"`
+	UserName       string    `json:"user_name,omitempty"`
+	UserContact    string    `json:"user_contact,omitempty"`
+	CheckedInAt    time.Time `json:"checked_in_at"`
+	CheckedInBy    string    `json:"checked_in_by"`
+}
+
+type CheckinResultResponse struct {
+	Checkin          CheckinResponse `json:"checkin"`
+	AlreadyCheckedIn bool            `json:"already_checked_in"`
 }
 
 type RegistrationStatusResponse struct {
-	Registered bool `json:"registered"`
+	Registered bool               `json:"registered"`
+	Admission  *AdmissionResponse `json:"admission,omitempty"`
 }
 
 type MyRegistrationResponse struct {

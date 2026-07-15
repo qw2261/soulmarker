@@ -3,7 +3,7 @@
   "info": {
     "title": "Soulmarker Event API",
     "version": "1.0.0",
-    "description": "Versioned API contract for authentication, organizers, events, registrations, discussions and tickets. Legacy /api routes remain available for one compatibility cycle."
+    "description": "Versioned API contract for authentication, organizers, events, registrations, admissions, checkins, discussions and tickets. Legacy /api routes remain available for one compatibility cycle."
   },
   "servers": [{ "url": "/api/v1" }],
   "tags": [
@@ -14,7 +14,8 @@
     { "name": "Events" },
     { "name": "Registrations" },
     { "name": "Discussions" },
-    { "name": "Tickets" }
+    { "name": "Tickets" },
+    { "name": "Admissions" }
   ],
   "paths": {
     "/openapi.json": {
@@ -56,6 +57,22 @@
         "operationId": "listMyRegistrations",
         "tags": ["Me"],
         "summary": "List registrations owned by the current user",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/admissions": {
+      "get": {
+        "operationId": "listMyAdmissions",
+        "tags": ["Me", "Admissions"],
+        "summary": "List current and revoked free-event admission credentials",
         "security": [{ "BearerAuth": [] }],
         "parameters": [
           { "$ref": "#/components/parameters/Page" },
@@ -213,6 +230,53 @@
         "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
+    "/events/{id}/admission": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "getMyAdmission",
+        "tags": ["Admissions"],
+        "summary": "Get the current user's admission credential for an event",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/events/{id}/checkins": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "checkInAdmission",
+        "tags": ["Admissions"],
+        "summary": "Idempotently check in an admission credential",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CheckinRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "201": { "$ref": "#/components/responses/Created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      },
+      "get": {
+        "operationId": "listEventCheckins",
+        "tags": ["Admissions"],
+        "summary": "List immutable checkin audit records",
+        "security": [{ "AdminToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/events/{id}/posts": {
       "parameters": [{ "$ref": "#/components/parameters/EventID" }],
       "post": {
@@ -318,7 +382,8 @@
       "CreatePostRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePostRequest" } } } },
       "CreateReplyRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateReplyRequest" } } } },
       "CreateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } } },
-      "UpdateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTicketRequest" } } } }
+      "UpdateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTicketRequest" } } } },
+      "CheckinRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CheckinRequest" } } } }
     },
     "responses": {
       "OK": { "description": "Successful response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/APIResponse" } } } },
@@ -335,7 +400,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -348,7 +413,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -363,13 +428,18 @@
       "CreateReplyRequest": { "type": "object", "additionalProperties": false, "required": ["content"], "properties": { "content": { "type": "string" } } },
       "CreateTicketRequest": { "type": "object", "additionalProperties": false, "required": ["name", "price", "stock"], "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 1 } } },
       "UpdateTicketRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 0 } } },
+      "CheckinRequest": { "type": "object", "additionalProperties": false, "required": ["credential"], "properties": { "credential": { "type": "string", "minLength": 1 } } },
       "UserResponse": { "type": "object", "required": ["id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
       "LoginResponse": { "type": "object", "required": ["token", "user"], "properties": { "token": { "type": "string" }, "user": { "$ref": "#/components/schemas/UserResponse" } } },
       "OrganizerResponse": { "type": "object", "required": ["id", "name", "description", "contact", "logo_url", "address", "website", "tags", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" }, "event_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "EventResponse": { "type": "object", "required": ["id", "organizer_id", "title", "description", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "organizer_id": { "type": "integer", "format": "int64" }, "organizer_name": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer" }, "price": { "type": "number" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
       "TicketResponse": { "type": "object", "required": ["id", "event_id", "name", "price", "stock", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "price": { "type": "number" }, "stock": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
-      "RegistrationResponse": { "type": "object", "required": ["id", "event_id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "identity_status": { "type": "string", "enum": ["verified", "backfilled", "legacy"] }, "created_at": { "type": "string", "format": "date-time" } } },
-      "RegistrationStatusResponse": { "type": "object", "required": ["registered"], "properties": { "registered": { "type": "boolean" } } },
+      "RegistrationResponse": { "type": "object", "required": ["id", "event_id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "identity_status": { "type": "string", "enum": ["verified", "backfilled", "legacy"] }, "created_at": { "type": "string", "format": "date-time" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },
+      "AdmissionResponse": { "type": "object", "required": ["id", "event_id", "credential_code", "credential", "status", "issued_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "credential_code": { "type": "string", "pattern": "^[0-9a-f]{32}$" }, "credential": { "type": "string" }, "status": { "type": "string", "enum": ["active", "revoked"] }, "issued_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": "string", "format": "date-time" }, "checked_in_at": { "type": "string", "format": "date-time" } } },
+      "MyAdmissionResponse": { "type": "object", "required": ["id", "event_id", "credential_code", "credential", "status", "issued_at", "event_title", "event_time", "location", "event_status"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "credential_code": { "type": "string", "pattern": "^[0-9a-f]{32}$" }, "credential": { "type": "string" }, "status": { "type": "string", "enum": ["active", "revoked"] }, "issued_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": "string", "format": "date-time" }, "checked_in_at": { "type": "string", "format": "date-time" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" } } },
+      "CheckinResponse": { "type": "object", "required": ["id", "admission_id", "event_id", "checked_in_at", "checked_in_by"], "properties": { "id": { "type": "integer", "format": "int64" }, "admission_id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "credential_code": { "type": "string" }, "user_name": { "type": "string" }, "user_contact": { "type": "string" }, "checked_in_at": { "type": "string", "format": "date-time" }, "checked_in_by": { "type": "string" } } },
+      "CheckinResultResponse": { "type": "object", "required": ["checkin", "already_checked_in"], "properties": { "checkin": { "$ref": "#/components/schemas/CheckinResponse" }, "already_checked_in": { "type": "boolean" } } },
+      "RegistrationStatusResponse": { "type": "object", "required": ["registered"], "properties": { "registered": { "type": "boolean" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },
       "MyRegistrationResponse": { "type": "object", "required": ["id", "event_id", "event_title", "event_time", "location", "event_status", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
       "PostResponse": { "type": "object", "required": ["id", "event_id", "author_name", "title", "content", "reply_count", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "title": { "type": "string" }, "content": { "type": "string" }, "reply_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" } } },
       "ReplyResponse": { "type": "object", "required": ["id", "post_id", "author_name", "content", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "content": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },

@@ -20,6 +20,7 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
+	"github.com/qw2261/soulmarker/event_go/internal/identifier"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
@@ -67,8 +68,9 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 	return NewHandler(s, cfg, Dependencies{
 		Clock:         businessClock,
 		Tokens:        appauth.NewJWTManager(cfg.JWTSecret),
-		Registrations: service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour),
+		Registrations: service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, identifier.CryptoCredentialGenerator{}),
 		Discussions:   service.NewDiscussionService(s),
+		Admissions:    service.NewAdmissionService(s, businessClock),
 	})
 }
 
@@ -1204,8 +1206,9 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 	h := NewHandler(s, cfg, Dependencies{
 		Clock:         businessClock,
 		Tokens:        tokens,
-		Registrations: service.NewRegistrationService(s, businessClock, 24*time.Hour),
+		Registrations: service.NewRegistrationService(s, businessClock, 24*time.Hour, identifier.CryptoCredentialGenerator{}),
 		Discussions:   service.NewDiscussionService(s),
+		Admissions:    service.NewAdmissionService(s, businessClock),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 
@@ -2735,5 +2738,151 @@ func TestIdentityMigrationReportRequiresAdmin(t *testing.T) {
 	registrations := data["registrations"].(map[string]interface{})
 	if registrations["verified"].(float64) != 1 || registrations["legacy"].(float64) != 1 {
 		t.Fatalf("unexpected identity report: %#v", registrations)
+	}
+}
+
+func TestAdmissionAndCheckinHTTPJourney(t *testing.T) {
+	_, _, server := setupTestServer(t)
+
+	createResponse, err := http.Post(server.URL+"/api/events", "application/json", strings.NewReader(
+		`{"organizer_id":1,"title":"免费核销活动","event_time":"2099-12-31T18:00:00+08:00","location":"现场","capacity":10,"price":0}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var eventResponse model.APIResp
+	if err := json.NewDecoder(createResponse.Body).Decode(&eventResponse); err != nil {
+		t.Fatal(err)
+	}
+	createResponse.Body.Close()
+	eventID := int64(eventResponse.Data.(map[string]interface{})["id"].(float64))
+
+	registerResponse := doUserJSON(t, http.MethodPost, server.URL+"/api/events/"+itoa64(eventID)+"/register", `{}`, 0, "凭证用户", "admission-http@example.com")
+	if registerResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("register: expected 201, got %d", registerResponse.StatusCode)
+	}
+	var registrationResponse model.APIResp
+	if err := json.NewDecoder(registerResponse.Body).Decode(&registrationResponse); err != nil {
+		t.Fatal(err)
+	}
+	registerResponse.Body.Close()
+	admission := registrationResponse.Data.(map[string]interface{})["admission"].(map[string]interface{})
+	credential := admission["credential"].(string)
+	if !strings.HasPrefix(credential, service.AdmissionCredentialPrefix) {
+		t.Fatalf("unexpected credential payload %q", credential)
+	}
+
+	getResponse := doUserJSON(t, http.MethodGet, server.URL+"/api/events/"+itoa64(eventID)+"/admission", "", 0, "凭证用户", "admission-http@example.com")
+	if getResponse.StatusCode != http.StatusOK {
+		t.Fatalf("get admission: expected 200, got %d", getResponse.StatusCode)
+	}
+	getResponse.Body.Close()
+
+	listResponse := doUserJSON(t, http.MethodGet, server.URL+"/api/me/admissions", "", 0, "凭证用户", "admission-http@example.com")
+	var listPayload model.APIResp
+	if err := json.NewDecoder(listResponse.Body).Decode(&listPayload); err != nil {
+		t.Fatal(err)
+	}
+	listResponse.Body.Close()
+	if listResponse.StatusCode != http.StatusOK || listPayload.Total == nil || *listPayload.Total != 1 {
+		t.Fatalf("unexpected admission list: status=%d payload=%+v", listResponse.StatusCode, listPayload)
+	}
+
+	checkinBody := `{"credential":"` + credential + `"}`
+	first, err := http.Post(server.URL+"/api/events/"+itoa64(eventID)+"/checkins", "application/json", strings.NewReader(checkinBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstPayload model.APIResp
+	if err := json.NewDecoder(first.Body).Decode(&firstPayload); err != nil {
+		t.Fatal(err)
+	}
+	first.Body.Close()
+	if first.StatusCode != http.StatusCreated || firstPayload.Data.(map[string]interface{})["already_checked_in"].(bool) {
+		t.Fatalf("unexpected first checkin: status=%d payload=%+v", first.StatusCode, firstPayload)
+	}
+
+	second, err := http.Post(server.URL+"/api/events/"+itoa64(eventID)+"/checkins", "application/json", strings.NewReader(checkinBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var secondPayload model.APIResp
+	if err := json.NewDecoder(second.Body).Decode(&secondPayload); err != nil {
+		t.Fatal(err)
+	}
+	second.Body.Close()
+	if second.StatusCode != http.StatusOK || !secondPayload.Data.(map[string]interface{})["already_checked_in"].(bool) {
+		t.Fatalf("unexpected duplicate checkin: status=%d payload=%+v", second.StatusCode, secondPayload)
+	}
+
+	auditResponse, err := http.Get(server.URL + "/api/events/" + itoa64(eventID) + "/checkins")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auditPayload model.APIResp
+	if err := json.NewDecoder(auditResponse.Body).Decode(&auditPayload); err != nil {
+		t.Fatal(err)
+	}
+	auditResponse.Body.Close()
+	if auditResponse.StatusCode != http.StatusOK || auditPayload.Total == nil || *auditPayload.Total != 1 {
+		t.Fatalf("unexpected audit list: status=%d payload=%+v", auditResponse.StatusCode, auditPayload)
+	}
+
+	cancelResponse := doUserJSON(t, http.MethodDelete, server.URL+"/api/events/"+itoa64(eventID)+"/register", `{}`, 0, "凭证用户", "admission-http@example.com")
+	var cancelPayload model.APIResp
+	if err := json.NewDecoder(cancelResponse.Body).Decode(&cancelPayload); err != nil {
+		t.Fatal(err)
+	}
+	cancelResponse.Body.Close()
+	if cancelResponse.StatusCode != http.StatusConflict || cancelPayload.ErrorCode != "ADMISSION_ALREADY_CHECKED_IN" {
+		t.Fatalf("checked-in cancellation was not rejected: status=%d payload=%+v", cancelResponse.StatusCode, cancelPayload)
+	}
+
+	deleteRequest, _ := http.NewRequest(http.MethodDelete, server.URL+"/api/events/"+itoa64(eventID), nil)
+	deleteResponse, err := http.DefaultClient.Do(deleteRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deletePayload model.APIResp
+	if err := json.NewDecoder(deleteResponse.Body).Decode(&deletePayload); err != nil {
+		t.Fatal(err)
+	}
+	deleteResponse.Body.Close()
+	if deleteResponse.StatusCode != http.StatusConflict || deletePayload.ErrorCode != "EVENT_HAS_ADMISSIONS" {
+		t.Fatalf("event with admissions was deleted: status=%d payload=%+v", deleteResponse.StatusCode, deletePayload)
+	}
+}
+
+func TestRevokedAdmissionCannotBeCheckedIn(t *testing.T) {
+	_, _, server := setupTestServer(t)
+	createResponse, _ := http.Post(server.URL+"/api/events", "application/json", strings.NewReader(
+		`{"organizer_id":1,"title":"取消凭证活动","event_time":"2099-12-31T18:00:00+08:00","location":"现场","capacity":10,"price":0}`,
+	))
+	var eventResponse model.APIResp
+	_ = json.NewDecoder(createResponse.Body).Decode(&eventResponse)
+	createResponse.Body.Close()
+	eventID := int64(eventResponse.Data.(map[string]interface{})["id"].(float64))
+	registerResponse := doUserJSON(t, http.MethodPost, server.URL+"/api/events/"+itoa64(eventID)+"/register", `{}`, 0, "取消用户", "revoked-http@example.com")
+	var registrationResponse model.APIResp
+	_ = json.NewDecoder(registerResponse.Body).Decode(&registrationResponse)
+	registerResponse.Body.Close()
+	credential := registrationResponse.Data.(map[string]interface{})["admission"].(map[string]interface{})["credential"].(string)
+	cancelResponse := doUserJSON(t, http.MethodDelete, server.URL+"/api/events/"+itoa64(eventID)+"/register", `{}`, 0, "取消用户", "revoked-http@example.com")
+	cancelResponse.Body.Close()
+	if cancelResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected cancellation success, got %d", cancelResponse.StatusCode)
+	}
+
+	response, err := http.Post(server.URL+"/api/events/"+itoa64(eventID)+"/checkins", "application/json", strings.NewReader(`{"credential":"`+credential+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload model.APIResp
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusConflict || payload.ErrorCode != "ADMISSION_REVOKED" {
+		t.Fatalf("revoked credential was accepted: status=%d payload=%+v", response.StatusCode, payload)
 	}
 }

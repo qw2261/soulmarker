@@ -13,6 +13,7 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler"
+	"github.com/qw2261/soulmarker/event_go/internal/identifier"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
@@ -35,12 +36,15 @@ func main() {
 
 	businessClock := clock.System{}
 	tokens := auth.NewJWTManager(cfg.JWTSecret)
-	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour)
+	credentials := identifier.CryptoCredentialGenerator{}
+	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, credentials)
+	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
 	h := handler.NewHandler(s, cfg, handler.Dependencies{
 		Clock:         businessClock,
 		Tokens:        tokens,
 		Registrations: registrations,
+		Admissions:    admissions,
 		Discussions:   discussions,
 	})
 
@@ -62,6 +66,7 @@ func main() {
 	log.Printf("  POST   /api/v1/auth/register                    用户注册")
 	log.Printf("  POST   /api/v1/auth/login                       用户登录")
 	log.Printf("  GET    /api/v1/me/registrations                 当前用户报名列表")
+	log.Printf("  GET    /api/v1/me/admissions                    当前用户入场凭证")
 	log.Printf("  GET    /api/v1/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/v1/organizers                       创建门店 🔐")
 	log.Printf("  GET    /api/v1/organizers                       门店列表")
@@ -77,6 +82,9 @@ func main() {
 	log.Printf("  DELETE /api/v1/events/{id}/register             取消报名")
 	log.Printf("  GET    /api/v1/events/{id}/registration         当前用户报名状态")
 	log.Printf("  GET    /api/v1/events/{id}/registrations        报名列表 🔐")
+	log.Printf("  GET    /api/v1/events/{id}/admission            当前用户活动凭证")
+	log.Printf("  POST   /api/v1/events/{id}/checkins             核销入场凭证 🔐")
+	log.Printf("  GET    /api/v1/events/{id}/checkins             核销审计列表 🔐")
 	log.Printf("  POST   /api/v1/events/{id}/posts                发帖（需已报名）")
 	log.Printf("  GET    /api/v1/events/{id}/posts                帖子列表")
 	log.Printf("  GET    /api/v1/events/{id}/posts/{postId}       帖子详情（含回复）")

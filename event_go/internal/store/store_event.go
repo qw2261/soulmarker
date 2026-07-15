@@ -186,6 +186,14 @@ func (s *Store) DeleteEvent(id int64) error {
 	}
 	defer tx.Rollback()
 
+	var admissionCount int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM admissions WHERE event_id = ?`, id).Scan(&admissionCount); err != nil {
+		return fmt.Errorf("查询活动入场凭证失败: %w", err)
+	}
+	if admissionCount > 0 {
+		return model.ErrEventHasAdmissions
+	}
+
 	_, err = tx.Exec(`DELETE FROM replies WHERE post_id IN (SELECT id FROM posts WHERE event_id = ?)`, id)
 	if err != nil {
 		return fmt.Errorf("删除回复失败: %w", err)

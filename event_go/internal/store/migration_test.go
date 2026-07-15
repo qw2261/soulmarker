@@ -272,6 +272,75 @@ func TestMigrationLegacyDatabasePreservesData(t *testing.T) {
 	}
 }
 
+func TestMigrationV5ToV6PreservesRegistrationsWithoutSyntheticAdmissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v5-to-v6.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("create current database: %v", err)
+	}
+	statements := []string{
+		`INSERT INTO organizers (id, name, created_at, updated_at) VALUES (1, '迁移门店', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO users (id, name, contact, password_hash, created_at) VALUES (7, '迁移用户', 'migration@example.com', 'hash', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO events (id, organizer_id, title, event_time, location, capacity, created_at, updated_at) VALUES (10, 1, '迁移活动', '2099-01-01T00:00:00Z', '线上', 10, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO registrations (id, event_id, user_id, name, contact, identity_status, created_at) VALUES (20, 10, 7, '迁移用户', 'migration@example.com', 'verified', '2026-01-01T00:00:00Z')`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.Exec(statement); err != nil {
+			_ = s.Close()
+			t.Fatalf("seed current database: %v", err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close current database: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open database for v5 fixture: %v", err)
+	}
+	v6Objects := []string{
+		`DROP TRIGGER checkins_immutable_update`,
+		`DROP TRIGGER checkins_immutable_delete`,
+		`DROP TABLE checkins`,
+		`DROP TABLE admissions`,
+		`DELETE FROM schema_migrations WHERE version = 6`,
+	}
+	for _, statement := range v6Objects {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v5 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close v5 fixture: %v", err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v5 database: %v", err)
+	}
+	defer s.Close()
+
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	var eventID, userID int64
+	var name, contact string
+	if err := s.db.QueryRow(
+		`SELECT event_id, user_id, name, contact FROM registrations WHERE id = 20`,
+	).Scan(&eventID, &userID, &name, &contact); err != nil {
+		t.Fatalf("read preserved registration: %v", err)
+	}
+	if eventID != 10 || userID != 7 || name != "迁移用户" || contact != "migration@example.com" {
+		t.Fatalf("registration changed during migration: event=%d user=%d name=%q contact=%q", eventID, userID, name, contact)
+	}
+	var admissionCount int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM admissions`).Scan(&admissionCount); err != nil {
+		t.Fatalf("count admissions: %v", err)
+	}
+	if admissionCount != 0 {
+		t.Fatalf("expected no synthetic admissions for existing registrations, got %d", admissionCount)
+	}
+}
+
 func TestMigrationRepeatedExecution(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "repeat.db")
 	for i := 0; i < 2; i++ {

@@ -31,7 +31,7 @@
           <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
               <el-button size="small" @click="$router.push(`/admin/events/${row.id}/edit`)">编辑</el-button>
-              <el-button size="small" @click="$router.push(`/admin/events/${row.id}/registrations`)">报名</el-button>
+              <el-button size="small" @click="$router.push(`/admin/events/${row.id}/registrations`)">报名 / 核销</el-button>
               <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
             </template>
           </el-table-column>

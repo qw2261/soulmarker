@@ -30,6 +30,7 @@ type Handler struct {
 	tokens        auth.TokenManager
 	registrations RegistrationService
 	discussions   DiscussionService
+	admissions    AdmissionService
 	startTime     time.Time
 	version       string
 }
@@ -48,11 +49,19 @@ type DiscussionService interface {
 	CreateReply(post *model.Post, user *model.User, content string) (*model.Reply, error)
 }
 
+type AdmissionService interface {
+	GetForUser(eventID, userID int64) (*model.MyAdmission, error)
+	ListForUser(userID int64, offset, limit int) ([]*model.MyAdmission, int, error)
+	CheckIn(eventID int64, credential, actor string) (*model.Checkin, bool, error)
+	ListCheckins(eventID int64, offset, limit int) ([]*model.Checkin, int, error)
+}
+
 type Dependencies struct {
 	Clock         clock.Clock
 	Tokens        auth.TokenManager
 	Registrations RegistrationService
 	Discussions   DiscussionService
+	Admissions    AdmissionService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -64,6 +73,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		tokens:        dependencies.Tokens,
 		registrations: dependencies.Registrations,
 		discussions:   dependencies.Discussions,
+		admissions:    dependencies.Admissions,
 		startTime:     dependencies.Clock.Now(),
 		version:       cfg.Version,
 	}

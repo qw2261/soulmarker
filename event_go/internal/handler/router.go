@@ -29,6 +29,7 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodPost, "/auth/register", "registerUser", "RegisterUserRequest", plain(h.RegisterUser)},
 		{http.MethodPost, "/auth/login", "loginUser", "LoginRequest", plain(h.Login)},
 		{http.MethodGet, "/me/registrations", "listMyRegistrations", "", plain(h.ListMyRegistrations)},
+		{http.MethodGet, "/me/admissions", "listMyAdmissions", "", plain(h.ListMyAdmissions)},
 		{http.MethodGet, "/admin/identity-migration", "getIdentityMigrationReport", "", admin(h.GetIdentityMigrationReport)},
 
 		{http.MethodPost, "/organizers", "createOrganizer", "CreateOrganizerRequest", admin(h.CreateOrganizer)},
@@ -47,6 +48,9 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodDelete, "/events/{id}/register", "cancelEventRegistration", "", plain(h.CancelRegistration)},
 		{http.MethodGet, "/events/{id}/registration", "getEventRegistrationStatus", "", plain(h.GetRegistrationStatus)},
 		{http.MethodGet, "/events/{id}/registrations", "listEventRegistrations", "", admin(h.ListRegistrations)},
+		{http.MethodGet, "/events/{id}/admission", "getMyAdmission", "", plain(h.GetMyAdmission)},
+		{http.MethodPost, "/events/{id}/checkins", "checkInAdmission", "CheckinRequest", admin(h.CheckIn)},
+		{http.MethodGet, "/events/{id}/checkins", "listEventCheckins", "", admin(h.ListCheckins)},
 
 		{http.MethodPost, "/events/{id}/posts", "createPost", "CreatePostRequest", plain(h.CreatePost)},
 		{http.MethodGet, "/events/{id}/posts", "listPosts", "", plain(h.ListPosts)},

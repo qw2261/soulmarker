@@ -57,6 +57,7 @@
                 </el-button>
                 <el-button @click="handleCancel">取消报名</el-button>
               </div>
+              <AdmissionCredential v-if="admission" :admission="admission" class="event-credential" />
             </template>
             <RegisterForm
               v-else-if="event.status === 'published' && userStore.isLoggedIn"
@@ -129,18 +130,20 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Shop } from '@element-plus/icons-vue'
 import { getEvent, getRegistrationStatus, cancelRegistration } from '@/api/events'
 import { listPosts } from '@/api/posts'
-import type { Event, Post } from '@/api/types'
+import type { Admission, Event, Post } from '@/api/types'
 import { EventStatusMap, EventStatusColors } from '@/api/types'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime, formatPrice, formatDate } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import RegisterForm from '@/components/RegisterForm.vue'
+import AdmissionCredential from '@/components/AdmissionCredential.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
 const event = ref<Event | null>(null)
 const loading = ref(true)
 const registered = ref(false)
+const admission = ref<Admission>()
 const recentPosts = ref<Post[]>([])
 
 async function fetchEvent() {
@@ -161,8 +164,10 @@ async function checkRegistration(eventId: number) {
   try {
     const res = await getRegistrationStatus(eventId)
     registered.value = res.data?.registered || false
+    admission.value = res.data?.admission
   } catch {
     registered.value = false
+    admission.value = undefined
   }
 }
 
@@ -175,8 +180,9 @@ async function fetchRecentPosts(eventId: number) {
   }
 }
 
-function onRegistered() {
+function onRegistered(value?: Admission) {
   registered.value = true
+  admission.value = value
 }
 
 async function handleCancel() {
@@ -191,6 +197,7 @@ async function handleCancel() {
     if (res.code === 200) {
       ElMessage.success('已取消报名')
       registered.value = false
+      admission.value = undefined
     } else {
       ElMessage.error(res.message || '取消失败')
     }
@@ -298,6 +305,10 @@ onMounted(fetchEvent)
 .registered-actions {
   display: flex;
   gap: 12px;
+  margin-top: 16px;
+}
+
+.event-credential {
   margin-top: 16px;
 }
 

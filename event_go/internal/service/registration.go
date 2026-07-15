@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
+	"github.com/qw2261/soulmarker/event_go/internal/identifier"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
@@ -35,13 +36,15 @@ type RegistrationService struct {
 	repository     RegistrationRepository
 	clock          clock.Clock
 	cancelDeadline time.Duration
+	credentials    identifier.CredentialGenerator
 }
 
-func NewRegistrationService(repository RegistrationRepository, businessClock clock.Clock, cancelDeadline time.Duration) *RegistrationService {
+func NewRegistrationService(repository RegistrationRepository, businessClock clock.Clock, cancelDeadline time.Duration, credentials identifier.CredentialGenerator) *RegistrationService {
 	return &RegistrationService{
 		repository:     repository,
 		clock:          businessClock,
 		cancelDeadline: cancelDeadline,
+		credentials:    credentials,
 	}
 }
 
@@ -60,6 +63,10 @@ func (s *RegistrationService) Register(event *model.Event, user *model.User, tic
 	if event.Status != "published" {
 		return nil, ErrEventNotPublished
 	}
+	credentialCode, err := s.credentials.NewCredential()
+	if err != nil {
+		return nil, fmt.Errorf("generate admission credential: %w", err)
+	}
 
 	userID := user.ID
 	registration := &model.Registration{
@@ -68,6 +75,10 @@ func (s *RegistrationService) Register(event *model.Event, user *model.User, tic
 		Name:     user.Name,
 		Contact:  user.Contact,
 		TicketID: ticketID,
+		Admission: &model.Admission{
+			CredentialCode: credentialCode,
+			IssuedAt:       s.clock.Now().UTC(),
+		},
 	}
 	if err := s.repository.Register(registration); err != nil {
 		if errors.Is(err, model.ErrFull) {

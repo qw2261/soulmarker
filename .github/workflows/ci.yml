@@ -41,7 +41,25 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: event_go/web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: event_go/go.mod
+          cache-dependency-path: event_go/go.sum
       - name: Install
         run: npm ci
       - name: Build
         run: npm run build
+      - name: Component tests
+        run: npm test
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser E2E
+        run: npx playwright test
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-evidence
+          path: event_go/test_reports
+          if-no-files-found: ignore
+          retention-days: 14

@@ -16,31 +16,20 @@
       </el-button>
     </el-form-item>
 
-    <el-dialog v-model="dialogVisible" title="报名成功" width="400px">
-      <p>你已经成功报名该活动！</p>
-      <p>现在可以参与活动讨论区。</p>
-      <template #footer>
-        <el-button @click="dialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="goDiscussion">去讨论区</el-button>
-      </template>
-    </el-dialog>
   </el-form>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { registerEvent } from '@/api/events'
+import type { Admission } from '@/api/types'
 import TicketSelector from '@/components/TicketSelector.vue'
 
 const props = defineProps<{ eventId: number }>()
-const emit = defineEmits<{ registered: [] }>()
-const router = useRouter()
-
+const emit = defineEmits<{ registered: [admission?: Admission] }>()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
-const dialogVisible = ref(false)
 
 const form = reactive({
   ticket_id: undefined as number | undefined,
@@ -56,8 +45,8 @@ async function submit() {
       ticket_id: form.ticket_id,
     })
     if (res.code === 201) {
-      dialogVisible.value = true
-      emit('registered')
+      ElMessage.success('报名成功，入场凭证已生成')
+      emit('registered', res.data?.admission)
     } else {
       ElMessage.error(res.message || '报名失败')
     }
@@ -66,10 +55,5 @@ async function submit() {
   } finally {
     submitting.value = false
   }
-}
-
-function goDiscussion() {
-  dialogVisible.value = false
-  router.push(`/events/${props.eventId}/discussion`)
 }
 </script>

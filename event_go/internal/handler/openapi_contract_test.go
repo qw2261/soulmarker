@@ -126,6 +126,7 @@ func TestOpenAPISchemasMatchDTOJSONFields(t *testing.T) {
 		"CreateTicketRequest":             dtoType(dto.CreateTicketRequest{}),
 		"UpdateTicketRequest":             dtoType(dto.UpdateTicketRequest{}),
 		"RegisterEventRequest":            dtoType(dto.RegisterEventRequest{}),
+		"CheckinRequest":                  dtoType(dto.CheckinRequest{}),
 		"CreatePostRequest":               dtoType(dto.CreatePostRequest{}),
 		"CreateReplyRequest":              dtoType(dto.CreateReplyRequest{}),
 		"UserResponse":                    dtoType(dto.UserResponse{}),
@@ -134,6 +135,10 @@ func TestOpenAPISchemasMatchDTOJSONFields(t *testing.T) {
 		"EventResponse":                   dtoType(dto.EventResponse{}),
 		"TicketResponse":                  dtoType(dto.TicketResponse{}),
 		"RegistrationResponse":            dtoType(dto.RegistrationResponse{}),
+		"AdmissionResponse":               dtoType(dto.AdmissionResponse{}),
+		"MyAdmissionResponse":             dtoType(dto.MyAdmissionResponse{}),
+		"CheckinResponse":                 dtoType(dto.CheckinResponse{}),
+		"CheckinResultResponse":           dtoType(dto.CheckinResultResponse{}),
 		"RegistrationStatusResponse":      dtoType(dto.RegistrationStatusResponse{}),
 		"MyRegistrationResponse":          dtoType(dto.MyRegistrationResponse{}),
 		"PostResponse":                    dtoType(dto.PostResponse{}),
@@ -198,6 +203,10 @@ func dtoType(value interface{}) reflect.Type {
 func jsonFieldNames(valueType reflect.Type) []string {
 	fields := make([]string, 0, valueType.NumField())
 	for i := 0; i < valueType.NumField(); i++ {
+		if valueType.Field(i).Anonymous && valueType.Field(i).Type.Kind() == reflect.Struct {
+			fields = append(fields, jsonFieldNames(valueType.Field(i).Type)...)
+			continue
+		}
 		tag := valueType.Field(i).Tag.Get("json")
 		name := strings.Split(tag, ",")[0]
 		if name != "" && name != "-" {

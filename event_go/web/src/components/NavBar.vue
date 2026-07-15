@@ -6,7 +6,7 @@
     </div>
     <div class="navbar-right">
       <template v-if="user.isLoggedIn">
-        <router-link to="/me/registrations">我的报名</router-link>
+        <router-link to="/me/registrations">我的活动</router-link>
         <span class="user-name">{{ user.user?.name }}</span>
         <el-button text @click="user.logout()">退出</el-button>
       </template>
@@ -18,14 +18,47 @@
       <router-link to="/admin/events" v-if="auth.isAdmin">管理</router-link>
       <router-link to="/admin" v-else>管理登录</router-link>
     </div>
+    <el-button
+      class="mobile-menu-button"
+      text
+      :icon="Menu"
+      aria-label="打开导航菜单"
+      title="导航菜单"
+      @click="mobileMenuOpen = true"
+    />
+    <el-drawer v-model="mobileMenuOpen" title="导航" direction="rtl" size="min(82vw, 320px)">
+      <nav class="mobile-nav">
+        <router-link to="/" @click="mobileMenuOpen = false">活动</router-link>
+        <router-link to="/organizers" @click="mobileMenuOpen = false">门店</router-link>
+        <template v-if="user.isLoggedIn">
+          <router-link to="/me/registrations" @click="mobileMenuOpen = false">我的活动</router-link>
+          <span class="mobile-user">{{ user.user?.name }}</span>
+          <el-button text @click="logoutUser">退出登录</el-button>
+        </template>
+        <template v-else>
+          <router-link to="/login" @click="mobileMenuOpen = false">登录</router-link>
+          <router-link to="/register" @click="mobileMenuOpen = false">注册</router-link>
+        </template>
+        <router-link v-if="auth.isAdmin" to="/admin/events" @click="mobileMenuOpen = false">活动管理</router-link>
+        <router-link v-else to="/admin" @click="mobileMenuOpen = false">管理登录</router-link>
+      </nav>
+    </el-drawer>
   </el-header>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { Menu } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 const auth = useAuthStore()
 const user = useUserStore()
+const mobileMenuOpen = ref(false)
+
+function logoutUser() {
+  user.logout()
+  mobileMenuOpen.value = false
+}
 </script>
 
 <style scoped>
@@ -63,6 +96,33 @@ const user = useUserStore()
   gap: 12px;
 }
 
+.mobile-menu-button {
+  display: none;
+  width: 40px;
+  height: 40px;
+}
+
+.mobile-nav {
+  display: grid;
+  gap: 4px;
+}
+
+.mobile-nav a,
+.mobile-nav button,
+.mobile-user {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 8px;
+  color: #303133;
+  text-decoration: none;
+}
+
+.mobile-user {
+  color: #909399;
+  font-size: 14px;
+}
+
 .navbar-right a {
   color: #606266;
   text-decoration: none;
@@ -81,5 +141,21 @@ const user = useUserStore()
 
 .divider {
   color: #dcdfe6;
+}
+
+@media (max-width: 720px) {
+  .navbar {
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  .navbar-right,
+  .nav-link {
+    display: none;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex;
+  }
 }
 </style>

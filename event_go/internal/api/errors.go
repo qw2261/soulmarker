@@ -28,6 +28,10 @@ const (
 	CodeCancellationDeadlineExceeded ErrorCode = "CANCELLATION_DEADLINE_EXCEEDED"
 	CodeParticipationRequired        ErrorCode = "PARTICIPATION_REQUIRED"
 	CodeInternalError                ErrorCode = "INTERNAL_ERROR"
+	CodeAdmissionNotFound            ErrorCode = "ADMISSION_NOT_FOUND"
+	CodeAdmissionRevoked             ErrorCode = "ADMISSION_REVOKED"
+	CodeAdmissionAlreadyCheckedIn    ErrorCode = "ADMISSION_ALREADY_CHECKED_IN"
+	CodeEventHasAdmissions           ErrorCode = "EVENT_HAS_ADMISSIONS"
 )
 
 var errorMessages = map[ErrorCode]string{
@@ -53,6 +57,10 @@ var errorMessages = map[ErrorCode]string{
 	CodeCancellationDeadlineExceeded: "已过取消截止时间，无法取消报名",
 	CodeParticipationRequired:        "只有报名者才能参与讨论",
 	CodeInternalError:                "服务器内部错误",
+	CodeAdmissionNotFound:            "入场凭证不存在",
+	CodeAdmissionRevoked:             "入场凭证已失效",
+	CodeAdmissionAlreadyCheckedIn:    "入场凭证已核销",
+	CodeEventHasAdmissions:           "活动已有入场凭证，不能删除",
 }
 
 // ErrorCodes 返回错误码目录的副本，供契约生成和测试使用。

@@ -5,11 +5,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 type fixedClock struct {
 	now time.Time
+}
+
+type fixedCredentialGenerator struct {
+	value string
+	err   error
+}
+
+func (g fixedCredentialGenerator) NewCredential() (string, error) {
+	return g.value, g.err
+}
+
+func newTestRegistrationService(repository RegistrationRepository, businessClock clock.Clock) *RegistrationService {
+	return NewRegistrationService(repository, businessClock, 24*time.Hour, fixedCredentialGenerator{value: "00112233445566778899aabbccddeeff"})
 }
 
 func (c fixedClock) Now() time.Time {
@@ -53,7 +67,7 @@ func (r *fakeRegistrationRepository) IsRegisteredByUserID(int64, int64) (bool, e
 
 func TestRegistrationServiceGetEvent(t *testing.T) {
 	repository := &fakeRegistrationRepository{}
-	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour)
+	service := newTestRegistrationService(repository, fixedClock{})
 	if _, err := service.GetEvent(99); !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("expected not found, got %v", err)
 	}
@@ -66,7 +80,8 @@ func TestRegistrationServiceGetEvent(t *testing.T) {
 
 func TestRegistrationServiceRegisterCopiesTrustedIdentity(t *testing.T) {
 	repository := &fakeRegistrationRepository{}
-	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour)
+	issuedAt := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	service := newTestRegistrationService(repository, fixedClock{now: issuedAt})
 	event := &model.Event{ID: 7, Status: "published", Capacity: 10}
 	user := &model.User{ID: 8, Name: "可信用户", Contact: "trusted@example.com"}
 	ticketID := int64(9)
@@ -81,11 +96,26 @@ func TestRegistrationServiceRegisterCopiesTrustedIdentity(t *testing.T) {
 	if registration.UserID == nil || *registration.UserID != user.ID || registration.Name != user.Name || registration.Contact != user.Contact {
 		t.Fatalf("trusted identity was not copied: %+v", registration)
 	}
+	if registration.Admission == nil || registration.Admission.CredentialCode != "00112233445566778899aabbccddeeff" {
+		t.Fatalf("admission credential was not generated: %+v", registration.Admission)
+	}
+	if !registration.Admission.IssuedAt.Equal(issuedAt) {
+		t.Fatalf("injected clock was not used: %s", registration.Admission.IssuedAt)
+	}
+}
+
+func TestRegistrationServiceStopsWhenCredentialGenerationFails(t *testing.T) {
+	repository := &fakeRegistrationRepository{}
+	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour, fixedCredentialGenerator{err: errors.New("entropy unavailable")})
+	_, err := service.Register(&model.Event{ID: 1, Status: "published"}, &model.User{ID: 2}, nil)
+	if err == nil || repository.registrationCalls != 0 {
+		t.Fatalf("credential failure must stop registration: calls=%d err=%v", repository.registrationCalls, err)
+	}
 }
 
 func TestRegistrationServiceRejectsUnpublishedAndWrapsCapacity(t *testing.T) {
 	repository := &fakeRegistrationRepository{}
-	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour)
+	service := newTestRegistrationService(repository, fixedClock{})
 	user := &model.User{ID: 1}
 
 	if _, err := service.Register(&model.Event{ID: 1, Status: "draft"}, user, nil); !errors.Is(err, ErrEventNotPublished) {
@@ -109,7 +139,7 @@ func TestRegistrationServiceCancelDeadlineBoundary(t *testing.T) {
 	event := &model.Event{ID: 12, EventTime: eventTime.Format(model.TimeFormat)}
 
 	repository := &fakeRegistrationRepository{}
-	service := NewRegistrationService(repository, fixedClock{now: deadline}, 24*time.Hour)
+	service := newTestRegistrationService(repository, fixedClock{now: deadline})
 	if err := service.Cancel(event, 34); err != nil {
 		t.Fatalf("deadline instant should still allow cancellation: %v", err)
 	}
@@ -118,7 +148,7 @@ func TestRegistrationServiceCancelDeadlineBoundary(t *testing.T) {
 	}
 
 	repository = &fakeRegistrationRepository{}
-	service = NewRegistrationService(repository, fixedClock{now: deadline.Add(time.Nanosecond)}, 24*time.Hour)
+	service = newTestRegistrationService(repository, fixedClock{now: deadline.Add(time.Nanosecond)})
 	if err := service.Cancel(event, 34); !errors.Is(err, model.ErrCancelDeadlineExceeded) {
 		t.Fatalf("expected deadline error, got %v", err)
 	}
@@ -129,7 +159,7 @@ func TestRegistrationServiceCancelDeadlineBoundary(t *testing.T) {
 
 func TestRegistrationServiceCancelPropagatesFailures(t *testing.T) {
 	repository := &fakeRegistrationRepository{cancelErr: model.ErrNotRegistered}
-	service := NewRegistrationService(repository, fixedClock{now: time.Now()}, 24*time.Hour)
+	service := newTestRegistrationService(repository, fixedClock{now: time.Now()})
 	if err := service.Cancel(&model.Event{ID: 1, EventTime: "invalid"}, 2); err == nil {
 		t.Fatal("expected invalid persisted event time to fail")
 	}
@@ -142,7 +172,7 @@ func TestRegistrationServiceCancelPropagatesFailures(t *testing.T) {
 
 func TestRegistrationServiceIsRegistered(t *testing.T) {
 	repository := &fakeRegistrationRepository{registeredStatus: true}
-	service := NewRegistrationService(repository, fixedClock{}, 24*time.Hour)
+	service := newTestRegistrationService(repository, fixedClock{})
 	registered, err := service.IsRegistered(1, 2)
 	if err != nil || !registered {
 		t.Fatalf("expected registered result, registered=%v err=%v", registered, err)

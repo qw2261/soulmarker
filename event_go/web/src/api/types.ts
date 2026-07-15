@@ -45,6 +45,42 @@ export interface Registration {
   ticket_id?: number
   ticket_name?: string
   created_at: string
+  admission?: Admission
+}
+
+export interface Admission {
+  id: number
+  event_id: number
+  ticket_name?: string
+  credential_code: string
+  credential: string
+  status: 'active' | 'revoked'
+  issued_at: string
+  revoked_at?: string
+  checked_in_at?: string
+}
+
+export interface MyAdmission extends Admission {
+  event_title: string
+  event_time: string
+  location: string
+  event_status: string
+}
+
+export interface Checkin {
+  id: number
+  admission_id: number
+  event_id: number
+  credential_code?: string
+  user_name?: string
+  user_contact?: string
+  checked_in_at: string
+  checked_in_by: string
+}
+
+export interface CheckinResult {
+  checkin: Checkin
+  already_checked_in: boolean
 }
 
 export interface MyRegistration {
@@ -61,6 +97,7 @@ export interface MyRegistration {
 
 export interface RegistrationStatus {
   registered: boolean
+  admission?: Admission
 }
 
 export interface Post {

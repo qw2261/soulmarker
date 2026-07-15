@@ -25,6 +25,7 @@ func (s *Store) Register(r *model.Registration) error {
 		return fmt.Errorf("开启事务失败: %w", err)
 	}
 	defer tx.Rollback()
+	effectivePrice := event.Price
 
 	var count int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ?`, r.EventID).Scan(&count); err != nil {
@@ -37,11 +38,12 @@ func (s *Store) Register(r *model.Registration) error {
 	ticketName := ""
 	if r.TicketID != nil {
 		var stock int
+		var price float64
 		var name string
 		err := tx.QueryRow(
-			`SELECT name, stock FROM tickets WHERE id = ? AND event_id = ?`,
+			`SELECT name, price, stock FROM tickets WHERE id = ? AND event_id = ?`,
 			*r.TicketID, r.EventID,
-		).Scan(&name, &stock)
+		).Scan(&name, &price, &stock)
 		if err == sql.ErrNoRows {
 			return model.ErrTicketNotFound
 		}
@@ -63,6 +65,7 @@ func (s *Store) Register(r *model.Registration) error {
 			return model.ErrTicketSoldOut
 		}
 		ticketName = name
+		effectivePrice = price
 	}
 
 	now := time.Now().UTC().Format(model.TimeFormat)
@@ -87,6 +90,32 @@ func (s *Store) Register(r *model.Registration) error {
 		return fmt.Errorf("获取报名 ID 失败: %w", err)
 	}
 
+	var admission *model.Admission
+	if effectivePrice == 0 && r.UserID != nil && r.Admission != nil && r.Admission.CredentialCode != "" {
+		issuedAt := r.Admission.IssuedAt
+		if issuedAt.IsZero() {
+			issuedAt = time.Now().UTC()
+		}
+		result, err := tx.Exec(
+			`INSERT INTO admissions (registration_id, event_id, user_id, ticket_name, credential_code, status, issued_at)
+			 VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+			id, r.EventID, *r.UserID, ticketName, r.Admission.CredentialCode, issuedAt.Format(model.TimeFormat),
+		)
+		if err != nil {
+			return fmt.Errorf("创建入场凭证失败: %w", err)
+		}
+		admissionID, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("获取入场凭证 ID 失败: %w", err)
+		}
+		registrationID := id
+		admission = &model.Admission{
+			ID: admissionID, RegistrationID: &registrationID, EventID: r.EventID,
+			UserID: *r.UserID, TicketName: ticketName, CredentialCode: r.Admission.CredentialCode,
+			Status: model.AdmissionStatusActive, IssuedAt: issuedAt,
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
@@ -96,6 +125,7 @@ func (s *Store) Register(r *model.Registration) error {
 	r.IdentityStatus = identityStatus
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
+	r.Admission = admission
 	return nil
 }
 
@@ -183,14 +213,37 @@ func (s *Store) cancelRegistration(eventID int64, identityColumn string, identit
 	}
 	defer tx.Rollback()
 
+	var registrationID int64
 	var ticketID sql.NullInt64
-	query := fmt.Sprintf(`SELECT ticket_id FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
-	err = tx.QueryRow(query, eventID, identity).Scan(&ticketID)
+	query := fmt.Sprintf(`SELECT id, ticket_id FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
+	err = tx.QueryRow(query, eventID, identity).Scan(&registrationID, &ticketID)
 	if err == sql.ErrNoRows {
 		return model.ErrNotRegistered
 	}
 	if err != nil {
 		return fmt.Errorf("查询报名记录失败: %w", err)
+	}
+
+	var admissionID int64
+	err = tx.QueryRow(`SELECT id FROM admissions WHERE registration_id = ?`, registrationID).Scan(&admissionID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("查询入场凭证失败: %w", err)
+	}
+	if err == nil {
+		var checkinID int64
+		checkinErr := tx.QueryRow(`SELECT id FROM checkins WHERE admission_id = ?`, admissionID).Scan(&checkinID)
+		if checkinErr == nil {
+			return model.ErrAdmissionCheckedIn
+		}
+		if checkinErr != sql.ErrNoRows {
+			return fmt.Errorf("查询核销记录失败: %w", checkinErr)
+		}
+		if _, err := tx.Exec(
+			`UPDATE admissions SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
+			time.Now().UTC().Format(model.TimeFormat), admissionID,
+		); err != nil {
+			return fmt.Errorf("吊销入场凭证失败: %w", err)
+		}
 	}
 
 	if ticketID.Valid {

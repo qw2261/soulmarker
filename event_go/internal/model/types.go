@@ -30,6 +30,10 @@ var (
 	ErrUserExists             = errors.New("该联系方式已注册")
 	ErrInvalidCreds           = errors.New("联系方式或密码错误")
 	ErrOrganizerNotFound      = errors.New("门店不存在")
+	ErrAdmissionNotFound      = errors.New("入场凭证不存在")
+	ErrAdmissionRevoked       = errors.New("入场凭证已失效")
+	ErrAdmissionCheckedIn     = errors.New("入场凭证已核销")
+	ErrEventHasAdmissions     = errors.New("活动已有入场凭证，不能删除")
 )
 
 type Organizer struct {
@@ -72,15 +76,54 @@ type Event struct {
 }
 
 type Registration struct {
-	ID             int64     `json:"id"`
-	EventID        int64     `json:"event_id"`
-	UserID         *int64    `json:"-"`
-	Name           string    `json:"name"`
-	Contact        string    `json:"contact"`
-	TicketID       *int64    `json:"ticket_id,omitempty"`
-	TicketName     string    `json:"ticket_name,omitempty"`
-	IdentityStatus string    `json:"identity_status,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             int64      `json:"id"`
+	EventID        int64      `json:"event_id"`
+	UserID         *int64     `json:"-"`
+	Name           string     `json:"name"`
+	Contact        string     `json:"contact"`
+	TicketID       *int64     `json:"ticket_id,omitempty"`
+	TicketName     string     `json:"ticket_name,omitempty"`
+	IdentityStatus string     `json:"identity_status,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	Admission      *Admission `json:"-"`
+}
+
+const (
+	AdmissionStatusActive     = "active"
+	AdmissionStatusRevoked    = "revoked"
+	AdmissionCredentialPrefix = "soulmark:admission:"
+)
+
+type Admission struct {
+	ID             int64
+	RegistrationID *int64
+	EventID        int64
+	UserID         int64
+	TicketName     string
+	CredentialCode string
+	Status         string
+	IssuedAt       time.Time
+	RevokedAt      *time.Time
+	CheckedInAt    *time.Time
+}
+
+type MyAdmission struct {
+	Admission
+	EventTitle  string
+	EventTime   string
+	Location    string
+	EventStatus string
+}
+
+type Checkin struct {
+	ID             int64
+	AdmissionID    int64
+	EventID        int64
+	CredentialCode string
+	UserName       string
+	UserContact    string
+	CheckedInAt    time.Time
+	CheckedInBy    string
 }
 
 type UpdateEventReq struct {

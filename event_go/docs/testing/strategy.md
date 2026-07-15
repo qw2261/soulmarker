@@ -1,6 +1,6 @@
 # 测试策略
 
-> 状态：Draft
+> 状态：Active
 > 适用版本：v5.2 起
 > 路线图来源：[goal.md](../goal.md)
 
@@ -29,10 +29,12 @@
     go vet ./...
     npm ci
     npm run build
+    npm test
 
 ## 4. 完整门禁
 
     go test -race -count=1 ./...
+    npm run e2e
 
 进入 G4 后，完整门禁还必须包含前端 unit/component 与核心浏览器 E2E；进入 G6 后增加迁移、Docker smoke、备份恢复、安全扫描和性能验证。
 

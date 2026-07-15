@@ -13,11 +13,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 5
+const CurrentSchemaVersion = 6
 
 type Store struct {
 	db             *sql.DB
 	registrationMu sync.Mutex
+	checkinMu      sync.Mutex
 }
 
 type migration struct {
@@ -149,7 +150,43 @@ func migrations() []migration {
 		{version: 3, name: "identity_user_id_expand", apply: migrateIdentityUserIDExpand},
 		{version: 4, name: "identity_backfill_and_legacy_status", apply: migrateIdentityBackfill},
 		{version: 5, name: "foreign_key_readiness", apply: migrateForeignKeyReadiness},
+		{version: 6, name: "admission_and_checkin", apply: migrateAdmissionAndCheckin},
 	}
+}
+
+func migrateAdmissionAndCheckin(tx *sql.Tx) error {
+	return execStatements(tx, []string{
+		`CREATE TABLE admissions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			registration_id INTEGER UNIQUE,
+			event_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			ticket_name TEXT NOT NULL DEFAULT '',
+			credential_code TEXT NOT NULL UNIQUE,
+			status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+			issued_at TEXT NOT NULL,
+			revoked_at TEXT,
+			FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL,
+			FOREIGN KEY (event_id) REFERENCES events(id),
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`,
+		`CREATE TABLE checkins (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			admission_id INTEGER NOT NULL UNIQUE,
+			event_id INTEGER NOT NULL,
+			checked_in_at TEXT NOT NULL,
+			checked_in_by TEXT NOT NULL,
+			FOREIGN KEY (admission_id) REFERENCES admissions(id),
+			FOREIGN KEY (event_id) REFERENCES events(id)
+		)`,
+		`CREATE INDEX idx_admissions_event ON admissions(event_id)`,
+		`CREATE INDEX idx_admissions_user ON admissions(user_id, issued_at DESC)`,
+		`CREATE INDEX idx_checkins_event ON checkins(event_id, checked_in_at DESC)`,
+		`CREATE TRIGGER checkins_immutable_update BEFORE UPDATE ON checkins
+		 BEGIN SELECT RAISE(ABORT, 'checkins are immutable'); END`,
+		`CREATE TRIGGER checkins_immutable_delete BEFORE DELETE ON checkins
+		 BEGIN SELECT RAISE(ABORT, 'checkins are immutable'); END`,
+	})
 }
 
 func migrateV51Baseline(tx *sql.Tx) error {
@@ -404,6 +441,11 @@ func validateForeignKeys(db *sql.DB) error {
 		{"replies", "posts", "post_id"},
 		{"replies", "users", "user_id"},
 		{"tickets", "events", "event_id"},
+		{"admissions", "registrations", "registration_id"},
+		{"admissions", "events", "event_id"},
+		{"admissions", "users", "user_id"},
+		{"checkins", "admissions", "admission_id"},
+		{"checkins", "events", "event_id"},
 	}
 	for _, foreignKey := range required {
 		exists, err := tableHasForeignKeyDB(db, foreignKey.table, foreignKey.parent, foreignKey.column)

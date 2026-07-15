@@ -16,6 +16,9 @@
 - 当前用户报名列表 API 与前端“我的报名”页面。
 - 管理员身份迁移统计和 legacy 人工处理清单 API。
 - 容量、门票库存和重复取消的真实并发测试。
+- Schema v6 Admission/Checkin 模型、用户凭证 API、幂等核销 API 和运营审计列表。
+- 用户活动详情与“我的活动”二维码凭证，运营报名页核销工作台。
+- Vitest 组件测试、Playwright 桌面/移动核心旅程和 CI 浏览器证据。
 
 ### Changed
 
@@ -24,7 +27,7 @@
 - 活动、门票、门店更新接口增加字段校验。
 - 门票和帖子嵌套路由校验活动归属。
 - 所有 JSON 写请求限制为 1 MiB，并拒绝未知字段和尾随 JSON。
-- API 错误响应建立 22 个稳定业务 `error_code` 的集中目录，HTTP 状态与业务原因独立选择，数字 `code` 保持兼容。
+- API 错误响应建立 26 个稳定业务 `error_code` 的集中目录，HTTP 状态与业务原因独立选择，数字 `code` 保持兼容。
 - 报名、取消、发帖和回复统一使用持久化 user_id 授权，不再接受联系方式回退。
 - SQLite 固定单连接写入模型并在启动时强制启用外键和执行一致性检查。
 - 删除门票时保留报名票种快照并解除 ticket_id 引用；删除门店使用隐藏的系统占位门店保持历史活动完整。
@@ -36,6 +39,8 @@
 - HTTP 请求、响应 Envelope 与公开资源 DTO 从数据库实体分离，所有 Handler 通过显式映射固定 JSON 字段集合。
 - 新增 `/api/v1` 稳定路由、内嵌 OpenAPI 3.1 文档和双向路由/Schema 契约测试；前端默认切换到 v1。
 - OpenAPI 固定 `ErrorResponse.error_code` 枚举，并与 Go 错误目录自动双向校验；未知错误码安全降级为通用内部错误。
+- 免费报名与 Admission 在同一事务内创建；取消会吊销凭证，已核销报名不可取消。
+- 移动导航改为抽屉，“我的报名”升级为显示参与状态与凭证的“我的活动”。
 
 ### Fixed
 
@@ -50,6 +55,7 @@
 - HTTP Server 增加读取、写入、Header 和空闲连接超时。
 - 增加 CSP、frame、MIME、Referrer 和 Permissions Policy 安全响应头。
 - HTTP 500 与健康检查不再向客户端返回 SQL 或数据库内部错误。
+- Admission 使用 128 位加密随机凭证；跨活动、已吊销凭证拒绝核销。
 
 ### Migration
 
@@ -58,3 +64,4 @@
 - Schema v3 迁移为纯 Expand；Schema v5 完成 user_id 授权切换并关闭联系方式兼容路径。
 - Schema 升级到版本 5：精确回填可匹配身份，无法匹配的记录标记为 legacy。
 - 新写入记录标记为 verified；管理员可以查询各实体迁移总量和 legacy 清单。
+- Schema 升级到版本 6：新增 Admission/Checkin 外键、索引和 Checkin 不可变触发器。

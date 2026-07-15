@@ -125,6 +125,15 @@ User (用户) — 注册/登录获得 JWT
 | user\_id     | \*int64 | 新报名的可信用户 ID；历史无法匹配的数据为空并标记 legacy |
 | identity\_status | string | verified / backfilled / legacy |
 
+### Admission & Checkin — 入场权益与核销
+
+| 实体 | 说明 |
+|---|---|
+| Admission | 免费报名在 Registration 事务内签发的独立入场权益；保存不可预测凭证、票种快照和 active/revoked 状态 |
+| Checkin | 每个 Admission 最多一条成功核销事件；数据库触发器禁止更新和删除 |
+
+Registration、Admission、Checkin 保持独立，取消报名会吊销未核销 Admission；已核销报名不能取消或退回库存。
+
 ### Post & Reply — 讨论区
 
 | 实体    | 说明                       |
@@ -136,7 +145,7 @@ User (用户) — 注册/登录获得 JWT
 
 ## 当前进度
 
-**v5.5 契约稳定验证版** — 27 个业务操作进入 `/api/v1`，前端默认使用 v1；旧 `/api` 路径保留一个兼容周期；稳定业务错误码已进入候选验证。
+**v6.0 免费活动可用版迭代中** — 31 个业务操作进入 `/api/v1`；Admission/Checkin 纵向切片已完成本地桌面和移动验收，G4 其余范围继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -144,6 +153,7 @@ User (用户) — 注册/登录获得 JWT
 POST   /api/v1/auth/register                            用户注册
 POST   /api/v1/auth/login                               用户登录（返回 JWT）
 GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
+GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
 POST   /api/v1/organizers                               创建门店 🔐
 GET    /api/v1/organizers[?page=&page_size=]            门店列表（分页，含活动数）
@@ -159,6 +169,9 @@ POST   /api/v1/events/{id}/register                     报名活动（必须登
 DELETE /api/v1/events/{id}/register                     取消自己的报名（活动开始前24h）
 GET    /api/v1/events/{id}/registration                 当前登录用户的报名状态
 GET    /api/v1/events/{id}/registrations[?page=&page_size=] 报名列表（分页）🔐
+GET    /api/v1/events/{id}/admission                    当前用户的活动入场凭证
+POST   /api/v1/events/{id}/checkins                     幂等核销入场凭证 🔐
+GET    /api/v1/events/{id}/checkins                     核销审计列表 🔐
 POST   /api/v1/events/{id}/posts                        发帖（需已报名，支持 JWT 自动识别）
 GET    /api/v1/events/{id}/posts[?page=&page_size=]     帖子列表（分页）
 GET    /api/v1/events/{id}/posts/{postId}               帖子详情（含回复）
@@ -206,6 +219,7 @@ GET    /health                                        健康检查
 | 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS` |
 | 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND` |
 | 报名与讨论 | `EVENT_NOT_PUBLISHED`、`REGISTRATION_DUPLICATE`、`EVENT_CAPACITY_FULL`、`TICKET_SOLD_OUT`、`REGISTRATION_NOT_FOUND`、`CANCELLATION_DEADLINE_EXCEEDED`、`PARTICIPATION_REQUIRED` |
+| 入场与核销 | `ADMISSION_NOT_FOUND`、`ADMISSION_REVOKED`、`ADMISSION_ALREADY_CHECKED_IN`、`EVENT_HAS_ADMISSIONS` |
 | 服务端 | `INTERNAL_ERROR` |
 
 详细历史任务见 [docs/mvp_task.md](docs/mvp_task.md)，后续路线见 [docs/goal.md](docs/goal.md)。
@@ -221,8 +235,10 @@ GET    /health                                        健康检查
 登录 (POST /api/v1/auth/login) → contact + password → 返回 JWT Token
 
 JWT 有效期 7 天（可配置），前端 localStorage 持久化
-报名、发帖、回复、取消和“我的报名”均从 JWT user_id 加载持久化用户，不接受联系方式授权
+报名、发帖、回复、取消和“我的活动”均从 JWT user_id 加载持久化用户，不接受联系方式授权
 ```
+
+免费报名成功时会同时生成 Admission。用户二维码内容为 `soulmark:admission:<32位随机码>`；运营端首次核销返回 201，重复核销返回原 Checkin 且 `already_checked_in=true`，不会新增记录。
 
 ### 1. 活动发布
 
@@ -258,8 +274,9 @@ JWT 有效期 7 天（可配置），前端 localStorage 持久化
 
 ```
 编辑活动 (PUT /api/v1/events/{id}) → 局部更新，支持改标题/时间/状态等
-删除活动 (DELETE /api/v1/events/{id}) → 事务级联清理：
-  回复 → 帖子 → 门票 → 报名 → 活动
+删除活动 (DELETE /api/v1/events/{id})
+  ├── 已签发 Admission → 拒绝硬删除，返回 EVENT_HAS_ADMISSIONS
+  └── 无 Admission → 事务级联清理：回复 → 帖子 → 报名 → 门票 → 活动
 ```
 
 ***
@@ -286,6 +303,7 @@ event_go/
 │   │   ├── handler_event.go     # 活动 API（Create/List/Get/Update/Delete）
 │   │   ├── handler_ticket.go    # 门票 API（Create/List/Get/Update/Delete）
 │   │   ├── handler_registration.go # 报名 API（Register, CancelRegistration, ListRegistrations）
+│   │   ├── handler_admission.go # 用户凭证、运营核销与审计 API
 │   │   ├── handler_post.go      # 帖子/回复 API（CreatePost/Reply, ListPosts, GetPost）
 │   │   ├── handler_auth.go      # 用户认证、JWT 解析与持久化用户校验
 │   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
@@ -297,12 +315,16 @@ event_go/
 │   │   └── v1.json              # OpenAPI 3.1 机器可读契约
 │   ├── service/
 │   │   ├── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
+│   │   ├── admission.go         # 凭证查询、规范化、核销与审计用例
 │   │   └── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
+│   ├── identifier/
+│   │   └── credential.go        # 加密随机 Admission 凭证生成器
 │   ├── store/
 │   │   ├── store.go             # Store、版本化事务迁移、schema_migrations
 │   │   ├── store_event.go       # 活动 CRUD
 │   │   ├── store_ticket.go      # 门票 CRUD
 │   │   ├── store_registration.go # 报名 CRUD
+│   │   ├── store_admission.go  # Admission 查询、幂等 Checkin 与审计
 │   │   ├── store_post.go        # 帖子/回复 CRUD
 │   │   ├── store_user.go        # 用户 CRUD
 │   │   ├── store_organizer.go   # 门店 CRUD
@@ -390,20 +412,22 @@ main.go
 |------|------|
 | 并发报名超卖 | `BEGIN` 事务内 `COUNT` + `INSERT`，原子操作 |
 | 门票库存超卖 | `UPDATE ... WHERE stock > 0` + 检查 `RowsAffected` |
-| 删除活动数据残留 | 事务级联删除：replies → posts → registrations → tickets → events |
+| 删除活动数据保护 | 存在 Admission 时拒绝硬删除；否则事务级联 replies → posts → registrations → tickets → events |
 | 删除门店保护 | 事务内解绑旗下活动（organizer_id = 0），不级联删除 |
 | 密码安全 | bcrypt 哈希（`DefaultCost`），不存明文 |
 | 数据库连接泄漏 | `Store.Close()` + `defer` + 信号监听优雅关闭 |
 | Schema 漂移 | `schema_migrations` + 逐版本事务执行；迁移失败阻止启动 |
 | 外键与孤儿数据 | 单连接 SQLite 强制 `foreign_keys=ON`，启动执行 `foreign_key_check` |
 | 并发报名 | Store 内串行化关键写事务；容量、库存与取消均有并发回归测试 |
+| 重复核销 | Admission 唯一约束 + 串行化事务；重复/并发扫描返回原 Checkin |
+| 核销审计不可变 | SQLite 触发器拒绝 Checkin 的 UPDATE 与 DELETE |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
-| 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **228** 个顶层 Go 测试 |
+| 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
+| 测试用例 | **248** 个顶层 Go 测试、2 个 Vue Component 测试、2 个浏览器项目 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
@@ -412,13 +436,15 @@ main.go
 
 ```bash
 cd event_go && go test -v -count=1 ./...   # 运行所有测试
-cd event_go && go test -race ./...          # 数据竞争检测
+cd event_go && go test -race -count=1 ./... # 数据竞争检测
 cd event_go && go vet ./...                 # 静态检查
+cd event_go/web && npm test                 # Vue 组件测试
+cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 ```
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=5`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=6`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -506,12 +532,12 @@ event_go/
 | `/organizers/:id` | 门店详情 | 门店信息 + 旗下活动列表（分页） |
 | `/login` | 用户登录 | contact + password |
 | `/register` | 用户注册 | name + contact + password（≥6 位） |
-| `/me/registrations` | 我的报名 | 当前账户报名记录、活动和票种信息 |
+| `/me/registrations` | 我的活动 | 待参加、已结束、已取消、已入场状态和 Admission 二维码；兼容其他报名 |
 | `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
 | `/admin/events` | 活动管理 | 列表 + 删除 |
 | `/admin/events/new` | 创建活动 | 表单（先选门店） |
 | `/admin/events/:id/edit` | 编辑活动 | 表单 + 状态管理 |
-| `/admin/events/:id/registrations` | 报名列表 | 查看报名记录 |
+| `/admin/events/:id/registrations` | 报名与核销 | 查看报名、扫码枪/粘贴凭证核销、查看不可变审计记录 |
 
 ***
 

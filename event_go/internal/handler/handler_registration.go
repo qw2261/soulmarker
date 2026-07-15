@@ -100,6 +100,8 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, api.CodeCancellationDeadlineExceeded, err.Error())
 		case errors.Is(err, model.ErrNotRegistered):
 			writeError(w, http.StatusNotFound, api.CodeRegistrationNotFound, err.Error())
+		case errors.Is(err, model.ErrAdmissionCheckedIn):
+			writeError(w, http.StatusConflict, api.CodeAdmissionAlreadyCheckedIn, err.Error())
 		default:
 			writeInternalError(w, "cancel_registration", err)
 		}
@@ -130,11 +132,22 @@ func (h *Handler) GetRegistrationStatus(w http.ResponseWriter, r *http.Request) 
 		writeInternalError(w, "get_registration_status", err)
 		return
 	}
+	status := dto.RegistrationStatusResponse{Registered: registered}
+	if registered {
+		admission, err := h.admissions.GetForUser(eventID, user.ID)
+		if err == nil {
+			mapped := dto.Admission(&admission.Admission)
+			status.Admission = &mapped
+		} else if !errors.Is(err, model.ErrAdmissionNotFound) {
+			writeInternalError(w, "get_registration_admission", err)
+			return
+		}
+	}
 
 	writeJSON(w, http.StatusOK, dto.Response{
 		Code:    200,
 		Message: "ok",
-		Data:    dto.RegistrationStatusResponse{Registered: registered},
+		Data:    status,
 	})
 }
 

@@ -7,6 +7,9 @@ import type {
   RegistrationStatus,
   MyRegistration,
   RegisterReq,
+  MyAdmission,
+  Checkin,
+  CheckinResult,
 } from './types'
 
 export interface ListEventsParams {
@@ -59,4 +62,23 @@ export function getRegistrationStatus(id: number) {
 
 export function listMyRegistrations(params?: { page?: number; page_size?: number }) {
   return get<MyRegistration[]>('/me/registrations', params)
+}
+
+export function listMyAdmissions(params?: { page?: number; page_size?: number }) {
+  return get<MyAdmission[]>('/me/admissions', params)
+}
+
+export function getMyAdmission(eventId: number) {
+  return get<MyAdmission>(`/events/${eventId}/admission`)
+}
+
+export function checkInAdmission(eventId: number, credential: string) {
+  return post<CheckinResult>(`/events/${eventId}/checkins`, { credential })
+}
+
+export function listCheckins(
+  eventId: number,
+  params?: { page?: number; page_size?: number }
+) {
+  return get<Checkin[]>(`/events/${eventId}/checkins`, params)
 }

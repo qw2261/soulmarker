@@ -190,6 +190,8 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteEvent(id); err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			writeError(w, http.StatusNotFound, api.CodeEventNotFound, err.Error())
+		} else if errors.Is(err, model.ErrEventHasAdmissions) {
+			writeError(w, http.StatusConflict, api.CodeEventHasAdmissions, err.Error())
 		} else {
 			writeInternalError(w, "delete_event", err)
 		}
