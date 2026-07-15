@@ -62,20 +62,35 @@
 ### 核心实体关系
 
 ```
-Organizer (门店/主办方)
-  └── Event (活动)
-        ├── Registration (报名记录)
-        │     └── Ticket (门票) — N:1，报名可选关联一张门票
-        ├── Post (帖子)
-        │     └── Reply (回复) — N:1，一个帖子有多个回复
-        └── Ticket (门票) — N:1，一个活动可创建多种门票
+Organization (授权、审计、未来计费租户)
+  ├── OrganizationMember (owner/admin/editor/checker/finance)
+  └── OrganizerProfile (公开门店/品牌资料)
+        └── Event (活动)
+              ├── Registration (报名记录)
+              │     └── Ticket (门票) — N:1，报名可选关联一张门票
+              ├── Post (帖子)
+              │     └── Reply (回复) — N:1，一个帖子有多个回复
+              └── Ticket (门票) — N:1，一个活动可创建多种门票
 
 User (用户) — 注册/登录获得 JWT
   报名/发帖/回复时自动携带身份
   └── Notification (站内通知) — 报名、取消、活动变更与临近提醒
 ```
 
-### Organizer — 门店/主办方
+### Organization & OrganizerProfile — 租户与公开资料
+
+Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员权限、审计和未来计费的租户；`OrganizerProfile` 继续承载现有 `/organizers` API 的门店/品牌公开资料。当前基础切片保持一对一关系，历史门店迁移为 `unclaimed` Organization，不根据联系方式猜测 owner。
+
+| 实体 | 说明 |
+|---|---|
+| `organizations` | 租户名称、slug 与 `unclaimed/active/suspended/system` 状态 |
+| `organizers` / `OrganizerProfile` | 兼容现有 API 的公开门店资料，通过 `organization_id` 关联租户 |
+| `organization_members` | 用户在租户内的角色与 active/revoked 状态；每个组织最多一个 active owner |
+| `organization_invitations` | 只保存邀请 Token 摘要、规范化邮箱、非 owner 角色、过期和消费状态 |
+
+邀请只能由 active Organization 的 active owner/admin 创建；接受者的登录邮箱或已验证恢复邮箱必须与邀请一致。完整租户 API、资源 scope、后台 UI 和审计仍属于后续 G5 切片，当前全局 Admin Token 仍只代表 platform admin。
+
+### OrganizerProfile 字段
 
 | 字段          | 类型      | 说明                          |
 | ----------- | ------- | --------------------------- |
@@ -167,7 +182,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 52 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程、内容治理和 Schema v11 站内通知均已完成远端候选门禁。JWT/Go 标准库漏洞修复与 P0/P1 清零审计也已通过远端门禁；G4-R03 仅剩真实 staging SMTP 验收和两场受控活动。
+**v6.0 验收与 v6.1 租户基础并行推进** — 免费活动自动化、JWT/Go 供应链安全与 P0/P1 清零已通过远端门禁；G4 仍待真实 staging SMTP 和两场受控活动。v6.1 当前只落地 Schema v12 租户基础、历史数据安全回填、成员/邀请存储不变量与 N/N-1 `/organizers` 写兼容，尚未开放自助组织 API，也未宣称业务资源已经 tenant scoped。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -382,6 +397,7 @@ event_go/
 │   │   ├── store_content_moderation.go # 举报队列、软删除、恢复与动作审计事务
 │   │   ├── store_user.go        # 用户 CRUD
 │   │   ├── store_organizer.go   # 门店 CRUD
+│   │   ├── store_organization.go # Organization、成员和邀请基础存储
 │   │   ├── store_identity.go    # 身份迁移统计与 legacy 清单
 │   │   ├── store_test.go        # Store 单元测试
 │   │   ├── store_concurrency_test.go # 容量、库存、取消并发测试
@@ -480,13 +496,15 @@ main.go
 | 密码重置 | 256 位一次性 Token、SHA-256 摘要存储、30 分钟默认过期、替代和消费均不可复用 |
 | 恢复邮箱绑定 | 当前密码 + 邮箱链接双重确认；确认事务撤销旧 JWT、旧重置 Token 和其他验证 Token，原登录 contact 不变 |
 | 内容治理 | Post/Reply 使用 `visible/removed` 软删除；举报处理与动作审计在事务内写入，公开查询只返回 visible 内容 |
+| 租户基础 | Organization 与 OrganizerProfile 分离；历史资料回填为 unclaimed；单 active owner、邀请邮箱/过期/单次消费由约束和事务保护 |
+| N/N-1 门店写兼容 | 旧应用省略 `organization_id` 创建资料时由触发器生成 unclaimed 租户；旧应用删除资料时自动暂停对应租户 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **277** 个顶层 Go 测试、13 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
+| 测试用例 | **293** 个顶层 Go 测试、17 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
@@ -505,7 +523,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=11`。Schema v7 新增认证版本和密码重置 Token；Schema v8 新增活动封面；Schema v9 新增帖子/回复治理元数据、举报与动作审计；Schema v10 新增独立恢复邮箱、验证时间和一次性验证 Token，并只对规范化后唯一的历史合法邮箱 contact 做兼容回填；Schema v11 新增持久化站内通知、用户未读索引、活动索引和全局唯一幂等键。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=12`。Schema v7–v11 分别覆盖认证、活动封面、内容治理、恢复邮箱和站内通知；Schema v12 新增 `organizations`、`organization_members`、`organization_invitations`，并为 `organizers` 增加 `organization_id`。历史资料一对一回填为 unclaimed 租户，系统占位资料对应 system 租户，不猜测历史 owner；兼容触发器保护 pre-v12 应用的创建和删除写入。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -514,7 +532,7 @@ cd event_go
 cp data/event_go.db data/event_go.db.pre-upgrade.bak
 ```
 
-身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。当前候选详细回滚步骤见 [docs/releases/v6.0.0/migration-rollback.md](docs/releases/v6.0.0/migration-rollback.md)。
+身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。Schema v12 的升级、兼容和回滚步骤见 [docs/releases/v6.1.0/migration-rollback.md](docs/releases/v6.1.0/migration-rollback.md)。
 
 ### API 速查
 

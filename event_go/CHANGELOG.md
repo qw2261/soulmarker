@@ -26,6 +26,9 @@
 - 防表格公式注入、UTF-8 BOM 和跨页聚合的报名 CSV 导出。
 - 持久化站内通知、通知中心、导航未读徽标，以及报名成功、取消、活动变更和临近提醒闭环。
 - 当前用户通知分页、未读计数、单条已读和全部已读 API；OpenAPI、DTO 与错误码契约同步扩展。
+- Schema v12 Organization、OrganizationMember 与 OrganizationInvitation 租户基础模型。
+- 组织与公开 OrganizerProfile 原子创建、用户组织查询，以及邀请创建/接受的 Store 能力。
+- [ADR-004](docs/adr/004-organization-tenant-boundary-and-migration.md) 固化租户边界、历史 unclaimed 回填、角色和分阶段切换策略。
 
 ### Changed
 
@@ -54,6 +57,7 @@
 - 后台登录与每次后台路由进入均服务端复验 Token；活动编辑允许重新选择门店。
 - 删除确认统一使用中文按钮，后台表格在移动端使用局部横向滚动。
 - 业务通知按 ADR-003 以站内持久化记录为事实源；外部业务邮件/短信和多实例投递延后到生产基础设施阶段。
+- `Organizer` 保留为 `OrganizerProfile` 的源码兼容别名，现有 `/organizers` API 暂不暴露租户授权字段。
 
 ### Fixed
 
@@ -77,6 +81,8 @@
 - 通知查询和已读操作只使用 JWT 用户 ID 作用域，跨用户通知统一隐藏为 `NOTIFICATION_NOT_FOUND`；通知正文不保存联系方式、恢复令牌或入场凭证。
 - 升级 `github.com/golang-jwt/jwt/v5` 到 v5.2.2，修复可达的 `GO-2025-3553` 分隔符洪泛过量内存分配问题，并在 CI 增加 pinned `govulncheck` 门禁。
 - 将 Go 工具链基线从 1.25.0 提升到 1.25.12，消除首次远端漏洞扫描发现的可达标准库漏洞。
+- 组织邀请只允许 active owner/admin 创建，禁止普通邀请授予 owner；接受时必须匹配登录邮箱或已验证恢复邮箱，且 Token 单次使用并受过期约束。
+- 每个组织通过数据库部分唯一索引限制为最多一个 active owner。
 
 ### Migration
 
@@ -88,3 +94,4 @@
 - Schema 升级到版本 6：新增 Admission/Checkin 外键、索引和 Checkin 不可变触发器。
 - Schema 升级到版本 7：新增用户认证版本、密码重置 Token 表、索引和新用户认证版本触发器。
 - Schema 升级到版本 11：新增通知表、用户时间线/未读/活动索引和全局唯一幂等键；活动删除后历史通知保留并将引用置空。
+- Schema 升级到版本 12：历史门店一对一回填为 unclaimed Organization，不猜测 owner；新增成员、邀请、角色/FK/索引，并以创建/删除触发器保持 pre-v12 `/organizers` 写兼容。

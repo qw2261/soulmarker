@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 11
+const CurrentSchemaVersion = 12
 
 type Store struct {
 	db             *sql.DB
@@ -159,7 +159,103 @@ func migrations() []migration {
 		{version: 9, name: "content_moderation", apply: migrateContentModeration},
 		{version: 10, name: "recovery_email", apply: migrateRecoveryEmail},
 		{version: 11, name: "in_app_notifications", apply: migrateInAppNotifications},
+		{version: 12, name: "organization_tenant_foundation", apply: migrateOrganizationTenantFoundation},
 	}
+}
+
+func migrateOrganizationTenantFoundation(tx *sql.Tx) error {
+	if err := execStatements(tx, []string{
+		`CREATE TABLE organizations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'unclaimed'
+			 CHECK (status IN ('unclaimed', 'active', 'suspended', 'system')),
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`INSERT INTO organizations (id, name, slug, status, created_at, updated_at)
+		 SELECT id, name,
+			CASE WHEN id = 0 THEN 'system' ELSE 'legacy-' || id END,
+			CASE WHEN id = 0 THEN 'system' ELSE 'unclaimed' END,
+			created_at, updated_at
+		 FROM organizers`,
+		`CREATE UNIQUE INDEX idx_organizations_slug
+		 ON organizations(slug) WHERE slug <> ''`,
+		`CREATE INDEX idx_organizations_status_created
+		 ON organizations(status, created_at DESC)`,
+	}); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(
+		tx, "organizers", "organization_id",
+		"organization_id INTEGER NOT NULL DEFAULT 0 REFERENCES organizations(id)",
+	); err != nil {
+		return err
+	}
+	return execStatements(tx, []string{
+		`UPDATE organizers SET organization_id = id`,
+		`CREATE UNIQUE INDEX idx_organizers_organization
+		 ON organizers(organization_id) WHERE organization_id <> 0`,
+		`CREATE TRIGGER organizers_create_unclaimed_organization
+		 AFTER INSERT ON organizers
+		 WHEN NEW.id <> 0 AND NEW.organization_id = 0
+		 BEGIN
+			INSERT INTO organizations (name, slug, status, created_at, updated_at)
+			VALUES (NEW.name, '', 'unclaimed', NEW.created_at, NEW.updated_at);
+			UPDATE organizers SET organization_id = last_insert_rowid() WHERE id = NEW.id;
+		 END`,
+		`CREATE TRIGGER organizers_suspend_organization_after_delete
+		 AFTER DELETE ON organizers
+		 WHEN OLD.organization_id <> 0
+		 BEGIN
+			UPDATE organizations
+			SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+			WHERE id = OLD.organization_id;
+		 END`,
+		`CREATE TABLE organization_members (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organization_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			role TEXT NOT NULL
+			 CHECK (role IN ('owner', 'admin', 'editor', 'checker', 'finance')),
+			status TEXT NOT NULL DEFAULT 'active'
+			 CHECK (status IN ('active', 'revoked')),
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			UNIQUE (organization_id, user_id)
+		)`,
+		`CREATE INDEX idx_organization_members_user
+		 ON organization_members(user_id, status, created_at ASC)`,
+		`CREATE INDEX idx_organization_members_org_role
+		 ON organization_members(organization_id, status, role)`,
+		`CREATE UNIQUE INDEX idx_organization_members_active_owner
+		 ON organization_members(organization_id) WHERE role = 'owner' AND status = 'active'`,
+		`CREATE TABLE organization_invitations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organization_id INTEGER NOT NULL,
+			email TEXT NOT NULL,
+			role TEXT NOT NULL
+			 CHECK (role IN ('admin', 'editor', 'checker', 'finance')),
+			token_hash TEXT NOT NULL UNIQUE,
+			status TEXT NOT NULL DEFAULT 'pending'
+			 CHECK (status IN ('pending', 'accepted', 'revoked', 'expired')),
+			expires_at TEXT NOT NULL,
+			accepted_at TEXT,
+			revoked_at TEXT,
+			invited_by_user_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+			FOREIGN KEY (invited_by_user_id) REFERENCES users(id)
+		)`,
+		`CREATE UNIQUE INDEX idx_organization_invitations_pending
+		 ON organization_invitations(organization_id, email) WHERE status = 'pending'`,
+		`CREATE INDEX idx_organization_invitations_expiry
+		 ON organization_invitations(expires_at) WHERE status = 'pending'`,
+	})
 }
 
 func migrateInAppNotifications(tx *sql.Tx) error {
@@ -651,6 +747,11 @@ func validateForeignKeys(db *sql.DB) error {
 		{"recovery_email_tokens", "users", "user_id"},
 		{"notifications", "users", "user_id"},
 		{"notifications", "events", "event_id"},
+		{"organizers", "organizations", "organization_id"},
+		{"organization_members", "organizations", "organization_id"},
+		{"organization_members", "users", "user_id"},
+		{"organization_invitations", "organizations", "organization_id"},
+		{"organization_invitations", "users", "invited_by_user_id"},
 		{"content_reports", "events", "event_id"},
 		{"content_reports", "posts", "post_id"},
 		{"content_reports", "users", "reporter_user_id"},

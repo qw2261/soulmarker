@@ -1,8 +1,8 @@
 # 亦闻 event-go 产品化目标与迭代方案
 
 > **文档状态**：Active，后续迭代的唯一目标与阶段验收依据<br>
-> **规划基线**：v5.1，评估快照为 2026-07-15 / b196b3c<br>
-> **更新时间**：2026-07-15<br>
+> **规划基线**：v5.1，当前评估快照为 2026-07-16 / a5722da 后续候选<br>
+> **更新时间**：2026-07-16<br>
 > **维护频率**：每个迭代结束、每次版本发布、每次重大范围调整后更新<br>
 > **目标**：把当前可演示 MVP 渐进迭代为可用、可上线、可商业化且可持续运营的活动平台
 
@@ -66,7 +66,7 @@
 - 已完成门店、活动、报名、门票、讨论、内容治理、站内通知、用户认证和管理接口，共 52 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 285 个顶层测试，当前候选验证中 go test、race、vet、gofmt 均纳入门禁。
+- Go 侧当前候选已有 293 个顶层测试，go test、race、vet、gofmt 与 govulncheck 均纳入门禁。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -373,14 +373,36 @@ G4-R09 当前拆分验收：
 
 ### 范围
 
-- [ ] **G5-R01** 区分租户 Organization 与公开品牌/门店资料 OrganizerProfile。
+- [x] **G5-R01** 区分租户 Organization 与公开品牌/门店资料 OrganizerProfile。
 - [ ] **G5-R02** 建立 organization_members、invitation 和角色权限。
-- [ ] **G5-R03** 最小角色集合：owner、admin、editor、checker、finance；可按试点简化。
+- [x] **G5-R03** 固化最小角色集合：owner、admin、editor、checker、finance；角色能力按后续授权切片逐项开放。
 - [ ] **G5-R04** platform_admin 与租户角色分离，移除公开业务面的全局 Admin Token。
 - [ ] **G5-R05** event、ticket、registration、admission、checkin、export 全部强制 tenant scope。
 - [ ] **G5-R06** 组织者自助入驻、邀请成员、发布活动、配置票种、核销和导出。
 - [ ] **G5-R07** 审计日志记录 actor、tenant、action、resource、request_id、时间和结果。
 - [ ] **G5-R08** 组织者联系方式、参与者 PII 按角色最小授权和脱敏展示。
+
+### 迭代切片与节奏
+
+| 切片 | 建议周期 | 目标 | 退出条件 | 回退边界 |
+|---|---:|---|---|---|
+| **G5.1 租户基础** | 1 个迭代 | Schema v12、Organization/Profile 分离、成员/邀请不变量、历史回填、N/N-1 兼容 | 空库/v11→v12/重复迁移/FK/触发器/旧应用写兼容通过；ADR-004 与 v6.1 候选文档完整 | 仅 Expand；旧应用忽略新表，保留兼容触发器，不删除租户数据 |
+| **G5.2 授权内核** | 1 个迭代 | 当前组织上下文、platform_admin 与 tenant role 分离、集中权限策略 | owner/admin/editor/checker/finance 权限矩阵自动化；所有拒绝路径有稳定错误码 | 新旧管理入口短期双轨，按 feature flag 关闭租户入口 |
+| **G5.3 资源租户化** | 1 个迭代 | event/ticket/registration/admission/checkin/export 查询与写入强制 tenant scope | 跨租户读写全部 403/404；直接按资源 ID 的 Store/Service 调用不能绕过 scope | Expand + backfill + dual-read；未完成全量校验前不切断旧字段 |
+| **G5.4 自助运营** | 1 个迭代 | 入驻、邀请接受、成员管理、发布、票种、核销、导出 UI/API | 新组织无需 platform admin 或改库即可完成免费活动运营 | 自助入口可关闭，platform admin 仅保留应急与治理能力 |
+| **G5.5 审计与试点** | 1 个迭代 | actor/tenant/request_id 审计、PII 最小授权、3 组织试点 | 全部关键动作可追溯；跨租户安全测试、真实试点和缺陷门禁通过 | 试点白名单与只读降级，不回退审计证据 |
+
+G5 每个切片使用“迁移/约束 → Store/Service → API 契约 → UI/E2E → 试点”的固定顺序。任何切片如果无法保持 N/N-1 或缺少回滚证据，不得进入下一切片；避免同时修改 Schema、授权、全部 Handler 和前端导航形成高耦合的一次性重构。
+
+### G5.1 当前基础切片验收
+
+- [x] **G5-F01** Schema v12 新增 Organization、OrganizationMember、OrganizationInvitation，并保持现有 `/organizers` API 和 `Organizer` 源码别名兼容。
+- [x] **G5-F02** 历史门店一对一回填为 unclaimed Organization，系统占位门店回填为 system；不根据 contact 或用户数据猜测 owner。
+- [x] **G5-F03** 新组织、公开资料和唯一 active owner 同事务创建；邀请只允许 active owner/admin 创建，不能邀请 owner，接受时匹配登录邮箱或已验证恢复邮箱，并保证过期与单次消费。
+- [x] **G5-F04** pre-v12 应用省略 `organization_id` 创建门店时自动生成 unclaimed Organization；旧应用删除门店时自动暂停对应租户。
+- [ ] **G5-F05** v6.1.0 候选通过完整本地与远端门禁，并回填 Commit、Run、迁移和回滚证据。
+
+G5.1 不包含组织自助 API、租户上下文、业务资源 scope、租户后台或完整角色授权，因此不能据此勾选 G5-R02、R04–R08，也不能把全局 Admin Token 描述为已被替换。
 
 ### 完成门槛
 
@@ -752,7 +774,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | Planned | v6.1 | — | 依赖可信身份 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 Schema v12 租户基础候选验证中；完整授权、tenant scope、自助运营与审计尚未开始 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

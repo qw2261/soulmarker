@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,21 +10,25 @@ import (
 )
 
 func (s *Store) CreateOrganizer(o *model.Organizer) error {
-	now := time.Now().Format(model.TimeFormat)
-	result, err := s.db.Exec(
-		"INSERT INTO organizers (name, description, contact, logo_url, address, website, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		o.Name, o.Description, o.Contact, o.LogoURL, o.Address, o.Website, o.Tags, now, now,
-	)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return err
+	defer tx.Rollback()
+	now := time.Now().UTC()
+	organization := &model.Organization{
+		Name: o.Name, Status: model.OrganizationStatusUnclaimed,
 	}
-	o.ID = id
-	o.CreatedAt, _ = time.Parse(model.TimeFormat, now)
-	o.UpdatedAt = o.CreatedAt
+	if err := insertOrganizationTx(tx, organization, now); err != nil {
+		return fmt.Errorf("创建门店租户失败: %w", err)
+	}
+	o.OrganizationID = organization.ID
+	if err := insertOrganizerProfileTx(tx, o, now); err != nil {
+		return fmt.Errorf("创建门店资料失败: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交门店创建事务失败: %w", err)
+	}
 	return nil
 }
 
@@ -34,8 +39,8 @@ func (s *Store) GetOrganizer(id int64) (*model.Organizer, error) {
 	o := &model.Organizer{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
-		"SELECT id, name, description, contact, logo_url, address, website, tags, created_at, updated_at FROM organizers WHERE id = ?", id,
-	).Scan(&o.ID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt)
+		"SELECT id, organization_id, name, description, contact, logo_url, address, website, tags, created_at, updated_at FROM organizers WHERE id = ?", id,
+	).Scan(&o.ID, &o.OrganizationID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -54,7 +59,7 @@ func (s *Store) ListOrganizers(offset, limit int) ([]*model.Organizer, int, erro
 	}
 
 	rows, err := s.db.Query(
-		`SELECT o.id, o.name, o.description, o.contact, o.logo_url, o.address, o.website, o.tags, o.created_at, o.updated_at,
+		`SELECT o.id, o.organization_id, o.name, o.description, o.contact, o.logo_url, o.address, o.website, o.tags, o.created_at, o.updated_at,
 		 COUNT(e.id) as event_count
 		 FROM organizers o LEFT JOIN events e ON o.id = e.organizer_id
 		 WHERE o.id <> 0
@@ -70,7 +75,7 @@ func (s *Store) ListOrganizers(offset, limit int) ([]*model.Organizer, int, erro
 	for rows.Next() {
 		o := &model.Organizer{}
 		var createdAt, updatedAt string
-		if err := rows.Scan(&o.ID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt, &o.EventCount); err != nil {
+		if err := rows.Scan(&o.ID, &o.OrganizationID, &o.Name, &o.Description, &o.Contact, &o.LogoURL, &o.Address, &o.Website, &o.Tags, &createdAt, &updatedAt, &o.EventCount); err != nil {
 			return nil, 0, err
 		}
 		o.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
@@ -148,6 +153,12 @@ func (s *Store) DeleteOrganizer(id int64) error {
 	defer tx.Rollback()
 
 	var count int
+	var organizationID int64
+	if err := tx.QueryRow("SELECT organization_id FROM organizers WHERE id = ?", id).Scan(&organizationID); err == sql.ErrNoRows {
+		return model.ErrOrganizerNotFound
+	} else if err != nil {
+		return err
+	}
 	if err := tx.QueryRow("SELECT COUNT(*) FROM events WHERE organizer_id = ?", id).Scan(&count); err != nil {
 		return err
 	}
@@ -164,6 +175,14 @@ func (s *Store) DeleteOrganizer(id int64) error {
 	n, _ := result.RowsAffected()
 	if n == 0 {
 		return model.ErrOrganizerNotFound
+	}
+	if organizationID != 0 {
+		if _, err := tx.Exec(
+			"UPDATE organizations SET status = ?, updated_at = ? WHERE id = ?",
+			model.OrganizationStatusSuspended, time.Now().UTC().Format(model.TimeFormat), organizationID,
+		); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

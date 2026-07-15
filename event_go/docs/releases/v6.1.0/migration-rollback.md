@@ -1,0 +1,59 @@
+# v6.1.0 Migration and Rollback
+
+## 前向迁移
+
+Schema v12 是 Expand-only，新增：
+
+- `organizations`：租户名称、slug、状态和时间；id=0 为 system。
+- `organizers.organization_id`：非空默认 0，迁移后历史非系统资料一对一关联 unclaimed Organization。
+- `organization_members`：用户、角色和 active/revoked 状态；部分唯一索引保证每组织最多一个 active owner。
+- `organization_invitations`：规范化邮箱、非 owner 角色、Token 摘要、pending/accepted/revoked/expired 状态和过期/消费时间。
+- 创建兼容触发器：旧应用 INSERT 不提供 `organization_id` 时自动创建 unclaimed Organization 并回填。
+- 删除兼容触发器：旧应用 DELETE OrganizerProfile 时自动暂停对应 Organization。
+
+迁移不会创建历史 Membership，也不会根据 `organizers.contact` 猜测 owner。现有 Event 继续引用 `organizers.id`，不在本切片重写资源外键。
+
+## 升级步骤
+
+1. 停止写入并记录当前应用 Commit、Schema 版本和数据库文件路径。
+2. 复制 SQLite 主文件及同目录 WAL/SHM 状态所需的一致性备份；推荐先正常停止应用再复制单文件。
+3. 在备份副本运行新应用或迁移测试，确认 v11→v12 成功。
+4. 启动候选后执行并保存：
+
+```sql
+SELECT MAX(version) FROM schema_migrations;
+PRAGMA foreign_key_check;
+SELECT COUNT(*) FROM organizers WHERE id <> 0 AND organization_id = 0;
+SELECT organization_id, COUNT(*) FROM organizers
+WHERE organization_id <> 0 GROUP BY organization_id HAVING COUNT(*) > 1;
+SELECT COUNT(*) FROM organization_members;
+```
+
+预期版本为 12、foreign_key_check 无行、历史非系统资料不存在零 organization_id、每个非零 organization_id 只有一份 Profile；迁移后成员数保持 0，除非候选应用随后显式创建新组织。
+
+## N/N-1 兼容
+
+- pre-v12 读取和更新旧 Organizer 字段不受新增列影响。
+- pre-v12 INSERT 省略 `organization_id` 时，触发器生成 unclaimed Organization；旧应用取得的 Organizer ID 保持可用。
+- pre-v12 DELETE 时，触发器把对应 Organization 标记为 suspended，避免留下无公开资料的 active 租户。
+- pre-v12 应用不了解 Membership/Invitation，也不会执行租户授权。应用回滚期间必须关闭未来自助租户入口，仅允许受控 platform admin 运营。
+
+## 应用回滚
+
+1. 停止 v12 候选应用，保留 v12 数据库和升级前备份。
+2. 确认没有依赖 v12 自助入口的外部流量；本基础切片默认尚未开放这些入口。
+3. 部署 pre-v12 应用。不要删除 organizations、memberships、invitations、索引或触发器。
+4. 复验旧 `/organizers` 创建、读取、更新、删除和 Event 关联；确认新建资料自动获得非零 organization_id，删除后租户为 suspended。
+5. 修复后以前滚方式重新部署 v12；新增租户数据仍保留。
+
+## 完全撤销 Schema v12
+
+只有在确认升级后没有任何新 Organization、Membership、Invitation 或 Organizer/Event 写入，并且业务明确放弃候选时，才允许停机恢复升级前完整数据库备份。不要在生产库手工 DROP 表、索引、触发器或尝试删除 `organization_id` 列；这会破坏外键和后续前滚证据。
+
+## Go/No-Go 检查
+
+- 空库、v11→v12、重复迁移、迁移失败和备份恢复测试通过。
+- FK、部分唯一索引、两个兼容触发器存在且行为测试通过。
+- 历史 Event/Organizer 数量和关联保持不变，Membership 不被猜测生成。
+- N/N-1 创建与删除写兼容通过。
+- 候选 Commit、远端 CI Run、备份路径、执行人和回滚判定已记录。

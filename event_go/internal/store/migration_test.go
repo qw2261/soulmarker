@@ -40,6 +40,32 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertIndexExists(t, s.db, "idx_notifications_user_created")
 	assertIndexExists(t, s.db, "idx_notifications_user_unread")
 	assertIndexExists(t, s.db, "idx_notifications_event")
+	assertTableExists(t, s.db, "organizations")
+	assertColumnExists(t, s.db, "organizers", "organization_id")
+	assertTableExists(t, s.db, "organization_members")
+	assertTableExists(t, s.db, "organization_invitations")
+	assertIndexExists(t, s.db, "idx_organizations_slug")
+	assertIndexExists(t, s.db, "idx_organizers_organization")
+	assertIndexExists(t, s.db, "idx_organization_members_user")
+	assertIndexExists(t, s.db, "idx_organization_members_active_owner")
+	assertIndexExists(t, s.db, "idx_organization_invitations_pending")
+	assertTriggerExists(t, s.db, "organizers_create_unclaimed_organization")
+	assertTriggerExists(t, s.db, "organizers_suspend_organization_after_delete")
+	if has, err := tableHasForeignKeyDB(s.db, "organizers", "organizations", "organization_id"); err != nil || !has {
+		t.Fatalf("organizer organization foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "organization_members", "organizations", "organization_id"); err != nil || !has {
+		t.Fatalf("member organization foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "organization_members", "users", "user_id"); err != nil || !has {
+		t.Fatalf("member user foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "organization_invitations", "organizations", "organization_id"); err != nil || !has {
+		t.Fatalf("invitation organization foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "organization_invitations", "users", "invited_by_user_id"); err != nil || !has {
+		t.Fatalf("invitation inviter foreign key missing: exists=%v err=%v", has, err)
+	}
 }
 
 func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
@@ -393,7 +419,8 @@ func TestMigrationV5ToCurrentPreservesRegistrationsWithoutSyntheticAdmissions(t 
 		t.Fatalf("create current database: %v", err)
 	}
 	statements := []string{
-		`INSERT INTO organizers (id, name, created_at, updated_at) VALUES (1, '迁移门店', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO organizations (id, name, slug, status, created_at, updated_at) VALUES (1, '迁移组织', 'migration-org', 'unclaimed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO organizers (id, organization_id, name, created_at, updated_at) VALUES (1, 1, '迁移门店', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO users (id, name, contact, password_hash, created_at) VALUES (7, '迁移用户', 'migration@example.com', 'hash', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO events (id, organizer_id, title, event_time, location, capacity, created_at, updated_at) VALUES (10, 1, '迁移活动', '2099-01-01T00:00:00Z', '线上', 10, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO registrations (id, event_id, user_id, name, contact, identity_status, created_at) VALUES (20, 10, 7, '迁移用户', 'migration@example.com', 'verified', '2026-01-01T00:00:00Z')`,
@@ -577,6 +604,109 @@ func TestMigrationV10ToV11AddsNotificationsWithoutChangingExistingData(t *testin
 	}
 }
 
+func TestMigrationV11ToV12BackfillsTenantWithoutGuessingOwner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v11-to-v12.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := &model.Organizer{Name: "历史公开门店", Contact: "operator@example.com"}
+	if err := s.CreateOrganizer(profile); err != nil {
+		t.Fatal(err)
+	}
+	event := &model.Event{
+		OrganizerID: profile.ID, Title: "历史租户迁移活动", EventTime: "2099-01-01T00:00:00Z",
+		Location: "线上", Capacity: 10,
+	}
+	if err := s.CreateEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "未推断所有者", Contact: "legacy-owner@example.com", PasswordHash: "hash"}
+	if err := s.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`DROP INDEX idx_organization_invitations_expiry`,
+		`DROP INDEX idx_organization_invitations_pending`,
+		`DROP TABLE organization_invitations`,
+		`DROP INDEX idx_organization_members_org_role`,
+		`DROP INDEX idx_organization_members_active_owner`,
+		`DROP INDEX idx_organization_members_user`,
+		`DROP TABLE organization_members`,
+		`DROP TRIGGER organizers_suspend_organization_after_delete`,
+		`DROP TRIGGER organizers_create_unclaimed_organization`,
+		`DROP INDEX idx_organizers_organization`,
+		`CREATE TABLE organizers_v11 (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			contact TEXT NOT NULL DEFAULT '',
+			logo_url TEXT NOT NULL DEFAULT '',
+			address TEXT NOT NULL DEFAULT '',
+			website TEXT NOT NULL DEFAULT '',
+			tags TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`INSERT INTO organizers_v11
+		 (id, name, description, contact, logo_url, address, website, tags, created_at, updated_at)
+		 SELECT id, name, description, contact, logo_url, address, website, tags, created_at, updated_at
+		 FROM organizers`,
+		`DROP TABLE organizers`,
+		`ALTER TABLE organizers_v11 RENAME TO organizers`,
+		`DROP INDEX idx_organizations_status_created`,
+		`DROP INDEX idx_organizations_slug`,
+		`DROP TABLE organizations`,
+		`DELETE FROM schema_migrations WHERE version = 12`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v11 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v11 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	assertTableExists(t, s.db, "organizations")
+	assertColumnExists(t, s.db, "organizers", "organization_id")
+	assertTableExists(t, s.db, "organization_members")
+	assertTableExists(t, s.db, "organization_invitations")
+	migratedProfile, err := s.GetOrganizer(profile.ID)
+	if err != nil || migratedProfile == nil || migratedProfile.OrganizationID != profile.ID {
+		t.Fatalf("profile tenant backfill mismatch: profile=%+v err=%v", migratedProfile, err)
+	}
+	organization, err := s.GetOrganization(migratedProfile.OrganizationID)
+	if err != nil || organization == nil || organization.Name != profile.Name || organization.Status != model.OrganizationStatusUnclaimed {
+		t.Fatalf("backfilled organization mismatch: organization=%+v err=%v", organization, err)
+	}
+	if member, err := s.GetOrganizationMember(organization.ID, user.ID); err != nil || member != nil {
+		t.Fatalf("migration must not guess historical owner: member=%+v err=%v", member, err)
+	}
+	if migratedEvent, err := s.GetEvent(event.ID); err != nil || migratedEvent == nil || migratedEvent.OrganizerID != profile.ID {
+		t.Fatalf("event changed during tenant migration: event=%+v err=%v", migratedEvent, err)
+	}
+	systemOrganization, err := s.GetOrganization(0)
+	if err != nil || systemOrganization == nil || systemOrganization.Status != model.OrganizationStatusSystem {
+		t.Fatalf("system organization missing: organization=%+v err=%v", systemOrganization, err)
+	}
+}
+
 func TestMigrationRepeatedExecution(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "repeat.db")
 	for i := 0; i < 2; i++ {
@@ -667,6 +797,17 @@ func assertIndexExists(t *testing.T, db *sql.DB, index string) {
 	}
 	if count != 1 {
 		t.Fatalf("expected index %s", index)
+	}
+}
+
+func assertTriggerExists(t *testing.T, db *sql.DB, trigger string) {
+	t.Helper()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = ?`, trigger).Scan(&count); err != nil {
+		t.Fatalf("query trigger %s: %v", trigger, err)
+	}
+	if count != 1 {
+		t.Fatalf("expected trigger %s", trigger)
 	}
 }
 
