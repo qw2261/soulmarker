@@ -295,7 +295,7 @@ G4-R03 当前拆分验收：
 
 ### 运营端
 
-- [ ] **G4-R06** 门店、活动、门票和报名管理后台完整可用。
+- [x] **G4-R06** 门店、活动、门票和报名管理后台完整可用。
 - [x] **G4-R07** 免费报名或免费票在报名事务内生成 Admission 入场权益和不可预测二维码凭证；付费票不误发。
 - [x] **G4-R08** Checkin 作为数据库触发器保护的不可变核销事件，重复扫码幂等并提供运营审计列表。
 - [ ] **G4-R09** 帖子、回复的删除、举报和基础内容管理。
@@ -308,7 +308,7 @@ G4-R06 当前拆分验收：
 - [x] 票种管理覆盖创建、价格/库存编辑、删除及历史报名票种快照提示。
 - [x] 报名名单支持跨页 CSV 导出、表格公式注入防护，并与幂等核销工作台统一。
 - [x] desktop-chromium 与 Pixel 7 通过建店、配活动、配票、报名、导出、核销和退出管理的完整本地 E2E。
-- [ ] 候选提交与远端 CI 证据绑定后再勾选 G4-R06 主任务。
+- [x] 候选提交 4b753ee 与远端 CI Run 29391643931 证据绑定。
 
 ### 测试重点
 
@@ -713,7 +713,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R07、R08 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R06 运营闭环已本地通过并等待候选远端门禁 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R06、R07、R08 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R01、R04、R05、R09 和受控活动继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

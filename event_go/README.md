@@ -145,7 +145,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线和认证安全闭环已完成远端门禁，门店/活动/票种/报名导出/核销运营闭环已完成本地桌面与移动验收。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R06 等待远端候选门禁，G4 其余范围继续推进。
+**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选及门店/活动/票种/报名导出/核销运营闭环均已完成远端桌面与移动门禁。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R01、R04、R05、R09 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
