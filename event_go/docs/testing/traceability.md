@@ -30,6 +30,6 @@
 | G3-R04 | v5.5 | High | Handler 不直接解码 model 请求或序列化数据库实体，公开 JSON 字段由 DTO 契约固定 | handler/dto、全部 Handler | CT-DTO-001 | 前端 TypeScript build | v5.5 test-report | Remote Pass |
 | G3-R05 | v5.5 | Medium | Repository 接口仅包含报名用例需要的 GetEvent、Register、Cancel 方法 | service.RegistrationRepository | ARCH-REPO-001 | — | v5.5 test-report | Remote Pass |
 | G3-R06 | v5.5 | High | 业务时间和 JWT 签发/验证可注入并可使用确定时间测试 | Clock、TokenManager、Handler Dependencies | ARCH-DEPS-001 | — | v5.5 test-report | Remote Pass |
-| G3-R07 | v5.5 | Critical | 所有业务操作同时注册 v1/兼容路由，OpenAPI operationId、request schema 与 DTO 字段双向一致 | Router catalog、OpenAPI 3.1、ADR-002 | CT-OPENAPI-001 | 前端使用 /api/v1 | v5.5 test-report | Local Pass |
+| G3-R07 | v5.5 | Critical | 所有业务操作同时注册 v1/兼容路由，OpenAPI operationId、request schema 与 DTO 字段双向一致 | Router catalog、OpenAPI 3.1、ADR-002 | CT-OPENAPI-001 | 前端使用 /api/v1 | v5.5 test-report | Remote Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

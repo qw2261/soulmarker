@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01–R06 已远端验证；R07 OpenAPI/API v1 切片本地完整门禁已通过，等待候选提交与远端 CI
+> 状态：In Progress，G3-R01–R07 当前实现均已通过本地和远端门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | 95df8c98d16b3dd3fcd1d5967dd18e0deabe1dd2 |
-| 当前候选 Commit | 待提交 |
+| 当前候选 Commit | f145e61cdbe75cecbf9621cb76611119b49aeaab |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -47,7 +47,8 @@
 | [GitHub Actions Run 29379040895](https://github.com/qw2261/soulmarker/actions/runs/29379040895) | service/依赖注入候选 success |
 | [GitHub Actions Run 29379725406](https://github.com/qw2261/soulmarker/actions/runs/29379725406) | DiscussionService 候选 success |
 | [GitHub Actions Run 29380643861](https://github.com/qw2261/soulmarker/actions/runs/29380643861) | HTTP DTO 候选 success |
+| [GitHub Actions Run 29381736629](https://github.com/qw2261/soulmarker/actions/runs/29381736629) | API v1/OpenAPI 候选 success |
 
 ## Go/No-Go
 
-No-Go：R07 切片仍需候选提交与远端 CI；G3 仍有稳定业务错误码工作。
+No-Go：R07 切片已完成验证；G3 仍有稳定业务错误码工作。
