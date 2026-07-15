@@ -145,7 +145,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 35 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线和认证安全闭环已完成本地与远端桌面/移动门禁。G4-R03 仍需补齐 legacy phone-only 账户迁移和真实 SMTP 环境验证，G4 其余范围继续推进。
+**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线和认证安全闭环已完成远端门禁，门店/活动/票种/报名导出/核销运营闭环已完成本地桌面与移动验收。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R06 等待远端候选门禁，G4 其余范围继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -158,6 +158,7 @@ POST   /api/v1/auth/password-reset/confirm              使用一次性 Token �
 GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
+GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
 GET    /api/v1/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
 POST   /api/v1/organizers                               创建门店 🔐
 GET    /api/v1/organizers[?page=&page_size=]            门店列表（分页，含活动数）
@@ -194,6 +195,8 @@ GET    /health                                        健康检查
 用户 Token  →  Authorization: Bearer <JWT>  →  UserAuth 中间件 → context
 管理员 Token →  X-Admin-Token: <token>       →  AdminAuth 中间件
 ```
+
+后台登录会先调用受保护的 `/admin/session` 校验 Token；每次进入后台路由再次服务端复验。任意受保护请求返回 `ADMIN_AUTH_INVALID` 时，前端只清理发出该请求的当前管理会话并安全回到管理登录页。
 
 **活动列表筛选参数**：
 
@@ -438,10 +441,10 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **262** 个顶层 Go 测试、5 个 Vue unit/component 测试、2 个浏览器项目 |
+| 测试用例 | **263** 个顶层 Go 测试、8 个 Vue unit/component 测试、2 个浏览器项目 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
-| 前端构建 | Element Plus 按实际组件注册；主 JS 约 481 KB / 168 KB gzip，无 chunk size 告警 |
+| 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
 
 **测试命令**：
@@ -483,11 +486,13 @@ curl -s -X POST http://localhost:8080/api/v1/auth/login \
 # 创建门店（管理端）
 curl -s -X POST http://localhost:8080/api/v1/organizers \
   -H "Content-Type: application/json" \
+  -H "X-Admin-Token: <ADMIN_TOKEN>" \
   -d '{"name":"XX大学","description":"综合大学","address":"大学路1号","tags":"教育,讲座"}'
 
 # 创建活动（归属门店）
 curl -s -X POST http://localhost:8080/api/v1/events \
   -H "Content-Type: application/json" \
+  -H "X-Admin-Token: <ADMIN_TOKEN>" \
   -d '{"organizer_id":1,"title":"Go 进阶讲座","event_time":"2026-06-15T14:00:00+08:00","location":"线上","capacity":50,"price":19.9}'
 
 # 报名（已登录用户自动携带 JWT）
@@ -547,11 +552,14 @@ event_go/
 | `/forgot-password` | 忘记密码 | 申请一次性密码重置链接，未知账户返回相同结果 |
 | `/reset-password?token=...` | 重置密码 | 消费一次性 Token 并撤销旧会话 |
 | `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
-| `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
-| `/admin/events` | 活动管理 | 列表 + 删除 |
+| `/admin` | 管理登录 | 通过服务端 `/admin/session` 验证 X-Admin-Token |
+| `/admin/organizers` | 门店管理 | 门店列表、创建、编辑和保留历史活动的安全删除 |
+| `/admin/organizers/new`、`/:id/edit` | 门店表单 | 维护名称、联系方式、地址、官网、Logo 和标签 |
+| `/admin/events` | 活动管理 | 列表、创建、编辑、删除及门店归属 |
 | `/admin/events/new` | 创建活动 | 表单（先选门店） |
-| `/admin/events/:id/edit` | 编辑活动 | 表单 + 状态管理 |
-| `/admin/events/:id/registrations` | 报名与核销 | 查看报名、扫码枪/粘贴凭证核销、查看不可变审计记录 |
+| `/admin/events/:id/edit` | 编辑活动 | 表单、状态和门店重新归属 |
+| `/admin/events/:id/tickets` | 票种管理 | 创建、编辑库存/价格、删除并保留报名快照 |
+| `/admin/events/:id/registrations` | 报名与核销 | 查看/安全导出报名、扫码枪/粘贴凭证核销、查看不可变审计记录 |
 
 ***
 

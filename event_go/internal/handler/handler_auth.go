@@ -121,6 +121,13 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "已退出登录"})
 }
 
+func (h *Handler) GetAdminSession(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, dto.Response{
+		Code: http.StatusOK, Message: "管理员身份有效",
+		Data: dto.AdminSessionResponse{Authenticated: true},
+	})
+}
+
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
 	if !decodeJSON(w, r, &req) {

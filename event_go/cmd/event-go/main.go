@@ -83,6 +83,7 @@ func main() {
 	log.Printf("  GET    /api/v1/me/registrations                 当前用户报名列表")
 	log.Printf("  GET    /api/v1/me/admissions                    当前用户入场凭证")
 	log.Printf("  GET    /api/v1/me/activities                    当前用户统一活动时间线")
+	log.Printf("  GET    /api/v1/admin/session                    校验平台管理员身份 🔐")
 	log.Printf("  GET    /api/v1/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/v1/organizers                       创建门店 🔐")
 	log.Printf("  GET    /api/v1/organizers                       门店列表")

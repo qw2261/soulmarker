@@ -1003,6 +1003,41 @@ func TestAdminAuthMiddleware(t *testing.T) {
 
 	_, _, srv := setupTestServer(t)
 
+	t.Run("session validates configured token", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/admin/session", nil)
+		req.Header.Set("X-Admin-Token", "test-token-123")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var payload struct {
+			Data dto.AdminSessionResponse `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if !payload.Data.Authenticated {
+			t.Fatal("valid admin token was not confirmed")
+		}
+	})
+
+	t.Run("session rejects invalid token", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/admin/session", nil)
+		req.Header.Set("X-Admin-Token", "wrong-token")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("with valid token", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", srv.URL+"/api/events",
 			strings.NewReader(`{"organizer_id":1,"title":"测试","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":0}`))

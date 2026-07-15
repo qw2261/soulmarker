@@ -63,10 +63,10 @@
 
 ### 3.1 已有优势
 
-- 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 35 个 API 操作。
+- 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 36 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 262 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 263 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -299,6 +299,16 @@ G4-R03 当前拆分验收：
 - [x] **G4-R07** 免费报名或免费票在报名事务内生成 Admission 入场权益和不可预测二维码凭证；付费票不误发。
 - [x] **G4-R08** Checkin 作为数据库触发器保护的不可变核销事件，重复扫码幂等并提供运营审计列表。
 - [ ] **G4-R09** 帖子、回复的删除、举报和基础内容管理。
+
+G4-R06 当前拆分验收：
+
+- [x] 后台登录通过受保护 API 服务端校验，后台路由复验 Token，失效会话安全清理并回跳。
+- [x] 门店管理覆盖创建、查询、编辑和保留历史活动的删除语义。
+- [x] 活动管理覆盖创建、编辑、状态、重新归属和删除入口。
+- [x] 票种管理覆盖创建、价格/库存编辑、删除及历史报名票种快照提示。
+- [x] 报名名单支持跨页 CSV 导出、表格公式注入防护，并与幂等核销工作台统一。
+- [x] desktop-chromium 与 Pixel 7 通过建店、配活动、配票、报名、导出、核销和退出管理的完整本地 E2E。
+- [ ] 候选提交与远端 CI 证据绑定后再勾选 G4-R06 主任务。
 
 ### 测试重点
 
@@ -703,7 +713,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R07、R08 已通过远端门禁；R03 候选 c6fc2cf 已通过远端门禁但保留 legacy phone-only 与真实 SMTP，其余范围继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R07、R08 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R06 运营闭环已本地通过并等待候选远端门禁 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

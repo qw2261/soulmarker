@@ -15,7 +15,10 @@
         <router-link to="/register">注册</router-link>
       </template>
       <span class="divider">|</span>
-      <router-link to="/admin/events" v-if="auth.isAdmin">管理</router-link>
+      <template v-if="auth.isAdmin">
+        <router-link to="/admin/events">运营</router-link>
+        <el-button text @click="logoutAdmin">退出管理</el-button>
+      </template>
       <router-link to="/admin" v-else>管理登录</router-link>
     </div>
     <el-button
@@ -39,7 +42,10 @@
           <router-link to="/login" @click="mobileMenuOpen = false">登录</router-link>
           <router-link to="/register" @click="mobileMenuOpen = false">注册</router-link>
         </template>
-        <router-link v-if="auth.isAdmin" to="/admin/events" @click="mobileMenuOpen = false">活动管理</router-link>
+        <template v-if="auth.isAdmin">
+          <router-link to="/admin/events" @click="mobileMenuOpen = false">运营后台</router-link>
+          <el-button text @click="logoutAdmin">退出管理</el-button>
+        </template>
         <router-link v-else to="/admin" @click="mobileMenuOpen = false">管理登录</router-link>
       </nav>
     </el-drawer>
@@ -66,6 +72,12 @@ async function logoutUser() {
     mobileMenuOpen.value = false
     router.push('/')
   }
+}
+
+function logoutAdmin() {
+  auth.logout()
+  mobileMenuOpen.value = false
+  router.push('/')
 }
 </script>
 

@@ -44,6 +44,7 @@ export interface Registration {
   contact: string
   ticket_id?: number
   ticket_name?: string
+  identity_status?: 'verified' | 'backfilled' | 'legacy'
   created_at: string
   admission?: Admission
 }

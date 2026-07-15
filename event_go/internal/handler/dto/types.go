@@ -106,6 +106,10 @@ type LoginResponse struct {
 	User  UserResponse `json:"user"`
 }
 
+type AdminSessionResponse struct {
+	Authenticated bool `json:"authenticated"`
+}
+
 type OrganizerResponse struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`

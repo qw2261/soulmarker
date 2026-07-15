@@ -15,6 +15,7 @@ import {
   ElIcon,
   ElInput,
   ElInputNumber,
+  ElLoading,
   ElMain,
   ElOption,
   ElPagination,
@@ -35,6 +36,8 @@ import App from './App.vue'
 import router from './router'
 import { useUserStore } from './stores/user'
 import { USER_SESSION_EXPIRED_EVENT } from './auth/session'
+import { useAuthStore } from './stores/auth'
+import { ADMIN_SESSION_EXPIRED_EVENT } from './auth/admin-session'
 
 const app = createApp(App)
 
@@ -75,12 +78,21 @@ const elementComponents = [
 for (const component of elementComponents) {
   app.use(component)
 }
+app.directive('loading', ElLoading.directive)
 
 window.addEventListener(USER_SESSION_EXPIRED_EVENT, (event) => {
   const redirect = (event as CustomEvent<{ redirect?: string }>).detail?.redirect || '/'
   useUserStore().logout()
   if (router.currentRoute.value.path !== '/login') {
     router.push({ path: '/login', query: { reason: 'expired', redirect } })
+  }
+})
+
+window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, (event) => {
+  const redirect = (event as CustomEvent<{ redirect?: string }>).detail?.redirect || '/admin/events'
+  useAuthStore().logout()
+  if (router.currentRoute.value.path !== '/admin') {
+    router.push({ path: '/admin', query: { redirect } })
   }
 })
 

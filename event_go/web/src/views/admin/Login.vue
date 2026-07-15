@@ -27,26 +27,36 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { getAdminSession } from '@/api/admin'
 import NavBar from '@/components/NavBar.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const token = ref('')
 const loading = ref(false)
 
-function login() {
+async function login() {
   if (!token.value) {
     ElMessage.warning('请输入 Token')
     return
   }
   loading.value = true
   auth.login(token.value)
-  ElMessage.success('登录成功')
-  router.push('/admin/events')
-  loading.value = false
+  try {
+    const response = await getAdminSession()
+    if (!response.data?.authenticated) return
+    ElMessage.success('管理身份验证成功')
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin/events'
+    await router.push(redirect.startsWith('/admin/') && !redirect.startsWith('//') ? redirect : '/admin/events')
+  } catch {
+    auth.logout()
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -55,7 +65,7 @@ function login() {
 .main { padding-top: 60px; display: flex; justify-content: center; }
 
 .login-card {
-  width: 400px;
+  width: min(400px, calc(100vw - 24px));
 }
 
 .login-card h2 {

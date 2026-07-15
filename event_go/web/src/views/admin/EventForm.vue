@@ -3,6 +3,7 @@
     <NavBar />
     <el-main class="main">
       <div class="container">
+        <AdminToolbar />
         <div class="header">
           <el-button text @click="$router.push('/admin/events')">← 返回</el-button>
           <h2>{{ isEdit ? '编辑活动' : '创建活动' }}</h2>
@@ -19,7 +20,6 @@
               <el-select
                 v-model="form.organizer_id"
                 placeholder="选择门店"
-                :disabled="isEdit"
                 filterable
               >
                 <el-option
@@ -81,6 +81,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import { createEvent, getEvent, updateEvent } from '@/api/events'
 import { listOrganizers } from '@/api/organizers'
 import type { Organizer } from '@/api/types'
+import AdminToolbar from '@/components/AdminToolbar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -91,7 +92,7 @@ const submitting = ref(false)
 const organizers = ref<Organizer[]>([])
 
 const form = reactive({
-  organizer_id: 0 as number,
+  organizer_id: undefined as number | undefined,
   title: '',
   description: '',
   event_time: '',
@@ -129,7 +130,7 @@ async function submit() {
     if (isEdit) {
       const id = Number(route.params.id)
       await updateEvent(id, {
-        organizer_id: form.organizer_id,
+        organizer_id: form.organizer_id!,
         title: form.title,
         description: form.description,
         event_time: form.event_time,
@@ -141,7 +142,7 @@ async function submit() {
       ElMessage.success('活动已更新')
     } else {
       await createEvent({
-        organizer_id: form.organizer_id,
+        organizer_id: form.organizer_id!,
         title: form.title,
         description: form.description,
         event_time: form.event_time,
@@ -171,4 +172,8 @@ async function submit() {
 }
 
 .header h2 { margin: 0; }
+
+@media (max-width: 600px) {
+  .main { padding: 16px 8px; }
+}
 </style>

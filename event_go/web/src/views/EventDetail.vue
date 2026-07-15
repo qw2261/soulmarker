@@ -126,7 +126,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Shop } from '@element-plus/icons-vue'
 import { getEvent, getRegistrationStatus, cancelRegistration } from '@/api/events'
 import { listPosts } from '@/api/posts'
@@ -137,6 +137,7 @@ import { formatDateTime, formatPrice, formatDate } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import RegisterForm from '@/components/RegisterForm.vue'
 import AdmissionCredential from '@/components/AdmissionCredential.vue'
+import { confirmAction } from '@/utils/confirm'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -188,7 +189,7 @@ function onRegistered(value?: Admission) {
 async function handleCancel() {
   if (!event.value) return
   try {
-    await ElMessageBox.confirm(
+    await confirmAction(
       '确定取消报名？取消后无法恢复，需在活动开始前 24 小时。',
       '确认取消',
       { type: 'warning' }

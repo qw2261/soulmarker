@@ -2,6 +2,7 @@ import axios from 'axios'
 import type { APIResp } from './types'
 import { ElMessage } from 'element-plus'
 import { expireUserSession, isCurrentUserSessionToken } from '@/auth/session'
+import { expireAdminSession, isCurrentAdminSessionToken } from '@/auth/admin-session'
 
 const publicAuthPaths = new Set([
   '/auth/register',
@@ -27,6 +28,7 @@ client.interceptors.request.use((config) => {
   const adminToken = localStorage.getItem('admin_token')
   if (adminToken) {
     config.headers['X-Admin-Token'] = adminToken
+    ;(config as typeof config & { soulmarkAdminToken?: string }).soulmarkAdminToken = adminToken
   }
   return config
 })
@@ -37,7 +39,15 @@ client.interceptors.response.use(
     const msg = error.response?.data?.message || error.message || '网络错误'
     const errorCode = error.response?.data?.error_code
     const sentUserToken = (error.config as typeof error.config & { soulmarkUserToken?: string })?.soulmarkUserToken
-    if (error.response?.status === 401 && isCurrentUserSessionToken(sentUserToken) && ['USER_TOKEN_INVALID', 'USER_AUTH_REQUIRED'].includes(errorCode)) {
+    const sentAdminToken = (error.config as typeof error.config & { soulmarkAdminToken?: string })?.soulmarkAdminToken
+    if (error.response?.status === 401 && errorCode === 'ADMIN_AUTH_INVALID' && isCurrentAdminSessionToken(sentAdminToken)) {
+      if (error.config?.url === '/admin/session') {
+        ElMessage.error(msg)
+      } else {
+        expireAdminSession(window.location.pathname + window.location.search)
+        ElMessage.warning('管理登录已失效，请重新验证')
+      }
+    } else if (error.response?.status === 401 && isCurrentUserSessionToken(sentUserToken) && ['USER_TOKEN_INVALID', 'USER_AUTH_REQUIRED'].includes(errorCode)) {
       expireUserSession(window.location.pathname + window.location.search)
       ElMessage.warning('登录已过期，请重新登录')
     } else {

@@ -3,9 +3,14 @@
     <NavBar />
     <el-main class="main">
       <div class="container">
+        <AdminToolbar />
         <div class="header">
           <el-button text @click="$router.push('/admin/events')">← 返回管理</el-button>
-          <h2>报名列表</h2>
+          <div class="header-copy">
+            <h2>报名与核销</h2>
+            <p>{{ event?.title || '加载活动中' }}</p>
+          </div>
+          <el-button :icon="Download" :loading="exporting" @click="exportCSV">导出 CSV</el-button>
         </div>
 
         <section class="checkin-tool">
@@ -88,17 +93,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { Aim } from '@element-plus/icons-vue'
+import { Aim, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { checkInAdmission, listCheckins, listRegistrations } from '@/api/events'
-import type { Checkin, Registration } from '@/api/types'
+import { checkInAdmission, getEvent, listCheckins, listRegistrations } from '@/api/events'
+import type { Checkin, Event, Registration } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import Pagination from '@/components/Pagination.vue'
+import AdminToolbar from '@/components/AdminToolbar.vue'
+import { downloadRegistrationCSV } from '@/utils/registration-export'
 
 const route = useRoute()
 const eventId = Number(route.params.id)
 
+const event = ref<Event>()
 const registrations = ref<Registration[]>([])
 const checkins = ref<Checkin[]>([])
 const loading = ref(false)
@@ -113,6 +121,7 @@ const credential = ref('')
 const checkingIn = ref(false)
 const checkinMessage = ref('')
 const checkinDuplicate = ref(false)
+const exporting = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -154,12 +163,34 @@ async function submitCheckin() {
   }
 }
 
+async function exportCSV() {
+  exporting.value = true
+  try {
+    const all: Registration[] = []
+    let currentPage = 1
+    while (true) {
+      const response = await listRegistrations(eventId, { page: currentPage, page_size: 100 })
+      all.push(...(response.data || []))
+      if (all.length >= (response.total || 0) || !response.data?.length) break
+      currentPage++
+    }
+    downloadRegistrationCSV(all, eventId)
+    ElMessage.success(`已导出 ${all.length} 条报名记录`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 function onPageChange(p: number) { page.value = p; fetchData() }
 function onSizeChange(s: number) { pageSize.value = s; page.value = 1; fetchData() }
 function onCheckinPageChange(value: number) { checkinPage.value = value; fetchCheckins() }
 function onCheckinSizeChange(value: number) { pageSize.value = value; checkinPage.value = 1; fetchCheckins() }
 
-onMounted(() => Promise.all([fetchData(), fetchCheckins()]))
+onMounted(async () => {
+  const eventResponse = await getEvent(eventId)
+  event.value = eventResponse.data
+  await Promise.all([fetchData(), fetchCheckins()])
+})
 </script>
 
 <style scoped>
@@ -171,10 +202,13 @@ onMounted(() => Promise.all([fetchData(), fetchCheckins()]))
   display: flex;
   align-items: center;
   gap: 16px;
+  justify-content: space-between;
   margin-bottom: 16px;
 }
 
-.header h2 { margin: 0; }
+.header-copy { flex: 1; }
+.header h2, .header p { margin: 0; }
+.header p { margin-top: 4px; color: #606266; font-size: 14px; }
 
 .checkin-tool {
   display: grid;
@@ -204,6 +238,7 @@ onMounted(() => Promise.all([fetchData(), fetchCheckins()]))
 
 @media (max-width: 600px) {
   .main { padding: 16px 8px; }
+  .header { align-items: stretch; flex-direction: column; }
   .checkin-action { grid-template-columns: 1fr; }
 }
 </style>
