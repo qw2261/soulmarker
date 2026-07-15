@@ -38,6 +38,15 @@
 
 进入 G4 后，完整门禁还必须包含前端 unit/component 与核心浏览器 E2E；进入 G6 后增加迁移、Docker smoke、备份恢复、安全扫描和性能验证。
 
+### G4 浏览器矩阵
+
+| 项目 | Playwright 设备 | 用途 |
+|---|---|---|
+| desktop-chromium | Desktop Chrome，1280×720 viewport | 桌面用户与运营完整旅程、键盘入口和失败恢复 |
+| mobile-chromium | Pixel 7 | H5 用户与运营完整旅程、移动导航、局部表格滚动和页面级横向溢出检查 |
+
+G4 的每个核心 E2E 必须同时运行两个项目。进入 G6 的公开生产门禁前，矩阵必须增加 macOS Safari/iPhone WebKit 和目标 Android Chrome 真机或等价云设备验证。
+
 ## 5. 测试数据
 
 - 单元和普通集成测试使用独立临时数据库。

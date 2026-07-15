@@ -96,6 +96,7 @@ User (用户) — 注册/登录获得 JWT
 | organizer\_name | string  | 门店名称（查询时自动填充）                          |
 | title          | string  | 活动标题                                     |
 | description    | string  | 活动描述                                     |
+| cover\_url     | string  | 活动封面 HTTP/HTTPS 图片地址                    |
 | event\_time    | string  | 活动时间（RFC3339）                            |
 | location       | string  | 活动地点                                     |
 | capacity       | int     | 报名容量上限                                   |
@@ -145,7 +146,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选及门店/活动/票种/报名导出/核销运营闭环均已完成远端桌面与移动门禁。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R01、R04、R05、R09 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选及运营闭环均已完成远端门禁。响应式用户旅程、Schema v8 活动封面、空/错/弱网反馈和讨论/取消闭环已通过本地桌面与 Pixel 7 候选门禁，等待远端 CI。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05、R09 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -441,7 +442,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **263** 个顶层 Go 测试、8 个 Vue unit/component 测试、2 个浏览器项目 |
+| 测试用例 | **265** 个顶层 Go 测试、10 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
@@ -459,7 +460,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=7`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=8`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器；Schema v8 为活动增加可空语义的 `cover_url` 默认空字符串列。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -468,7 +469,7 @@ cd event_go
 cp data/event_go.db data/event_go.db.pre-upgrade.bak
 ```
 
-身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。详细回滚步骤见 [docs/releases/v5.4.0/migration-rollback.md](docs/releases/v5.4.0/migration-rollback.md)。
+身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。当前候选详细回滚步骤见 [docs/releases/v6.0.0/migration-rollback.md](docs/releases/v6.0.0/migration-rollback.md)。
 
 ### API 速查
 

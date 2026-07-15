@@ -52,6 +52,7 @@ type CreateEventRequest struct {
 	OrganizerID int64   `json:"organizer_id"`
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
+	CoverURL    string  `json:"cover_url"`
 	EventTime   string  `json:"event_time"`
 	Location    string  `json:"location"`
 	Capacity    int     `json:"capacity"`
@@ -62,6 +63,7 @@ type UpdateEventRequest struct {
 	OrganizerID *int64   `json:"organizer_id"`
 	Title       *string  `json:"title"`
 	Description *string  `json:"description"`
+	CoverURL    *string  `json:"cover_url"`
 	EventTime   *string  `json:"event_time"`
 	Location    *string  `json:"location"`
 	Capacity    *int     `json:"capacity"`
@@ -130,6 +132,7 @@ type EventResponse struct {
 	OrganizerName string    `json:"organizer_name,omitempty"`
 	Title         string    `json:"title"`
 	Description   string    `json:"description"`
+	CoverURL      string    `json:"cover_url"`
 	EventTime     string    `json:"event_time"`
 	Location      string    `json:"location"`
 	Capacity      int       `json:"capacity"`

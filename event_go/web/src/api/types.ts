@@ -18,6 +18,7 @@ export interface Event {
   organizer_name?: string
   title: string
   description: string
+  cover_url: string
   event_time: string
   location: string
   capacity: number
@@ -154,6 +155,7 @@ export interface CreateEventReq {
   organizer_id: number
   title: string
   description: string
+  cover_url: string
   event_time: string
   location: string
   capacity: number
@@ -164,6 +166,7 @@ export interface UpdateEventReq {
   organizer_id?: number
   title?: string
   description?: string
+  cover_url?: string
   event_time?: string
   location?: string
   capacity?: number

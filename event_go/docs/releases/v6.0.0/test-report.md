@@ -1,15 +1,15 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R06 免费活动运营闭环已通过本地与远端候选门禁
+> 状态：In Progress，G4-R01/R04 响应式用户旅程与反馈闭环已通过本地候选门禁，等待提交与远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 4b753eec78053855e0b41e7708926eb4a76273bf |
+| 当前候选 Commit | 工作树候选，基于 4eb2080；首次提交后回填完整 SHA |
 | 候选分支 | origin/codex/update_project |
-| Schema | v7，新增认证版本、密码重置 Token 表与触发器；保留 v6 admissions/checkins |
+| Schema | v8，新增活动 `cover_url`；保留 v7 认证版本/重置 Token 与 v6 admissions/checkins |
 
 ## 追溯范围
 
@@ -23,22 +23,24 @@
 | G4-R03 browser | E2E-AUTH-001 | desktop-chromium 与 Pixel 7：无效 JWT 清理、安全回跳重新登录、服务端退出、受保护路由、未知邮箱统一重置成功页 |
 | G4-R06 | SEC-ADMIN-SESSION-001、FE-ADMIN-SESSION-001、FE-CSV-001、CT-API-ADMIN-001 | 管理 Token 服务端校验和失效竞态；门店/活动/票种运营页面；CSV 转义、UTF-8 与公式注入防护；OpenAPI 双向契约 |
 | G4-R06 browser | E2E-OPERATOR-001 | desktop-chromium 与 Pixel 7：后台守卫/登录、门店增删改、活动创建、票种增删改、用户报名、CSV 下载内容、首次/重复核销、管理退出 |
+| G4-R01 | FE-RESPONSIVE-001、E2E-ATTENDEE-001 | 活动列表、封面详情、报名、二维码凭证、发帖、回复、取消、“我的活动”取消/已入场状态；关键用户页断言无页面级横向溢出 |
+| G4-R04 | MIG-EVENT-COVER-001、CT-EVENT-COVER-001、FE-REQUEST-STATE-001、E2E-UX-STATE-001 | v7→v8 保留历史活动并默认空封面；封面 URL 安全边界；加载失败重试、无匹配空状态、404、离线和恢复提示 |
 
 ## 当前本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 263 |
-| Vue unit/component tests | 8 passed（5 files） |
-| Playwright E2E | 2 passed（desktop-chromium、mobile-chromium） |
+| 顶层 Go Test 数量 | 265 |
+| Vue unit/component tests | 10 passed（6 files） |
+| Playwright E2E | 4 passed（2 个场景 × desktop-chromium / Pixel 7） |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
-| npm run build | 通过；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
+| npm run build | 通过；主 JS 498.37 KB / 173.18 KB gzip，无 chunk size 告警 |
 | npm audit --omit=dev | 0 vulnerabilities |
 | Markdown 本地链接 / git diff --check / gofmt | 通过 |
-| Browser 可视验收 | 桌面/Pixel 7 门店、活动、票种、报名导出与核销全流程通过；移动表格局部滚动；二维码 184x184 非空 |
+| Browser 可视验收 | 桌面/Pixel 7 用户讨论回复、取消状态、凭证与运营核销全流程通过；成功报告含 6 张截图附件；移动表格局部滚动 |
 
 本阶段继续不使用 covdata。
 
@@ -61,4 +63,4 @@
 
 ## Go/No-Go
 
-No-Go：R02、R06、R07、R08 已通过本地和远端候选门禁；R03 仍缺 legacy phone-only 恢复和真实 staging SMTP。G4-R01、R04、R05、R09、完整讨论/取消用户旅程和两场受控测试活动尚未完成。
+No-Go：R02、R06、R07、R08 已通过本地和远端候选门禁；R01/R04 及完整讨论/取消用户旅程已本地通过，但尚未绑定候选提交与远端 CI。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、R09 和两场受控测试活动尚未完成。

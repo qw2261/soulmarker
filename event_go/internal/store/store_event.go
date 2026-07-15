@@ -11,9 +11,9 @@ import (
 func (s *Store) CreateEvent(e *model.Event) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
-		`INSERT INTO events (organizer_id, title, description, event_time, location, capacity, price, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
-		e.OrganizerID, e.Title, e.Description, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
+		`INSERT INTO events (organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
+		e.OrganizerID, e.Title, e.Description, e.CoverURL, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("创建活动失败: %w", err)
@@ -64,7 +64,7 @@ func (s *Store) ListEvents(params model.ListEventsParams) ([]*model.Event, int, 
 		return nil, 0, fmt.Errorf("查询活动总数失败: %w", err)
 	}
 
-	query := `SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+	query := `SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
 		FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id` + where + ` ORDER BY e.created_at DESC`
 	if params.Limit > 0 {
 		query += " LIMIT ? OFFSET ?"
@@ -81,7 +81,7 @@ func (s *Store) ListEvents(params model.ListEventsParams) ([]*model.Event, int, 
 	for rows.Next() {
 		e := &model.Event{}
 		var createdAt, updatedAt string
-		if err := rows.Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.EventTime, &e.Location,
+		if err := rows.Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
 			&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt); err != nil {
 			return nil, 0, fmt.Errorf("读取活动记录失败: %w", err)
 		}
@@ -108,9 +108,9 @@ func (s *Store) GetEvent(id int64) (*model.Event, error) {
 	e := &model.Event{}
 	var createdAt, updatedAt string
 	err := s.db.QueryRow(
-		`SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+		`SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
 		 FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id WHERE e.id = ?`, id,
-	).Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.EventTime, &e.Location,
+	).Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
 		&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -149,6 +149,9 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 	if req.Description != nil {
 		event.Description = *req.Description
 	}
+	if req.CoverURL != nil {
+		event.CoverURL = *req.CoverURL
+	}
 	if req.EventTime != nil {
 		event.EventTime = *req.EventTime
 	}
@@ -167,9 +170,9 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 
 	now := time.Now().UTC().Format(model.TimeFormat)
 	_, err = s.db.Exec(
-		`UPDATE events SET organizer_id=?, title=?, description=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
+		`UPDATE events SET organizer_id=?, title=?, description=?, cover_url=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
 		 WHERE id=?`,
-		event.OrganizerID, event.Title, event.Description, event.EventTime, event.Location,
+		event.OrganizerID, event.Title, event.Description, event.CoverURL, event.EventTime, event.Location,
 		event.Capacity, event.Price, event.Status, now, id,
 	)
 	if err != nil {

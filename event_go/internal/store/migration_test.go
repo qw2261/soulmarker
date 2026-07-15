@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,56 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "replies", "identity_status")
 	assertColumnExists(t, s.db, "user_auth_versions", "version")
 	assertColumnExists(t, s.db, "password_reset_tokens", "token_hash")
+	assertColumnExists(t, s.db, "events", "cover_url")
+}
+
+func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema-v7.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)`,
+		`CREATE TABLE organizers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', contact TEXT NOT NULL DEFAULT '', logo_url TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE TABLE events (id INTEGER PRIMARY KEY, organizer_id INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', event_time TEXT NOT NULL, location TEXT NOT NULL, capacity INTEGER NOT NULL DEFAULT 0, price REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'published', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY (organizer_id) REFERENCES organizers(id))`,
+		`CREATE TABLE tickets (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id))`,
+		`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, contact TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)`,
+		`CREATE TABLE registrations (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, name TEXT NOT NULL, contact TEXT NOT NULL, ticket_id INTEGER, ticket_name TEXT NOT NULL DEFAULT '', identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (ticket_id) REFERENCES tickets(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE posts (id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE replies (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, user_id INTEGER, author_name TEXT NOT NULL, author_contact TEXT NOT NULL, content TEXT NOT NULL, identity_status TEXT NOT NULL DEFAULT 'legacy', created_at TEXT NOT NULL, FOREIGN KEY (post_id) REFERENCES posts(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE admissions (id INTEGER PRIMARY KEY, registration_id INTEGER UNIQUE, event_id INTEGER NOT NULL, user_id INTEGER NOT NULL, ticket_name TEXT NOT NULL DEFAULT '', credential_code TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'active', issued_at TEXT NOT NULL, revoked_at TEXT, FOREIGN KEY (registration_id) REFERENCES registrations(id), FOREIGN KEY (event_id) REFERENCES events(id), FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE checkins (id INTEGER PRIMARY KEY, admission_id INTEGER NOT NULL UNIQUE, event_id INTEGER NOT NULL, checked_in_at TEXT NOT NULL, checked_in_by TEXT NOT NULL, FOREIGN KEY (admission_id) REFERENCES admissions(id), FOREIGN KEY (event_id) REFERENCES events(id))`,
+		`CREATE TABLE user_auth_versions (user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`CREATE TABLE password_reset_tokens (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))`,
+		`INSERT INTO organizers VALUES (1, '封面迁移门店', '', '', '', '', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO events VALUES (1, 1, '迁移前活动', '', '2099-12-31T18:00:00+08:00', '线上', 10, 0, 'published', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	}
+	for version := 1; version <= 7; version++ {
+		statements = append(statements, `INSERT INTO schema_migrations VALUES (`+fmt.Sprint(version)+`, 'applied', '2026-01-01T00:00:00Z')`)
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v7 database: %v", err)
+		}
+	}
+	_ = db.Close()
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v7 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	assertColumnExists(t, s.db, "events", "cover_url")
+	var title, coverURL string
+	if err := s.db.QueryRow(`SELECT title, cover_url FROM events WHERE id = 1`).Scan(&title, &coverURL); err != nil {
+		t.Fatal(err)
+	}
+	if title != "迁移前活动" || coverURL != "" {
+		t.Fatalf("existing event changed: title=%q cover_url=%q", title, coverURL)
+	}
 }
 
 func TestMigrationBackfillsMatchingIdentityAndMarksLegacy(t *testing.T) {

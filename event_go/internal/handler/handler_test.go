@@ -242,13 +242,21 @@ func createStoreEvent(t *testing.T, s *store.Store, title string) *model.Event {
 func TestCreateEventHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"organizer_id":1,"title":"Go 讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50,"price":0}`
+	body := `{"organizer_id":1,"title":"Go 讲座","cover_url":" https://assets.example.com/go.jpg ","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":50,"price":0}`
 	resp, err := http.Post(srv.URL+"/api/events", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if coverURL := apiResp.Data.(map[string]interface{})["cover_url"]; coverURL != "https://assets.example.com/go.jpg" {
+		t.Fatalf("unexpected cover_url: %v", coverURL)
 	}
 }
 
@@ -265,6 +273,7 @@ func TestCreateEventValidationErrors(t *testing.T) {
 		{"empty location", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","capacity":50}`},
 		{"zero capacity", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":0}`},
 		{"negative price", `{"organizer_id":1,"title":"讲座","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10,"price":-1}`},
+		{"unsafe cover url", `{"organizer_id":1,"title":"讲座","cover_url":"javascript:alert(1)","event_time":"2026-12-31T18:00:00+08:00","location":"线上","capacity":10}`},
 	}
 
 	for _, tt := range tests {
@@ -384,7 +393,7 @@ func TestUpdateEventHandler(t *testing.T) {
 	eventData := created.Data.(map[string]interface{})
 	id := int64(eventData["id"].(float64))
 
-	updateBody := `{"organizer_id":1,"title":"新标题","price":99.9}`
+	updateBody := `{"organizer_id":1,"title":"新标题","cover_url":"https://assets.example.com/new.jpg","price":99.9}`
 	req, _ := http.NewRequest("PUT", srv.URL+"/api/events/"+itoa64(id), strings.NewReader(updateBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -404,6 +413,9 @@ func TestUpdateEventHandler(t *testing.T) {
 	}
 	if updated["price"].(float64) != 99.9 {
 		t.Fatalf("expected price 99.9, got %v", updated["price"])
+	}
+	if updated["cover_url"] != "https://assets.example.com/new.jpg" {
+		t.Fatalf("unexpected cover_url: %v", updated["cover_url"])
 	}
 }
 

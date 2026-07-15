@@ -61,9 +61,10 @@ func TestEntityMappersFixPublicFieldSets(t *testing.T) {
 
 	assertJSONKeys(t, Event(&model.Event{
 		ID: 1, OrganizerID: 2, OrganizerName: "门店", Title: "活动", Description: "说明",
+		CoverURL:  "https://assets.example.com/event.jpg",
 		EventTime: now.Format(model.TimeFormat), Location: "线上", Capacity: 10, Price: 1,
 		Status: "published", CreatedAt: now, UpdatedAt: now,
-	}), "id", "organizer_id", "organizer_name", "title", "description", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at")
+	}), "id", "organizer_id", "organizer_name", "title", "description", "cover_url", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at")
 
 	registration := assertJSONKeys(t, Registration(&model.Registration{
 		ID: 1, EventID: 2, UserID: &userID, Name: "用户", Contact: "user@example.com",

@@ -34,7 +34,9 @@
           <el-skeleton :rows="3" animated />
         </div>
 
-        <el-empty v-else-if="events.length === 0" description="暂无活动" />
+        <PageLoadError v-else-if="error" :message="error" @retry="fetchEvents" />
+
+        <el-empty v-else-if="events.length === 0" :description="emptyDescription" />
 
         <template v-else>
           <EventCard
@@ -56,13 +58,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { listEvents } from '@/api/events'
 import type { Event } from '@/api/types'
 import NavBar from '@/components/NavBar.vue'
 import EventCard from '@/components/EventCard.vue'
 import Pagination from '@/components/Pagination.vue'
+import PageLoadError from '@/components/PageLoadError.vue'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const events = ref<Event[]>([])
 const loading = ref(false)
@@ -72,9 +76,16 @@ const pageSize = ref(10)
 const keyword = ref('')
 const statusFilter = ref('')
 const priceType = ref('')
+const error = ref('')
+const emptyDescription = computed(() => (
+  keyword.value || statusFilter.value || priceType.value
+    ? '没有符合筛选条件的活动'
+    : '暂无可浏览活动'
+))
 
 async function fetchEvents() {
   loading.value = true
+  error.value = ''
   try {
     const res = await listEvents({
       page: page.value,
@@ -85,6 +96,10 @@ async function fetchEvents() {
     })
     events.value = res.data || []
     total.value = res.total || 0
+  } catch (cause) {
+    events.value = []
+    total.value = 0
+    error.value = requestErrorMessage(cause, '活动列表加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -142,5 +157,31 @@ onMounted(fetchEvents)
   padding: 24px;
   background: #fff;
   border-radius: 8px;
+}
+
+@media (max-width: 720px) {
+  .main {
+    padding: 16px 8px;
+  }
+
+  .search-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .search-bar .el-input,
+  .search-bar .el-select,
+  .search-bar .el-button {
+    width: 100%;
+  }
+
+  .search-bar .el-input {
+    grid-column: 1 / -1;
+  }
+
+  .search-bar .el-button {
+    grid-column: 1 / -1;
+  }
 }
 </style>

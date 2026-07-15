@@ -13,7 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 7
+const CurrentSchemaVersion = 8
 
 type Store struct {
 	db             *sql.DB
@@ -152,7 +152,12 @@ func migrations() []migration {
 		{version: 5, name: "foreign_key_readiness", apply: migrateForeignKeyReadiness},
 		{version: 6, name: "admission_and_checkin", apply: migrateAdmissionAndCheckin},
 		{version: 7, name: "authentication_session_and_password_reset", apply: migrateAuthenticationSessionAndPasswordReset},
+		{version: 8, name: "event_cover_url", apply: migrateEventCoverURL},
 	}
+}
+
+func migrateEventCoverURL(tx *sql.Tx) error {
+	return addColumnIfMissing(tx, "events", "cover_url", "cover_url TEXT NOT NULL DEFAULT ''")
 }
 
 func migrateAuthenticationSessionAndPasswordReset(tx *sql.Tx) error {

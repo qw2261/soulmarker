@@ -1,5 +1,17 @@
 <template>
-  <div class="ticket-selector" v-if="tickets.length > 0">
+  <el-alert
+    v-if="error"
+    :title="error"
+    type="error"
+    show-icon
+    :closable="false"
+    class="ticket-error"
+  >
+    <template #default>
+      <el-button text type="primary" @click="fetchTickets">重新加载票种</el-button>
+    </template>
+  </el-alert>
+  <div class="ticket-selector" v-else-if="tickets.length > 0">
     <div class="ticket-label">选择门票（可选）</div>
     <el-radio-group v-model="selectedTicketId" @change="$emit('update:ticketId', selectedTicketId)">
       <el-radio
@@ -23,26 +35,42 @@ import { ref, onMounted } from 'vue'
 import { listTickets } from '@/api/tickets'
 import type { Ticket } from '@/api/types'
 import { formatPrice } from '@/utils/format'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const props = defineProps<{ eventId: number }>()
 defineEmits<{ 'update:ticketId': [id: number | null] }>()
 
 const tickets = ref<Ticket[]>([])
 const selectedTicketId = ref<number | null>(null)
+const error = ref('')
 
-onMounted(async () => {
+async function fetchTickets() {
+  error.value = ''
   try {
     const res = await listTickets(props.eventId)
     tickets.value = res.data || []
-  } catch {
-    // ignore
+  } catch (cause) {
+    tickets.value = []
+    error.value = requestErrorMessage(cause, '票种加载失败，请稍后重试')
   }
-})
+}
+
+onMounted(fetchTickets)
 </script>
 
 <style scoped>
 .ticket-selector {
   margin-bottom: 16px;
+}
+
+.ticket-error {
+  margin-bottom: 16px;
+}
+
+.ticket-selector :deep(.el-radio-group) {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
 }
 
 .ticket-label {

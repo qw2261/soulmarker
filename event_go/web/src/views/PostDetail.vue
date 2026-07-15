@@ -11,6 +11,8 @@
           <el-skeleton :rows="3" animated />
         </div>
 
+        <PageLoadError v-else-if="error" :message="error" @retry="fetchPost" />
+
         <template v-else-if="post">
           <h2>{{ post.title }}</h2>
           <p class="post-meta">
@@ -34,21 +36,37 @@
           </div>
 
           <el-card class="reply-form">
-            <el-form :model="form" label-position="top">
+            <el-alert
+              v-if="!userStore.isLoggedIn"
+              title="登录并报名后可以参与回复"
+              type="info"
+              show-icon
+              :closable="false"
+              class="reply-login-hint"
+            >
+              <template #default>
+                <el-button text type="primary" @click="goToLogin">去登录</el-button>
+              </template>
+            </el-alert>
+            <el-form :model="form" label-position="top" @submit.prevent="submitReply">
               <el-form-item label="回复内容">
                 <el-input
                   v-model="form.content"
                   type="textarea"
                   :rows="3"
                   placeholder="写下你的回复..."
+                  maxlength="4000"
+                  show-word-limit
                 />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" @click="submitReply" :loading="replying" :disabled="!userStore.isLoggedIn">回复</el-button>
+                <el-button native-type="submit" type="primary" :loading="replying" :disabled="!userStore.isLoggedIn">回复</el-button>
               </el-form-item>
             </el-form>
           </el-card>
         </template>
+
+        <el-empty v-else description="帖子不存在或已被删除" />
       </div>
     </el-main>
   </div>
@@ -56,15 +74,18 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getPost, createReply } from '@/api/posts'
 import type { Post, Reply } from '@/api/types'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
+import PageLoadError from '@/components/PageLoadError.vue'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const route = useRoute()
+const router = useRouter()
 const eventId = Number(route.params.id)
 const postId = Number(route.params.postId)
 const userStore = useUserStore()
@@ -73,18 +94,29 @@ const post = ref<Post | null>(null)
 const replies = ref<Reply[]>([])
 const loading = ref(true)
 const replying = ref(false)
+const error = ref('')
 
 const form = reactive({
   content: '',
 })
 
+function goToLogin() {
+  router.push({ path: '/login', query: { redirect: route.fullPath } })
+}
+
 async function fetchPost() {
+  loading.value = true
+  error.value = ''
   try {
     const res = await getPost(eventId, postId)
     if (res.data) {
       post.value = res.data.post
       replies.value = res.data.replies
     }
+  } catch (cause) {
+    post.value = null
+    replies.value = []
+    error.value = requestErrorMessage(cause, '帖子加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -105,7 +137,7 @@ async function submitReply() {
     if (res.code === 201) {
       ElMessage.success('回复成功')
       form.content = ''
-      fetchPost()
+      await fetchPost()
     }
   } finally {
     replying.value = false
@@ -163,6 +195,14 @@ onMounted(fetchPost)
 }
 
 .reply-form { margin-top: 16px; }
+.reply-login-hint { margin-bottom: 16px; }
 
 .loading { padding: 24px; background: #fff; border-radius: 8px; }
+
+@media (max-width: 640px) {
+  .main { padding: 16px 8px; }
+  h2 { overflow-wrap: anywhere; font-size: 20px; }
+  .post-meta, .reply-meta { flex-wrap: wrap; gap: 6px 12px; }
+  .post-content, .reply-item { padding: 16px; }
+}
 </style>

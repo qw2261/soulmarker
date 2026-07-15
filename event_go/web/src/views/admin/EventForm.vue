@@ -41,6 +41,9 @@
                 placeholder="活动描述"
               />
             </el-form-item>
+            <el-form-item label="活动封面">
+              <el-input v-model="form.cover_url" placeholder="https://example.com/event-cover.jpg" />
+            </el-form-item>
             <el-form-item label="时间" prop="event_time">
               <el-input v-model="form.event_time" placeholder="2026-12-31T18:00:00+08:00" />
             </el-form-item>
@@ -95,6 +98,7 @@ const form = reactive({
   organizer_id: undefined as number | undefined,
   title: '',
   description: '',
+  cover_url: '',
   event_time: '',
   location: '',
   capacity: 50,
@@ -133,6 +137,7 @@ async function submit() {
         organizer_id: form.organizer_id!,
         title: form.title,
         description: form.description,
+        cover_url: form.cover_url,
         event_time: form.event_time,
         location: form.location,
         capacity: form.capacity,
@@ -145,6 +150,7 @@ async function submit() {
         organizer_id: form.organizer_id!,
         title: form.title,
         description: form.description,
+        cover_url: form.cover_url,
         event_time: form.event_time,
         location: form.location,
         capacity: form.capacity,

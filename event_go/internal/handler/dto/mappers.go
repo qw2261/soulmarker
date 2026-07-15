@@ -39,7 +39,7 @@ func Event(event *model.Event) EventResponse {
 	return EventResponse{
 		ID: event.ID, OrganizerID: event.OrganizerID, OrganizerName: event.OrganizerName,
 		Title: event.Title, Description: event.Description, EventTime: event.EventTime,
-		Location: event.Location, Capacity: event.Capacity, Price: event.Price, Status: event.Status,
+		CoverURL: event.CoverURL, Location: event.Location, Capacity: event.Capacity, Price: event.Price, Status: event.Status,
 		CreatedAt: event.CreatedAt, UpdatedAt: event.UpdatedAt,
 	}
 }

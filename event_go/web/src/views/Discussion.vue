@@ -13,43 +13,56 @@
           </el-button>
         </div>
 
-        <el-card v-if="showForm" class="post-form">
-          <el-form :model="form" label-position="top">
-            <el-form-item label="标题">
-              <el-input v-model="form.title" placeholder="帖子标题" />
-            </el-form-item>
-            <el-form-item label="内容">
-              <el-input
-                v-model="form.content"
-                type="textarea"
-                :rows="4"
-                placeholder="说点什么..."
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="createPost" :loading="posting">发布</el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
+        <div v-if="loading" class="loading"><el-skeleton :rows="5" animated /></div>
+        <PageLoadError v-else-if="error" :message="error" @retry="fetchPosts" />
 
-        <el-empty v-if="!loading && posts.length === 0" description="暂无讨论" />
+        <template v-else>
+          <el-card v-if="showForm" class="post-form">
+            <el-form :model="form" label-position="top" @submit.prevent="createPost">
+              <el-form-item label="标题">
+                <el-input v-model="form.title" placeholder="帖子标题" maxlength="120" show-word-limit />
+              </el-form-item>
+              <el-form-item label="内容">
+                <el-input
+                  v-model="form.content"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="说点什么..."
+                  maxlength="4000"
+                  show-word-limit
+                />
+              </el-form-item>
+              <el-form-item>
+                <el-button native-type="submit" type="primary" :loading="posting">发布</el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
 
-        <div v-for="post in posts" :key="post.id" class="post-card" @click="$router.push(`/events/${eventId}/posts/${post.id}`)">
-          <h4>{{ post.title }}</h4>
-          <p class="post-meta">
-            <span>{{ post.author_name }}</span>
-            <span>{{ formatDateTime(post.created_at) }}</span>
-            <span>{{ post.reply_count }} 回复</span>
-          </p>
-        </div>
+          <el-empty v-if="posts.length === 0" description="暂无讨论，报名后可以发布第一条帖子" />
 
-        <Pagination
-          :total="total"
-          :current-page="page"
-          :page-size="pageSize"
-          @page-change="onPageChange"
-          @size-change="onSizeChange"
-        />
+          <button
+            v-for="post in posts"
+            :key="post.id"
+            type="button"
+            class="post-card"
+            @click="$router.push(`/events/${eventId}/posts/${post.id}`)"
+          >
+            <h4>{{ post.title }}</h4>
+            <p class="post-meta">
+              <span>{{ post.author_name }}</span>
+              <span>{{ formatDateTime(post.created_at) }}</span>
+              <span>{{ post.reply_count }} 回复</span>
+            </p>
+          </button>
+
+          <Pagination
+            :total="total"
+            :current-page="page"
+            :page-size="pageSize"
+            @page-change="onPageChange"
+            @size-change="onSizeChange"
+          />
+        </template>
       </div>
     </el-main>
   </div>
@@ -65,6 +78,8 @@ import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import Pagination from '@/components/Pagination.vue'
+import PageLoadError from '@/components/PageLoadError.vue'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,6 +93,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const showForm = ref(false)
 const posting = ref(false)
+const error = ref('')
 
 const form = reactive({
   title: '',
@@ -87,7 +103,7 @@ const form = reactive({
 function togglePostForm() {
   if (!userStore.isLoggedIn) {
     ElMessage.warning('请先登录并报名后再发帖')
-    router.push('/login')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
   showForm.value = !showForm.value
@@ -95,10 +111,15 @@ function togglePostForm() {
 
 async function fetchPosts() {
   loading.value = true
+  error.value = ''
   try {
     const res = await listPosts(eventId, { page: page.value, page_size: pageSize.value })
     posts.value = res.data || []
     total.value = res.total || 0
+  } catch (cause) {
+    posts.value = []
+    total.value = 0
+    error.value = requestErrorMessage(cause, '讨论区加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -117,7 +138,7 @@ async function createPost() {
       showForm.value = false
       form.title = ''
       form.content = ''
-      fetchPosts()
+      await fetchPosts()
     }
   } finally {
     posting.value = false
@@ -147,14 +168,20 @@ onMounted(fetchPosts)
 .post-form { margin-bottom: 16px; }
 
 .post-card {
+  display: block;
+  width: 100%;
+  border: 0;
   background: #fff;
   border-radius: 8px;
   padding: 16px 20px;
   margin-bottom: 8px;
   cursor: pointer;
+  color: inherit;
+  text-align: left;
 }
 
 .post-card:hover { background: #f0f5ff; }
+.post-card:focus-visible { outline: 3px solid #79bbff; outline-offset: 2px; }
 
 .post-card h4 { margin: 0 0 8px; font-size: 15px; }
 
@@ -164,5 +191,15 @@ onMounted(fetchPosts)
   margin: 0;
   font-size: 12px;
   color: #909399;
+}
+
+.loading { padding: 24px; background: #fff; border-radius: 8px; }
+
+@media (max-width: 640px) {
+  .main { padding: 16px 8px; }
+  .header { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+  .header h2 { order: -1; width: 100%; }
+  .post-card { padding: 16px; }
+  .post-meta { flex-wrap: wrap; gap: 6px 12px; }
 }
 </style>

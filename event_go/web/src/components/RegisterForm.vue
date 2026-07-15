@@ -2,7 +2,7 @@
   <el-form
     :model="form"
     ref="formRef"
-    label-width="80px"
+    label-position="top"
     @submit.prevent="submit"
   >
     <TicketSelector
@@ -11,7 +11,7 @@
     />
 
     <el-form-item>
-      <el-button type="primary" @click="submit" :loading="submitting">
+      <el-button native-type="submit" type="primary" :loading="submitting">
         立即报名
       </el-button>
     </el-form-item>

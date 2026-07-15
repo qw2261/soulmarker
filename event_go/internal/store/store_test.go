@@ -86,6 +86,32 @@ func TestGetEvent(t *testing.T) {
 	}
 }
 
+func TestCreateAndUpdateEventCoverURL(t *testing.T) {
+	store := setupTestStore(t)
+	event := newTestEvent("封面活动")
+	event.CoverURL = "https://assets.example.com/cover-one.jpg"
+	if err := store.CreateEvent(event); err != nil {
+		t.Fatalf("CreateEvent failed: %v", err)
+	}
+
+	created, err := store.GetEvent(event.ID)
+	if err != nil {
+		t.Fatalf("GetEvent failed: %v", err)
+	}
+	if created.CoverURL != event.CoverURL {
+		t.Fatalf("expected cover %q, got %q", event.CoverURL, created.CoverURL)
+	}
+
+	updatedCover := "https://assets.example.com/cover-two.jpg"
+	updated, err := store.UpdateEvent(event.ID, model.UpdateEventReq{CoverURL: &updatedCover})
+	if err != nil {
+		t.Fatalf("UpdateEvent failed: %v", err)
+	}
+	if updated.CoverURL != updatedCover {
+		t.Fatalf("expected updated cover %q, got %q", updatedCover, updated.CoverURL)
+	}
+}
+
 func TestGetEventNotFound(t *testing.T) {
 	store := setupTestStore(t)
 

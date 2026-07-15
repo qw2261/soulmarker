@@ -66,7 +66,7 @@
 - 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 36 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 263 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 265 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -292,6 +292,15 @@ G4-R03 当前拆分验收：
 - [x] staging/production 对 HTTPS 公开地址、SMTP 和合法 Token TTL 配置 fail-closed。
 - [ ] 为历史 phone-only 账户提供邮箱绑定或人工恢复流程。
 - [ ] 在真实 staging SMTP 完成已知账户收件、链接跳转、重置和旧会话撤销验收。
+
+G4-R01 / G4-R04 当前拆分验收：
+
+- [x] Schema v8 为活动增加向后兼容的 `cover_url`；创建、编辑、列表、详情、DTO 与 OpenAPI 契约一致，并限制为 2048 字节内 HTTP/HTTPS 地址。
+- [x] 活动列表、详情、报名、凭证、讨论、回复和“我的活动”在桌面与 Pixel 7 无页面级横向溢出，移动导航和分页可操作。
+- [x] 用户完整旅程覆盖浏览、报名、查看凭证、发帖、回复、取消和取消状态；核销用户旅程继续覆盖凭证与已入场状态。
+- [x] 列表、详情、讨论、帖子和个人活动提供明确加载、空状态、失败重试；全局离线与恢复反馈可见，404 有返回入口。
+- [x] Playwright 成功报告保存桌面/Pixel 7 的讨论回复、取消状态和核销审计截图附件。
+- [ ] 候选提交与远端 CI 证据绑定后再勾选 G4-R01、G4-R04 及对应阶段门槛。
 
 ### 运营端
 
@@ -713,7 +722,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R06、R07、R08 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R01、R04、R05、R09 和受控活动继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R06、R07、R08 已通过远端门禁；R01/R04 本地候选通过并等待远端 CI；R03 保留 legacy phone-only 与真实 SMTP；R05、R09 和受控活动继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

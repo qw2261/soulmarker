@@ -8,7 +8,8 @@
           <span>{{ total }} 项</span>
         </div>
         <el-skeleton v-if="loading" :rows="6" animated />
-        <el-empty v-else-if="activities.length === 0" description="暂无活动" />
+        <PageLoadError v-else-if="error" :message="error" @retry="fetchActivities" />
+        <el-empty v-else-if="activities.length === 0" description="暂无活动，报名后将在这里看到凭证和状态" />
         <template v-else>
           <section
             v-for="activity in activities"
@@ -47,19 +48,27 @@ import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import Pagination from '@/components/Pagination.vue'
 import AdmissionCredential from '@/components/AdmissionCredential.vue'
+import PageLoadError from '@/components/PageLoadError.vue'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const activities = ref<MyActivity[]>([])
 const loading = ref(true)
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
+const error = ref('')
 
 async function fetchActivities() {
   loading.value = true
+  error.value = ''
   try {
     const response = await listMyActivities({ page: page.value, page_size: pageSize.value })
     activities.value = response.data || []
     total.value = response.total || 0
+  } catch (cause) {
+    activities.value = []
+    total.value = 0
+    error.value = requestErrorMessage(cause, '个人活动加载失败，请稍后重试')
   } finally {
     loading.value = false
   }

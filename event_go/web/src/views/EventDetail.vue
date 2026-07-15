@@ -7,13 +7,28 @@
           <el-skeleton :rows="5" animated />
         </div>
 
+        <PageLoadError v-else-if="error" :message="error" @retry="fetchEvent" />
+
         <template v-else-if="event">
           <el-button text class="back-link" @click="$router.push('/')">
             ← 返回活动列表
           </el-button>
+          <div v-if="event.cover_url && !coverFailed" class="event-cover">
+            <img
+              :src="event.cover_url"
+              :alt="`${event.title}活动封面`"
+              decoding="async"
+              referrerpolicy="no-referrer"
+              @error="coverFailed = true"
+            />
+            <el-tag class="cover-status" :type="EventStatusColors[event.status] as any" size="large">
+              {{ EventStatusMap[event.status] || event.status }}
+            </el-tag>
+          </div>
+
           <div class="event-header">
             <h1>{{ event.title }}</h1>
-            <el-tag :type="EventStatusColors[event.status] as any" size="large">
+            <el-tag v-if="!event.cover_url || coverFailed" :type="EventStatusColors[event.status] as any" size="large">
               {{ EventStatusMap[event.status] || event.status }}
             </el-tag>
           </div>
@@ -72,7 +87,7 @@
               :closable="false"
             >
               <template #default>
-                <el-button type="primary" @click="$router.push('/login')">去登录</el-button>
+                <el-button type="primary" @click="goToLogin">去登录</el-button>
               </template>
             </el-alert>
             <el-alert
@@ -118,6 +133,8 @@
             </div>
           </div>
         </template>
+
+        <el-empty v-else description="活动不存在或已被删除" />
       </div>
     </el-main>
   </div>
@@ -125,7 +142,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Shop } from '@element-plus/icons-vue'
 import { getEvent, getRegistrationStatus, cancelRegistration } from '@/api/events'
@@ -138,16 +155,24 @@ import NavBar from '@/components/NavBar.vue'
 import RegisterForm from '@/components/RegisterForm.vue'
 import AdmissionCredential from '@/components/AdmissionCredential.vue'
 import { confirmAction } from '@/utils/confirm'
+import PageLoadError from '@/components/PageLoadError.vue'
+import { requestErrorMessage } from '@/utils/request-error'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const event = ref<Event | null>(null)
 const loading = ref(true)
 const registered = ref(false)
 const admission = ref<Admission>()
 const recentPosts = ref<Post[]>([])
+const error = ref('')
+const coverFailed = ref(false)
 
 async function fetchEvent() {
+  loading.value = true
+  error.value = ''
+  coverFailed.value = false
   const id = Number(route.params.id)
   try {
     const res = await getEvent(id)
@@ -156,6 +181,9 @@ async function fetchEvent() {
       await checkRegistration(id)
     }
     await fetchRecentPosts(id)
+  } catch (cause) {
+    event.value = null
+    error.value = requestErrorMessage(cause, '活动详情加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -179,6 +207,10 @@ async function fetchRecentPosts(eventId: number) {
   } catch {
     recentPosts.value = []
   }
+}
+
+function goToLogin() {
+  router.push({ path: '/login', query: { redirect: route.fullPath } })
 }
 
 function onRegistered(value?: Admission) {
@@ -257,6 +289,28 @@ onMounted(fetchEvent)
 .event-header h1 {
   margin: 0;
   font-size: 24px;
+}
+
+.event-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 20px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #e4e7ed;
+}
+
+.event-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-status {
+  position: absolute;
+  top: 14px;
+  right: 14px;
 }
 
 .info {
@@ -356,5 +410,42 @@ onMounted(fetchEvent)
   font-size: 13px;
   text-align: center;
   padding: 16px 0 8px;
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: 16px 8px;
+  }
+
+  .event-header {
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .event-header h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 21px;
+  }
+
+  .description,
+  .section {
+    padding: 16px;
+  }
+
+  .registered-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .registered-actions .el-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .post-meta {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
 }
 </style>

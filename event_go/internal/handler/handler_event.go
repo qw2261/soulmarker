@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -56,12 +57,18 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "价格不能为负数")
 		return
 	}
+	coverURL, ok := normalizeEventCoverURL(req.CoverURL)
+	if !ok {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "活动封面必须是有效的 HTTP 或 HTTPS 地址")
+		return
+	}
 
 	event := &model.Event{
 		OrganizerID:   req.OrganizerID,
 		OrganizerName: org.Name,
 		Title:         req.Title,
 		Description:   req.Description,
+		CoverURL:      coverURL,
 		EventTime:     req.EventTime,
 		Location:      req.Location,
 		Capacity:      req.Capacity,
@@ -162,6 +169,14 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "活动容量必须大于 0")
 		return
 	}
+	if req.CoverURL != nil {
+		coverURL, ok := normalizeEventCoverURL(*req.CoverURL)
+		if !ok {
+			writeError(w, http.StatusBadRequest, api.CodeValidationError, "活动封面必须是有效的 HTTP 或 HTTPS 地址")
+			return
+		}
+		req.CoverURL = &coverURL
+	}
 	if req.Price != nil && *req.Price < 0 {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "价格不能为负数")
 		return
@@ -178,6 +193,21 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "活动更新成功", Data: dto.Event(event)})
+}
+
+func normalizeEventCoverURL(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", true
+	}
+	if len(value) > 2048 {
+		return "", false
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", false
+	}
+	return value, true
 }
 
 func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
