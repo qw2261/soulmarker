@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，本地候选；远端 CI 待提交后回填
+> 状态：In Progress，G4-R02/R07/R08 已通过本地和远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 待提交与远端验证 |
+| 当前候选 Commit | 674fd623513f1504c6325ed985192630d3a57c16 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v6，新增 admissions/checkins 与不可变触发器 |
 
@@ -38,6 +38,14 @@
 
 本阶段继续不使用 covdata。
 
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [GitHub Actions Run 29386146688](https://github.com/qw2261/soulmarker/actions/runs/29386146688) | Commit 674fd623，success |
+| [backend job 87259740454](https://github.com/qw2261/soulmarker/actions/runs/29386146688/job/87259740454) | format、vet、test、race success |
+| [frontend job 87259740437](https://github.com/qw2261/soulmarker/actions/runs/29386146688/job/87259740437) | Node 22 build、component、desktop/mobile Playwright success；浏览器证据已上传 |
+
 ## Go/No-Go
 
-No-Go：R02、R07、R08 本地切片成立，但 G4 其余 Requirements、完整 E2E 和两场受控测试活动尚未完成。
+No-Go：R02、R07、R08 纵向切片已通过本地和远端候选门禁，但 G4 其余 Requirements、完整 E2E 和两场受控测试活动尚未完成。
