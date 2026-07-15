@@ -19,6 +19,15 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type PasswordResetRequest struct {
+	Contact string `json:"contact"`
+}
+
+type PasswordResetConfirmRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 type CreateOrganizerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`

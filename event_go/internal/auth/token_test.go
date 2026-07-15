@@ -10,7 +10,7 @@ import (
 func TestJWTManagerSignAndVerifyUser(t *testing.T) {
 	manager := NewJWTManager("test-secret-with-enough-entropy")
 	issuedAt := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
-	user := &model.User{ID: 42, Name: "测试用户", Contact: "user@example.com"}
+	user := &model.User{ID: 42, Name: "测试用户", Contact: "user@example.com", AuthVersion: 3}
 
 	token, err := manager.SignUser(user, issuedAt, time.Hour)
 	if err != nil {
@@ -20,7 +20,7 @@ func TestJWTManagerSignAndVerifyUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.UserID != user.ID || claims.Name != user.Name || claims.Contact != user.Contact {
+	if claims.UserID != user.ID || claims.Name != user.Name || claims.Contact != user.Contact || claims.AuthVersion != user.AuthVersion {
 		t.Fatalf("unexpected claims: %+v", claims)
 	}
 	if claims.IssuedAt == nil || !claims.IssuedAt.Time.Equal(issuedAt) {
@@ -28,6 +28,17 @@ func TestJWTManagerSignAndVerifyUser(t *testing.T) {
 	}
 	if claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(issuedAt.Add(time.Hour)) {
 		t.Fatalf("unexpected expires_at: %+v", claims.ExpiresAt)
+	}
+}
+
+func TestJWTManagerRejectsExpiredToken(t *testing.T) {
+	manager := NewJWTManager("test-secret-with-enough-entropy")
+	token, err := manager.SignUser(&model.User{ID: 1, AuthVersion: 1}, time.Now().Add(-2*time.Hour), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.VerifyUser(token); err == nil {
+		t.Fatal("expired token accepted")
 	}
 }
 

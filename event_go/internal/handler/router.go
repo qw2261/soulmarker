@@ -28,6 +28,9 @@ func (h *Handler) apiRoutes() []apiRoute {
 	return []apiRoute{
 		{http.MethodPost, "/auth/register", "registerUser", "RegisterUserRequest", plain(h.RegisterUser)},
 		{http.MethodPost, "/auth/login", "loginUser", "LoginRequest", plain(h.Login)},
+		{http.MethodPost, "/auth/logout", "logoutUser", "", plain(h.Logout)},
+		{http.MethodPost, "/auth/password-reset/request", "requestPasswordReset", "PasswordResetRequest", plain(h.RequestPasswordReset)},
+		{http.MethodPost, "/auth/password-reset/confirm", "confirmPasswordReset", "PasswordResetConfirmRequest", plain(h.ConfirmPasswordReset)},
 		{http.MethodGet, "/me/registrations", "listMyRegistrations", "", plain(h.ListMyRegistrations)},
 		{http.MethodGet, "/me/admissions", "listMyAdmissions", "", plain(h.ListMyAdmissions)},
 		{http.MethodGet, "/me/activities", "listMyActivities", "", plain(h.ListMyActivities)},

@@ -52,6 +52,42 @@
         }
       }
     },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logoutUser",
+        "tags": ["Auth"],
+        "summary": "Revoke all current user sessions",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/auth/password-reset/request": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "tags": ["Auth"],
+        "summary": "Request an account-enumeration-safe password reset email",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetRequest" },
+        "responses": {
+          "202": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/auth/password-reset/confirm": {
+      "post": {
+        "operationId": "confirmPasswordReset",
+        "tags": ["Auth"],
+        "summary": "Consume a one-time password reset token",
+        "requestBody": { "$ref": "#/components/requestBodies/PasswordResetConfirmRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
     "/me/registrations": {
       "get": {
         "operationId": "listMyRegistrations",
@@ -390,6 +426,8 @@
     "requestBodies": {
       "RegisterUserRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterUserRequest" } } } },
       "LoginRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } },
+      "PasswordResetRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetRequest" } } } },
+      "PasswordResetConfirmRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PasswordResetConfirmRequest" } } } },
       "CreateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrganizerRequest" } } } },
       "UpdateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateOrganizerRequest" } } } },
       "CreateEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEventRequest" } } } },
@@ -416,7 +454,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -429,12 +467,14 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
-      "RegisterUserRequest": { "type": "object", "additionalProperties": false, "required": ["name", "contact", "password"], "properties": { "name": { "type": "string" }, "contact": { "type": "string" }, "password": { "type": "string", "minLength": 6 } } },
+      "RegisterUserRequest": { "type": "object", "additionalProperties": false, "required": ["name", "contact", "password"], "properties": { "name": { "type": "string" }, "contact": { "type": "string", "format": "email" }, "password": { "type": "string", "minLength": 8, "maxLength": 72 } } },
       "LoginRequest": { "type": "object", "additionalProperties": false, "required": ["contact", "password"], "properties": { "contact": { "type": "string" }, "password": { "type": "string" } } },
+      "PasswordResetRequest": { "type": "object", "additionalProperties": false, "required": ["contact"], "properties": { "contact": { "type": "string", "format": "email" } } },
+      "PasswordResetConfirmRequest": { "type": "object", "additionalProperties": false, "required": ["token", "password"], "properties": { "token": { "type": "string", "minLength": 1 }, "password": { "type": "string", "minLength": 8, "maxLength": 72 } } },
       "CreateOrganizerRequest": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
       "UpdateOrganizerRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
       "CreateEventRequest": { "type": "object", "additionalProperties": false, "required": ["organizer_id", "title", "event_time", "location", "capacity", "price"], "properties": { "organizer_id": { "type": "integer", "format": "int64", "minimum": 1 }, "title": { "type": "string" }, "description": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer", "minimum": 1 }, "price": { "type": "number", "minimum": 0 } } },

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -24,15 +25,16 @@ const maxRequestBodyBytes int64 = 1 << 20
 
 // Handler 负责处理HTTP请求，协调store层进行数据操作
 type Handler struct {
-	store         *store.Store
-	config        *config.Config
-	clock         clock.Clock
-	tokens        auth.TokenManager
-	registrations RegistrationService
-	discussions   DiscussionService
-	admissions    AdmissionService
-	startTime     time.Time
-	version       string
+	store          *store.Store
+	config         *config.Config
+	clock          clock.Clock
+	tokens         auth.TokenManager
+	registrations  RegistrationService
+	discussions    DiscussionService
+	admissions     AdmissionService
+	authentication AuthenticationService
+	startTime      time.Time
+	version        string
 }
 
 type RegistrationService interface {
@@ -57,26 +59,34 @@ type AdmissionService interface {
 	ListCheckins(eventID int64, offset, limit int) ([]*model.Checkin, int, error)
 }
 
+type AuthenticationService interface {
+	RequestPasswordReset(ctx context.Context, contact string) error
+	ResetPassword(token, password string) error
+	Logout(userID int64) error
+}
+
 type Dependencies struct {
-	Clock         clock.Clock
-	Tokens        auth.TokenManager
-	Registrations RegistrationService
-	Discussions   DiscussionService
-	Admissions    AdmissionService
+	Clock          clock.Clock
+	Tokens         auth.TokenManager
+	Registrations  RegistrationService
+	Discussions    DiscussionService
+	Admissions     AdmissionService
+	Authentication AuthenticationService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
 func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *Handler {
 	return &Handler{
-		store:         s,
-		config:        cfg,
-		clock:         dependencies.Clock,
-		tokens:        dependencies.Tokens,
-		registrations: dependencies.Registrations,
-		discussions:   dependencies.Discussions,
-		admissions:    dependencies.Admissions,
-		startTime:     dependencies.Clock.Now(),
-		version:       cfg.Version,
+		store:          s,
+		config:         cfg,
+		clock:          dependencies.Clock,
+		tokens:         dependencies.Tokens,
+		registrations:  dependencies.Registrations,
+		discussions:    dependencies.Discussions,
+		admissions:     dependencies.Admissions,
+		authentication: dependencies.Authentication,
+		startTime:      dependencies.Clock.Now(),
+		version:        cfg.Version,
 	}
 }
 

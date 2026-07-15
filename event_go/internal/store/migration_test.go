@@ -25,6 +25,8 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "registrations", "identity_status")
 	assertColumnExists(t, s.db, "posts", "identity_status")
 	assertColumnExists(t, s.db, "replies", "identity_status")
+	assertColumnExists(t, s.db, "user_auth_versions", "version")
+	assertColumnExists(t, s.db, "password_reset_tokens", "token_hash")
 }
 
 func TestMigrationBackfillsMatchingIdentityAndMarksLegacy(t *testing.T) {
@@ -272,7 +274,7 @@ func TestMigrationLegacyDatabasePreservesData(t *testing.T) {
 	}
 }
 
-func TestMigrationV5ToV6PreservesRegistrationsWithoutSyntheticAdmissions(t *testing.T) {
+func TestMigrationV5ToCurrentPreservesRegistrationsWithoutSyntheticAdmissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "v5-to-v6.db")
 	s, err := OpenStore(path)
 	if err != nil {
@@ -299,6 +301,10 @@ func TestMigrationV5ToV6PreservesRegistrationsWithoutSyntheticAdmissions(t *test
 		t.Fatalf("open database for v5 fixture: %v", err)
 	}
 	v6Objects := []string{
+		`DROP TRIGGER users_create_auth_version`,
+		`DROP TABLE password_reset_tokens`,
+		`DROP TABLE user_auth_versions`,
+		`DELETE FROM schema_migrations WHERE version = 7`,
 		`DROP TRIGGER checkins_immutable_update`,
 		`DROP TRIGGER checkins_immutable_delete`,
 		`DROP TABLE checkins`,
@@ -338,6 +344,55 @@ func TestMigrationV5ToV6PreservesRegistrationsWithoutSyntheticAdmissions(t *test
 	}
 	if admissionCount != 0 {
 		t.Fatalf("expected no synthetic admissions for existing registrations, got %d", admissionCount)
+	}
+}
+
+func TestMigrationV6ToV7PreservesUsersAndInitializesAuthVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v6-to-v7.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "迁移认证用户", Contact: "auth-migration@example.com", PasswordHash: "hash"}
+	if err := s.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`DROP TRIGGER users_create_auth_version`,
+		`DROP TABLE password_reset_tokens`,
+		`DROP TABLE user_auth_versions`,
+		`DELETE FROM schema_migrations WHERE version = 7`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v6 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v6 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	preserved, err := s.GetUserByContact(user.Contact)
+	if err != nil || preserved == nil || preserved.ID != user.ID || preserved.AuthVersion != 1 {
+		t.Fatalf("user/auth version not preserved: user=%+v err=%v", preserved, err)
+	}
+	var tokenCount int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM password_reset_tokens`).Scan(&tokenCount); err != nil || tokenCount != 0 {
+		t.Fatalf("unexpected reset token state: count=%d err=%v", tokenCount, err)
 	}
 }
 

@@ -49,9 +49,20 @@ const router = createRouter({
       component: () => import('@/views/auth/Register.vue'),
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/auth/ForgotPassword.vue'),
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/auth/ResetPassword.vue'),
+    },
+    {
       path: '/me/registrations',
       name: 'my-registrations',
       component: () => import('@/views/MyRegistrations.vue'),
+      meta: { requiresUser: true },
     },
     {
       path: '/admin/events',
@@ -79,6 +90,12 @@ const router = createRouter({
       component: () => import('@/views/NotFound.vue'),
     },
   ],
+})
+
+router.beforeEach((to) => {
+  if (to.meta.requiresUser && !localStorage.getItem('user_token')) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
 })
 
 export default router

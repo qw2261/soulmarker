@@ -34,6 +34,8 @@ var (
 	ErrAdmissionRevoked       = errors.New("入场凭证已失效")
 	ErrAdmissionCheckedIn     = errors.New("入场凭证已核销")
 	ErrEventHasAdmissions     = errors.New("活动已有入场凭证，不能删除")
+	ErrPasswordResetInvalid   = errors.New("密码重置链接无效或已过期")
+	ErrPasswordResetRateLimit = errors.New("密码重置请求过于频繁")
 )
 
 type Organizer struct {
@@ -162,13 +164,15 @@ type User struct {
 	Name         string    `json:"name"`
 	Contact      string    `json:"contact"`
 	PasswordHash string    `json:"-"`
+	AuthVersion  int       `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 type UserClaims struct {
-	UserID  int64  `json:"user_id"`
-	Name    string `json:"name"`
-	Contact string `json:"contact"`
+	UserID      int64  `json:"user_id"`
+	Name        string `json:"name"`
+	Contact     string `json:"contact"`
+	AuthVersion int    `json:"auth_version"`
 	jwt.RegisteredClaims
 }
 

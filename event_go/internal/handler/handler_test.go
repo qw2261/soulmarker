@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +17,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 	appauth "github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/identifier"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/notification"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
@@ -41,6 +44,33 @@ type recordingTokenManager struct {
 	user     *model.User
 	issuedAt time.Time
 	ttl      time.Duration
+}
+
+type sequenceResetTokenGenerator struct {
+	tokens []string
+	index  int
+}
+
+func (g *sequenceResetTokenGenerator) NewResetToken() (string, error) {
+	if g.index >= len(g.tokens) {
+		return fmt.Sprintf("reset-token-%d", g.index+1), nil
+	}
+	token := g.tokens[g.index]
+	g.index++
+	return token, nil
+}
+
+type recordingPasswordResetSender struct {
+	contact   string
+	resetURL  string
+	expiresAt time.Time
+	calls     int
+}
+
+func (s *recordingPasswordResetSender) SendPasswordReset(_ context.Context, contact, resetURL string, expiresAt time.Time) error {
+	s.contact, s.resetURL, s.expiresAt = contact, resetURL, expiresAt
+	s.calls++
+	return nil
 }
 
 func (m *recordingTokenManager) SignUser(user *model.User, issuedAt time.Time, ttl time.Duration) (string, error) {
@@ -65,12 +95,18 @@ func mustNewStore(t *testing.T) *store.Store {
 
 func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 	businessClock := clock.System{}
+	authentication := service.NewAuthenticationService(
+		s, businessClock, identifier.CryptoResetTokenGenerator{},
+		notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL,
+		time.Duration(cfg.PasswordResetTTLMin)*time.Minute,
+	)
 	return NewHandler(s, cfg, Dependencies{
-		Clock:         businessClock,
-		Tokens:        appauth.NewJWTManager(cfg.JWTSecret),
-		Registrations: service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, identifier.CryptoCredentialGenerator{}),
-		Discussions:   service.NewDiscussionService(s),
-		Admissions:    service.NewAdmissionService(s, businessClock),
+		Clock:          businessClock,
+		Tokens:         appauth.NewJWTManager(cfg.JWTSecret),
+		Registrations:  service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, identifier.CryptoCredentialGenerator{}),
+		Discussions:    service.NewDiscussionService(s),
+		Admissions:     service.NewAdmissionService(s, businessClock),
+		Authentication: authentication,
 	})
 }
 
@@ -1204,11 +1240,12 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 	businessClock := testClock{now: fixedTime}
 	tokens := &recordingTokenManager{token: "signed-by-test-manager"}
 	h := NewHandler(s, cfg, Dependencies{
-		Clock:         businessClock,
-		Tokens:        tokens,
-		Registrations: service.NewRegistrationService(s, businessClock, 24*time.Hour, identifier.CryptoCredentialGenerator{}),
-		Discussions:   service.NewDiscussionService(s),
-		Admissions:    service.NewAdmissionService(s, businessClock),
+		Clock:          businessClock,
+		Tokens:         tokens,
+		Registrations:  service.NewRegistrationService(s, businessClock, 24*time.Hour, identifier.CryptoCredentialGenerator{}),
+		Discussions:    service.NewDiscussionService(s),
+		Admissions:     service.NewAdmissionService(s, businessClock),
+		Authentication: service.NewAuthenticationService(s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL, 30*time.Minute),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 
@@ -2239,7 +2276,7 @@ func TestGetOrganizerHandlerNotFound(t *testing.T) {
 func TestRegisterUserHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"name":"测试用户","contact":"reg@test.com","password":"123456"}`
+	body := `{"name":"测试用户","contact":"reg@test.com","password":"12345678"}`
 	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -2263,7 +2300,7 @@ func TestRegisterUserHandler(t *testing.T) {
 func TestRegisterUserDuplicate(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
-	body := `{"name":"重复","contact":"dup@test.com","password":"123456"}`
+	body := `{"name":"重复","contact":"dup@test.com","password":"12345678"}`
 	http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
 	resp, err := http.Post(srv.URL+"/api/auth/register", "application/json", strings.NewReader(body))
 	if err != nil {
@@ -2295,9 +2332,9 @@ func TestLoginHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
 	http.Post(srv.URL+"/api/auth/register", "application/json",
-		strings.NewReader(`{"name":"登录测试","contact":"login@test.com","password":"abcdef"}`))
+		strings.NewReader(`{"name":"登录测试","contact":"login@test.com","password":"abcdefgh"}`))
 
-	body := `{"contact":"login@test.com","password":"abcdef"}`
+	body := `{"contact":"login@test.com","password":"abcdefgh"}`
 	resp, err := http.Post(srv.URL+"/api/auth/login", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -2348,6 +2385,142 @@ func TestLoginHandlerNotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestPasswordResetAndLogoutHTTPJourney(t *testing.T) {
+	s, h, srv := setupTestServer(t)
+	sender := &recordingPasswordResetSender{}
+	generator := &sequenceResetTokenGenerator{tokens: []string{"known-reset-token", "throttled-reset-token", "unknown-reset-token"}}
+	h.authentication = service.NewAuthenticationService(
+		s, clock.System{}, generator, sender, "https://events.example.com", 30*time.Minute,
+	)
+
+	registerResponse, err := http.Post(srv.URL+"/api/v1/auth/register", "application/json", strings.NewReader(
+		`{"name":"重置用户","contact":"reset-http@example.com","password":"old-password"}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var registerPayload model.APIResp
+	if err := json.NewDecoder(registerResponse.Body).Decode(&registerPayload); err != nil {
+		t.Fatal(err)
+	}
+	registerResponse.Body.Close()
+	if registerResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("register: expected 201, got %d", registerResponse.StatusCode)
+	}
+	registerData := registerPayload.Data.(map[string]interface{})
+	oldToken := registerData["token"].(string)
+
+	requestReset := func(contact string) model.APIResp {
+		t.Helper()
+		response, err := http.Post(srv.URL+"/api/v1/auth/password-reset/request", "application/json", strings.NewReader(
+			`{"contact":"`+contact+`"}`,
+		))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusAccepted {
+			t.Fatalf("reset request: expected 202, got %d", response.StatusCode)
+		}
+		var payload model.APIResp
+		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+	knownResponse := requestReset("reset-http@example.com")
+	throttledResponse := requestReset("reset-http@example.com")
+	unknownResponse := requestReset("missing-http@example.com")
+	if knownResponse.Message != throttledResponse.Message || knownResponse.Message != unknownResponse.Message || sender.calls != 1 || sender.contact != "reset-http@example.com" {
+		t.Fatalf("reset request leaked account state: known=%+v throttled=%+v unknown=%+v sender=%+v", knownResponse, throttledResponse, unknownResponse, sender)
+	}
+	resetURL, err := url.Parse(sender.resetURL)
+	if err != nil || resetURL.Query().Get("token") != "known-reset-token" {
+		t.Fatalf("unexpected reset URL %q: %v", sender.resetURL, err)
+	}
+
+	confirmBody := `{"token":"known-reset-token","password":"new-password"}`
+	confirmResponse, err := http.Post(srv.URL+"/api/v1/auth/password-reset/confirm", "application/json", strings.NewReader(confirmBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmResponse.Body.Close()
+	if confirmResponse.StatusCode != http.StatusOK {
+		t.Fatalf("confirm reset: expected 200, got %d", confirmResponse.StatusCode)
+	}
+
+	reuseResponse, err := http.Post(srv.URL+"/api/v1/auth/password-reset/confirm", "application/json", strings.NewReader(confirmBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reusePayload model.APIResp
+	if err := json.NewDecoder(reuseResponse.Body).Decode(&reusePayload); err != nil {
+		t.Fatal(err)
+	}
+	reuseResponse.Body.Close()
+	if reuseResponse.StatusCode != http.StatusBadRequest || reusePayload.ErrorCode != string(api.CodePasswordResetInvalid) {
+		t.Fatalf("consumed reset token accepted: status=%d payload=%+v", reuseResponse.StatusCode, reusePayload)
+	}
+
+	oldSessionRequest, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/me/activities", nil)
+	oldSessionRequest.Header.Set("Authorization", "Bearer "+oldToken)
+	oldSessionResponse, err := http.DefaultClient.Do(oldSessionRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSessionResponse.Body.Close()
+	if oldSessionResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("password reset did not revoke old JWT: %d", oldSessionResponse.StatusCode)
+	}
+
+	login := func(password string) (*http.Response, model.APIResp) {
+		t.Helper()
+		response, err := http.Post(srv.URL+"/api/v1/auth/login", "application/json", strings.NewReader(
+			`{"contact":"reset-http@example.com","password":"`+password+`"}`,
+		))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload model.APIResp
+		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		return response, payload
+	}
+	oldLogin, _ := login("old-password")
+	if oldLogin.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old password accepted: %d", oldLogin.StatusCode)
+	}
+	newLogin, newLoginPayload := login("new-password")
+	if newLogin.StatusCode != http.StatusOK {
+		t.Fatalf("new password rejected: %d", newLogin.StatusCode)
+	}
+	newToken := newLoginPayload.Data.(map[string]interface{})["token"].(string)
+
+	logoutRequest, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/logout", nil)
+	logoutRequest.Header.Set("Authorization", "Bearer "+newToken)
+	logoutResponse, err := http.DefaultClient.Do(logoutRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logoutResponse.Body.Close()
+	if logoutResponse.StatusCode != http.StatusOK {
+		t.Fatalf("logout: expected 200, got %d", logoutResponse.StatusCode)
+	}
+
+	revokedRequest, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/me/activities", nil)
+	revokedRequest.Header.Set("Authorization", "Bearer "+newToken)
+	revokedResponse, err := http.DefaultClient.Do(revokedRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokedResponse.Body.Close()
+	if revokedResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("logout did not revoke JWT: %d", revokedResponse.StatusCode)
 	}
 }
 

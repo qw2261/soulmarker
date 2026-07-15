@@ -17,6 +17,7 @@
             </el-button>
           </el-form-item>
         </el-form>
+        <p class="reset-link"><router-link to="/forgot-password">忘记密码？</router-link></p>
         <p class="switch">
           还没有账号？<router-link to="/register">去注册</router-link>
         </p>
@@ -27,13 +28,14 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { loginUser } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import NavBar from '@/components/NavBar.vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 
 const formRef = ref<FormInstance>()
@@ -58,7 +60,8 @@ async function submit() {
     if (res.code === 200 && res.data) {
       userStore.setAuth(res.data.token, res.data.user)
       ElMessage.success('登录成功')
-      router.push('/')
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+      router.push(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/')
     }
   } finally {
     loading.value = false
@@ -71,5 +74,5 @@ async function submit() {
 .main { padding-top: 40px; display: flex; justify-content: center; }
 .auth-card { width: 400px; }
 .auth-card h2 { text-align: center; margin-bottom: 24px; }
-.switch { text-align: center; color: #909399; font-size: 13px; margin-top: 8px; }
+.switch, .reset-link { text-align: center; color: #909399; font-size: 13px; margin-top: 8px; }
 </style>

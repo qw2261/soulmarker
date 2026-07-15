@@ -8,7 +8,7 @@
       <template v-if="user.isLoggedIn">
         <router-link to="/me/registrations">我的活动</router-link>
         <span class="user-name">{{ user.user?.name }}</span>
-        <el-button text @click="user.logout()">退出</el-button>
+        <el-button text @click="logoutUser">退出</el-button>
       </template>
       <template v-else>
         <router-link to="/login">登录</router-link>
@@ -51,13 +51,21 @@ import { ref } from 'vue'
 import { Menu } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
+import { logoutUser as revokeUserSession } from '@/api/auth'
+import { useRouter } from 'vue-router'
 const auth = useAuthStore()
 const user = useUserStore()
+const router = useRouter()
 const mobileMenuOpen = ref(false)
 
-function logoutUser() {
-  user.logout()
-  mobileMenuOpen.value = false
+async function logoutUser() {
+  try {
+    await revokeUserSession()
+  } finally {
+    user.logout()
+    mobileMenuOpen.value = false
+    router.push('/')
+  }
 }
 </script>
 

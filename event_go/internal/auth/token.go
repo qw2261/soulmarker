@@ -26,9 +26,10 @@ func NewJWTManager(secret string) *JWTManager {
 
 func (m *JWTManager) SignUser(user *model.User, issuedAt time.Time, ttl time.Duration) (string, error) {
 	claims := &model.UserClaims{
-		UserID:  user.ID,
-		Name:    user.Name,
-		Contact: user.Contact,
+		UserID:      user.ID,
+		Name:        user.Name,
+		Contact:     user.Contact,
+		AuthVersion: user.AuthVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(issuedAt.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(issuedAt),

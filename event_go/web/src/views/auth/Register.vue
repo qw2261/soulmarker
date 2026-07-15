@@ -8,11 +8,11 @@
           <el-form-item label="昵称" prop="name">
             <el-input v-model="form.name" placeholder="你的名字" />
           </el-form-item>
-          <el-form-item label="联系方式" prop="contact">
-            <el-input v-model="form.contact" placeholder="手机号或邮箱" />
+          <el-form-item label="邮箱" prop="contact">
+            <el-input v-model="form.contact" type="email" placeholder="name@example.com" />
           </el-form-item>
           <el-form-item label="密码" prop="password">
-            <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" />
+            <el-input v-model="form.password" type="password" show-password placeholder="8 到 72 位" />
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="submit" :loading="loading" style="width: 100%">
@@ -50,10 +50,13 @@ const form = reactive({
 
 const rules = {
   name: [{ required: true, message: '请输入昵称', trigger: 'blur' }],
-  contact: [{ required: true, message: '请输入联系方式', trigger: 'blur' }],
+  contact: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入有效邮箱', trigger: 'blur' },
+  ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+    { min: 8, max: 72, message: '密码必须为 8 到 72 位', trigger: 'blur' },
   ],
 }
 

@@ -1,6 +1,14 @@
 import axios from 'axios'
 import type { APIResp } from './types'
 import { ElMessage } from 'element-plus'
+import { expireUserSession, isCurrentUserSessionToken } from '@/auth/session'
+
+const publicAuthPaths = new Set([
+  '/auth/register',
+  '/auth/login',
+  '/auth/password-reset/request',
+  '/auth/password-reset/confirm',
+])
 
 const client = axios.create({
   baseURL: '/api/v1',
@@ -12,8 +20,9 @@ const client = axios.create({
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('user_token')
-  if (token) {
+  if (token && !publicAuthPaths.has(config.url || '')) {
     config.headers.Authorization = `Bearer ${token}`
+    ;(config as typeof config & { soulmarkUserToken?: string }).soulmarkUserToken = token
   }
   const adminToken = localStorage.getItem('admin_token')
   if (adminToken) {
@@ -26,7 +35,14 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     const msg = error.response?.data?.message || error.message || '网络错误'
-    ElMessage.error(msg)
+    const errorCode = error.response?.data?.error_code
+    const sentUserToken = (error.config as typeof error.config & { soulmarkUserToken?: string })?.soulmarkUserToken
+    if (error.response?.status === 401 && isCurrentUserSessionToken(sentUserToken) && ['USER_TOKEN_INVALID', 'USER_AUTH_REQUIRED'].includes(errorCode)) {
+      expireUserSession(window.location.pathname + window.location.search)
+      ElMessage.warning('登录已过期，请重新登录')
+    } else {
+      ElMessage.error(msg)
+    }
     return Promise.reject(error)
   }
 )

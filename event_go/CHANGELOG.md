@@ -20,6 +20,8 @@
 - 用户活动详情与“我的活动”二维码凭证，运营报名页核销工作台。
 - Vitest 组件测试、Playwright 桌面/移动核心旅程和 CI 浏览器证据。
 - `/me/activities` 统一参与时间线 API，合并 Admission 历史与没有 Admission 的 Registration。
+- 用户服务端退出、一次性密码重置申请/确认 API，以及忘记密码和设置新密码页面。
+- SMTP、开发日志和测试丢弃三种密码重置通知适配器。
 
 ### Changed
 
@@ -42,7 +44,9 @@
 - OpenAPI 固定 `ErrorResponse.error_code` 枚举，并与 Go 错误目录自动双向校验；未知错误码安全降级为通用内部错误。
 - 免费报名与 Admission 在同一事务内创建；取消会吊销凭证，已核销报名不可取消。
 - 移动导航改为抽屉，“我的报名”升级为显示参与状态与凭证的“我的活动”。
-- 前端从全量安装 Element Plus 改为显式注册实际使用组件，主 JS 降至约 479 KB。
+- 前端从全量安装 Element Plus 改为显式注册实际使用组件，认证页面加入后主 JS 约 481 KB。
+- 新注册收敛为邮箱，密码策略统一为 8–72 字节；历史 contact 登录继续兼容。
+- 前端受保护路由、Token 过期安全回跳与服务端退出形成统一会话状态闭环。
 
 ### Fixed
 
@@ -59,6 +63,9 @@
 - 增加 CSP、frame、MIME、Referrer 和 Permissions Policy 安全响应头。
 - HTTP 500 与健康检查不再向客户端返回 SQL 或数据库内部错误。
 - Admission 使用 128 位加密随机凭证；跨活动、已吊销凭证拒绝核销。
+- JWT 增加认证版本；退出或密码重置会撤销该用户全部旧 Token，旧无版本 JWT 按版本 1 兼容。
+- 密码重置使用 256 位随机 Token，数据库只存 SHA-256 摘要，并实施一次性消费、过期、替代与用户级一分钟限流。
+- staging/production 缺 HTTPS 公开地址、SMTP 配置或合法重置有效期时拒绝启动。
 
 ### Migration
 
@@ -68,3 +75,4 @@
 - Schema 升级到版本 5：精确回填可匹配身份，无法匹配的记录标记为 legacy。
 - 新写入记录标记为 verified；管理员可以查询各实体迁移总量和 legacy 清单。
 - Schema 升级到版本 6：新增 Admission/Checkin 外键、索引和 Checkin 不可变触发器。
+- Schema 升级到版本 7：新增用户认证版本、密码重置 Token 表、索引和新用户认证版本触发器。

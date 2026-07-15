@@ -13,7 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 6
+const CurrentSchemaVersion = 7
 
 type Store struct {
 	db             *sql.DB
@@ -151,7 +151,39 @@ func migrations() []migration {
 		{version: 4, name: "identity_backfill_and_legacy_status", apply: migrateIdentityBackfill},
 		{version: 5, name: "foreign_key_readiness", apply: migrateForeignKeyReadiness},
 		{version: 6, name: "admission_and_checkin", apply: migrateAdmissionAndCheckin},
+		{version: 7, name: "authentication_session_and_password_reset", apply: migrateAuthenticationSessionAndPasswordReset},
 	}
+}
+
+func migrateAuthenticationSessionAndPasswordReset(tx *sql.Tx) error {
+	return execStatements(tx, []string{
+		`CREATE TABLE user_auth_versions (
+			user_id INTEGER PRIMARY KEY,
+			version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`INSERT INTO user_auth_versions (user_id, version, updated_at)
+		 SELECT id, 1, created_at FROM users`,
+		`CREATE TRIGGER users_create_auth_version AFTER INSERT ON users
+		 BEGIN
+			INSERT INTO user_auth_versions (user_id, version, updated_at)
+			VALUES (NEW.id, 1, NEW.created_at);
+		 END`,
+		`CREATE TABLE password_reset_tokens (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			token_hash TEXT NOT NULL UNIQUE,
+			expires_at TEXT NOT NULL,
+			used_at TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX idx_password_reset_user_created
+		 ON password_reset_tokens(user_id, created_at DESC)`,
+		`CREATE INDEX idx_password_reset_expiry
+		 ON password_reset_tokens(expires_at) WHERE used_at IS NULL`,
+	})
 }
 
 func migrateAdmissionAndCheckin(tx *sql.Tx) error {
@@ -446,6 +478,8 @@ func validateForeignKeys(db *sql.DB) error {
 		{"admissions", "users", "user_id"},
 		{"checkins", "admissions", "admission_id"},
 		{"checkins", "events", "event_id"},
+		{"user_auth_versions", "users", "user_id"},
+		{"password_reset_tokens", "users", "user_id"},
 	}
 	for _, foreignKey := range required {
 		exists, err := tableHasForeignKeyDB(db, foreignKey.table, foreignKey.parent, foreignKey.column)

@@ -145,13 +145,16 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 32 个业务操作进入 `/api/v1`；Admission/Checkin 与统一“我的活动”时间线已完成本地桌面和移动验收，G4 其余范围继续推进。
+**v6.0 免费活动可用版迭代中** — 35 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线和认证安全闭环已完成本地桌面与移动验收。G4-R03 仍需补齐 legacy phone-only 账户迁移和真实 SMTP 环境验证，G4 其余范围继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
 ```
 POST   /api/v1/auth/register                            用户注册
 POST   /api/v1/auth/login                               用户登录（返回 JWT）
+POST   /api/v1/auth/logout                              退出并撤销该用户全部现有 JWT
+POST   /api/v1/auth/password-reset/request              请求一次性密码重置链接
+POST   /api/v1/auth/password-reset/confirm              使用一次性 Token 重置密码
 GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
@@ -217,7 +220,7 @@ GET    /health                                        健康检查
 | 类别 | `error_code` |
 |---|---|
 | 请求边界 | `VALIDATION_ERROR`、`INVALID_JSON`、`REQUEST_TOO_LARGE`、`API_ROUTE_NOT_FOUND`、`METHOD_NOT_ALLOWED` |
-| 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS` |
+| 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS`、`PASSWORD_RESET_TOKEN_INVALID` |
 | 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND` |
 | 报名与讨论 | `EVENT_NOT_PUBLISHED`、`REGISTRATION_DUPLICATE`、`EVENT_CAPACITY_FULL`、`TICKET_SOLD_OUT`、`REGISTRATION_NOT_FOUND`、`CANCELLATION_DEADLINE_EXCEEDED`、`PARTICIPATION_REQUIRED` |
 | 入场与核销 | `ADMISSION_NOT_FOUND`、`ADMISSION_REVOKED`、`ADMISSION_ALREADY_CHECKED_IN`、`EVENT_HAS_ADMISSIONS` |
@@ -232,12 +235,16 @@ GET    /health                                        健康检查
 ### 0. 用户注册与登录
 
 ```
-注册 (POST /api/v1/auth/register) → name + contact + password（≥6位，bcrypt 加密）
-登录 (POST /api/v1/auth/login) → contact + password → 返回 JWT Token
+注册 (POST /api/v1/auth/register) → name + email + password（8–72 字节，bcrypt 加密）
+登录 (POST /api/v1/auth/login) → contact + password → 返回带 auth_version 的 JWT Token
+退出 (POST /api/v1/auth/logout) → 服务端递增 auth_version，撤销该用户全部旧 JWT
+忘记密码 → 申请 30 分钟一次性链接 → 设置新密码 → 撤销全部旧 JWT
 
 JWT 有效期 7 天（可配置），前端 localStorage 持久化
 报名、发帖、回复、取消和“我的活动”均从 JWT user_id 加载持久化用户，不接受联系方式授权
 ```
+
+新注册仅接受邮箱；历史 contact 登录保持兼容。密码重置 Token 使用 256 位随机数，数据库只保存 SHA-256 摘要；新申请会替代旧 Token，同一用户一分钟内只接受一次申请。已知和未知账户均返回相同 202 响应。
 
 免费报名成功时会同时生成 Admission。用户二维码内容为 `soulmark:admission:<32位随机码>`；运营端首次核销返回 201，重复核销返回原 Checkin 且 `already_checked_in=true`，不会新增记录。
 
@@ -423,16 +430,18 @@ main.go
 | 重复核销 | Admission 唯一约束 + 串行化事务；重复/并发扫描返回原 Checkin |
 | 核销审计不可变 | SQLite 触发器拒绝 Checkin 的 UPDATE 与 DELETE |
 | 用户活动分页 | 单一 SQL 投影合并 Admission 与无凭证 Registration，统一排序、去重和精确计数 |
+| 会话撤销 | JWT 携带 auth_version；退出和密码重置递增数据库版本，旧 JWT 随即失效 |
+| 密码重置 | 256 位一次性 Token、SHA-256 摘要存储、30 分钟默认过期、替代和消费均不可复用 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **250** 个顶层 Go 测试、3 个 Vue Component 测试、2 个浏览器项目 |
+| 测试用例 | **262** 个顶层 Go 测试、5 个 Vue unit/component 测试、2 个浏览器项目 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
-| 前端构建 | Element Plus 按实际组件注册；主 JS 约 479 KB / 167 KB gzip，无 chunk size 告警 |
+| 前端构建 | Element Plus 按实际组件注册；主 JS 约 481 KB / 168 KB gzip，无 chunk size 告警 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
 
 **测试命令**：
@@ -447,7 +456,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=6`。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=7`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -464,12 +473,12 @@ cp data/event_go.db data/event_go.db.pre-upgrade.bak
 # 用户注册
 curl -s -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"张三","contact":"13800001111","password":"123456"}'
+  -d '{"name":"张三","contact":"zhangsan@example.com","password":"change-me-123"}'
 
 # 用户登录
 curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"contact":"13800001111","password":"123456"}'
+  -d '{"contact":"zhangsan@example.com","password":"change-me-123"}'
 
 # 创建门店（管理端）
 curl -s -X POST http://localhost:8080/api/v1/organizers \
@@ -534,7 +543,9 @@ event_go/
 | `/organizers` | 门店列表 | 卡片网格，含活动数，可点击进入详情 |
 | `/organizers/:id` | 门店详情 | 门店信息 + 旗下活动列表（分页） |
 | `/login` | 用户登录 | contact + password |
-| `/register` | 用户注册 | name + contact + password（≥6 位） |
+| `/register` | 用户注册 | name + email + password（8–72 字节） |
+| `/forgot-password` | 忘记密码 | 申请一次性密码重置链接，未知账户返回相同结果 |
+| `/reset-password?token=...` | 重置密码 | 消费一次性 Token 并撤销旧会话 |
 | `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
 | `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
 | `/admin/events` | 活动管理 | 列表 + 删除 |
@@ -558,8 +569,13 @@ event_go/
 | `JWT_EXPIRE_HOURS` | `168`（7 天） | JWT 有效期 |
 | `CORS_ORIGIN` | `*` | 允许的跨域来源 |
 | `CANCEL_DEADLINE_HOURS` | `24` | 取消报名截止小时数 |
+| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置链接的公开站点地址；生产必须为 HTTPS |
+| `PASSWORD_RESET_TTL_MINUTES` | `30` | 密码重置 Token 有效分钟数，允许 1–1440 |
+| `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
+| `SMTP_FROM` | 空 | 密码重置邮件发件人 |
 
-staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`，并将 `CORS_ORIGIN` 设置为明确来源。
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 `PASSWORD_RESET_TTL_MINUTES` 会拒绝启动。development 未配置 SMTP 时只把重置链接写入服务日志，不发送邮件。
 
 ### 环境准备
 

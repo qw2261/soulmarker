@@ -35,5 +35,6 @@
 | G4-R02 | v6.0 | High | “我的活动”以单一精确分页时间线展示免费/付费、待参加、已结束、已取消、已入场和真实凭证 | MyActivity、GET /me/activities、MyRegistrations、AdmissionCredential | DOM-ACTIVITY-001、CT-WEB-ACTIVITY-001、CT-WEB-ADMISSION-001 | E2E-ADMISSION-001 desktop/mobile | v6.0 test-report / Run 29387047591 | Remote Pass |
 | G4-R07 | v6.0 | Critical | 免费报名与 Admission 同事务创建；付费票不生成；凭证由加密随机生成器产生并仅向本人/管理员返回 | migration v6、RegistrationService、Store、Admission API | DOM-ADMISSION-001、MIG-ADMISSION-001、SEC-CREDENTIAL-001 | E2E-ADMISSION-001 | v6.0 test-report / Run 29386146688 | Remote Pass |
 | G4-R08 | v6.0 | Critical | 首次核销生成一条不可变 Checkin；重复与并发调用返回同一记录；吊销/跨活动凭证拒绝；已核销不可取消 | AdmissionService、Store CheckIn、immutable triggers、运营核销页 | CONC-CHECKIN-001、SEC-CHECKIN-001、IT-CHECKIN-001 | E2E-ADMISSION-001 desktop/mobile | v6.0 test-report / Run 29386146688 | Remote Pass |
+| G4-R03 | v6.0 | Critical | 注册/登录/退出/Token 过期/重置状态一致；旧 JWT 可撤销；重置 Token 不可读取、复用或越期；未知账户不暴露状态 | AuthenticationService、Schema v7、auth handlers、session.ts、认证页面 | SEC-AUTH-SESSION-001、SEC-PASSWORD-RESET-001、MIG-AUTH-V7-001、CT-API-AUTH-001、FE-AUTH-SESSION-001 | E2E-AUTH-001 desktop/mobile；真实 SMTP 待 staging | v6.0 test-report | Partial Local Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

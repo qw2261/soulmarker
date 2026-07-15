@@ -63,10 +63,10 @@
 
 ### 3.1 已有优势
 
-- 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 25 个 API。
+- 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 35 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 202 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 262 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -282,6 +282,16 @@
 - [ ] **G4-R03** 登录、注册、退出、Token 过期、密码重置形成完整状态闭环。
 - [ ] **G4-R04** 活动封面、状态可见性、错误页、空状态和弱网反馈完善。
 - [ ] **G4-R05** 基础通知：报名成功、取消、活动变更和临近提醒。
+
+G4-R03 当前拆分验收：
+
+- [x] 新注册邮箱校验、8–72 字节密码策略和历史 contact 登录兼容。
+- [x] 服务端退出通过认证版本撤销全部旧 JWT。
+- [x] 前端受保护路由、401 过期清理、安全回跳和迟到 401 竞态回归。
+- [x] 256 位一次性密码重置 Token、摘要存储、过期、替代、限流和统一 202 响应。
+- [x] staging/production 对 HTTPS 公开地址、SMTP 和合法 Token TTL 配置 fail-closed。
+- [ ] 为历史 phone-only 账户提供邮箱绑定或人工恢复流程。
+- [ ] 在真实 staging SMTP 完成已知账户收件、链接跳转、重置和旧会话撤销验收。
 
 ### 运营端
 
@@ -693,7 +703,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R07、R08 已随候选 df969f2 通过本地与远端门禁；其余用户、运营和受控活动门禁继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R02、R07、R08 已通过远端门禁；R03 认证闭环已本地通过但保留 legacy phone-only 与真实 SMTP 门禁，其余范围继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

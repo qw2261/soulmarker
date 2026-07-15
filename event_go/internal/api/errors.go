@@ -32,6 +32,7 @@ const (
 	CodeAdmissionRevoked             ErrorCode = "ADMISSION_REVOKED"
 	CodeAdmissionAlreadyCheckedIn    ErrorCode = "ADMISSION_ALREADY_CHECKED_IN"
 	CodeEventHasAdmissions           ErrorCode = "EVENT_HAS_ADMISSIONS"
+	CodePasswordResetInvalid         ErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
 )
 
 var errorMessages = map[ErrorCode]string{
@@ -61,6 +62,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeAdmissionRevoked:             "入场凭证已失效",
 	CodeAdmissionAlreadyCheckedIn:    "入场凭证已核销",
 	CodeEventHasAdmissions:           "活动已有入场凭证，不能删除",
+	CodePasswordResetInvalid:         "密码重置链接无效或已过期",
 }
 
 // ErrorCodes 返回错误码目录的副本，供契约生成和测试使用。

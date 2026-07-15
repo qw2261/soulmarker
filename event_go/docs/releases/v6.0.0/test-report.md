@@ -1,15 +1,15 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R02 统一时间线加固已通过本地和远端候选门禁
+> 状态：In Progress，G4-R03 认证安全闭环已通过本地候选门禁，等待提交与远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | df969f2820b6ff2976fe5d1658b211c531ac22d1 |
+| 当前候选 Commit | 工作树候选，基于 3c38acf；首次提交后回填完整 SHA |
 | 候选分支 | origin/codex/update_project |
-| Schema | v6，新增 admissions/checkins 与不可变触发器 |
+| Schema | v7，新增认证版本、密码重置 Token 表与触发器；保留 v6 admissions/checkins |
 
 ## 追溯范围
 
@@ -19,19 +19,21 @@
 | G4-R07 | DOM-ADMISSION-001、MIG-ADMISSION-001、SEC-CREDENTIAL-001 | 免费/付费签发、v5→v6 数据保留、迁移外键/触发器、随机凭证、可信用户作用域与 HTTP 旅程 |
 | G4-R08 | CONC-CHECKIN-001、SEC-CHECKIN-001、IT-CHECKIN-001 | 首次/重复/并发核销、不可变触发器、吊销、跨活动、已核销取消、审计列表 |
 | G4 browser gate | E2E-ADMISSION-001 | desktop-chromium 与 Pixel 7：注册、浏览、报名、凭证、首次/重复核销、审计、已入场状态 |
+| G4-R03 | SEC-AUTH-SESSION-001、SEC-PASSWORD-RESET-001、MIG-AUTH-V7-001、CT-API-AUTH-001、FE-AUTH-SESSION-001 | 注册邮箱/密码策略；旧 JWT 版本兼容与撤销；一次性重置 Token；v6→v7 迁移；生产配置 fail-closed；迟到 401 不清除新会话 |
+| G4-R03 browser | E2E-AUTH-001 | desktop-chromium 与 Pixel 7：无效 JWT 清理、安全回跳重新登录、服务端退出、受保护路由、未知邮箱统一重置成功页 |
 
 ## 当前本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 250 |
-| Vue component tests | 3 passed |
+| 顶层 Go Test 数量 | 262 |
+| Vue unit/component tests | 5 passed（3 files） |
 | Playwright E2E | 2 passed（desktop-chromium、mobile-chromium） |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
-| npm run build | 通过；主 JS 约 479 KB / 167 KB gzip，无 chunk size 告警 |
+| npm run build | 通过；主 JS 约 481 KB / 168 KB gzip，无 chunk size 告警 |
 | npm audit --omit=dev | 0 vulnerabilities |
 | Markdown 本地链接 / git diff --check / gofmt | 通过 |
 | Browser 可视验收 | 桌面/412x915 用户凭证、移动菜单、运营核销布局通过；二维码 184x184 非空 |
@@ -51,4 +53,4 @@
 
 ## Go/No-Go
 
-No-Go：R02 统一时间线加固及 R07、R08 纵向切片已通过本地和远端候选门禁；G4 其余 Requirements、完整 E2E 和两场受控测试活动尚未完成。
+No-Go：R02、R07、R08 已通过本地和远端候选门禁；R03 代码与本地门禁通过，但 legacy phone-only 恢复、真实 staging SMTP、提交绑定和远端 CI 尚未完成。G4 其余 Requirements、完整 E2E 和两场受控测试活动也尚未完成。

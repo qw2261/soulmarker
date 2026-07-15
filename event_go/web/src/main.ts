@@ -33,6 +33,8 @@ import {
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
+import { useUserStore } from './stores/user'
+import { USER_SESSION_EXPIRED_EVENT } from './auth/session'
 
 const app = createApp(App)
 
@@ -73,5 +75,13 @@ const elementComponents = [
 for (const component of elementComponents) {
   app.use(component)
 }
+
+window.addEventListener(USER_SESSION_EXPIRED_EVENT, (event) => {
+  const redirect = (event as CustomEvent<{ redirect?: string }>).detail?.redirect || '/'
+  useUserStore().logout()
+  if (router.currentRoute.value.path !== '/login') {
+    router.push({ path: '/login', query: { reason: 'expired', redirect } })
+  }
+})
 
 app.mount('#app')

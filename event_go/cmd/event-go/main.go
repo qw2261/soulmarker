@@ -14,6 +14,7 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler"
 	"github.com/qw2261/soulmarker/event_go/internal/identifier"
+	"github.com/qw2261/soulmarker/event_go/internal/notification"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
@@ -40,12 +41,23 @@ func main() {
 	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, credentials)
 	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
+	var resetSender notification.PasswordResetSender = notification.LogPasswordResetSender{}
+	if cfg.SMTPHost != "" {
+		resetSender = notification.NewSMTPPasswordResetSender(
+			cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom,
+		)
+	}
+	authentication := service.NewAuthenticationService(
+		s, businessClock, identifier.CryptoResetTokenGenerator{}, resetSender,
+		cfg.PublicBaseURL, time.Duration(cfg.PasswordResetTTLMin)*time.Minute,
+	)
 	h := handler.NewHandler(s, cfg, handler.Dependencies{
-		Clock:         businessClock,
-		Tokens:        tokens,
-		Registrations: registrations,
-		Admissions:    admissions,
-		Discussions:   discussions,
+		Clock:          businessClock,
+		Tokens:         tokens,
+		Registrations:  registrations,
+		Admissions:     admissions,
+		Discussions:    discussions,
+		Authentication: authentication,
 	})
 
 	port := cfg.Port
@@ -65,6 +77,9 @@ func main() {
 	log.Printf("  GET    /health                               健康检查")
 	log.Printf("  POST   /api/v1/auth/register                    用户注册")
 	log.Printf("  POST   /api/v1/auth/login                       用户登录")
+	log.Printf("  POST   /api/v1/auth/logout                      退出并撤销用户会话")
+	log.Printf("  POST   /api/v1/auth/password-reset/request      请求密码重置")
+	log.Printf("  POST   /api/v1/auth/password-reset/confirm      确认密码重置")
 	log.Printf("  GET    /api/v1/me/registrations                 当前用户报名列表")
 	log.Printf("  GET    /api/v1/me/admissions                    当前用户入场凭证")
 	log.Printf("  GET    /api/v1/me/activities                    当前用户统一活动时间线")
