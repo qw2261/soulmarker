@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：Candidate，G5.1 租户基础切片
+> 状态：Remote Candidate Pass，G5.1 租户基础切片（Commit f548a29 / Run 29437366319）
 
 ## 当前切片
 

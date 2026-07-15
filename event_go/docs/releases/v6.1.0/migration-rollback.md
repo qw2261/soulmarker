@@ -57,3 +57,5 @@ SELECT COUNT(*) FROM organization_members;
 - 历史 Event/Organizer 数量和关联保持不变，Membership 不被猜测生成。
 - N/N-1 创建与删除写兼容通过。
 - 候选 Commit、远端 CI Run、备份路径、执行人和回滚判定已记录。
+
+当前代码候选证据：Commit `f548a29`，GitHub Actions Run `29437366319` success；backend job `87427278795` 与 frontend job `87427278794` 均通过。

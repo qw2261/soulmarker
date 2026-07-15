@@ -400,7 +400,7 @@ G5 每个切片使用“迁移/约束 → Store/Service → API 契约 → UI/E2
 - [x] **G5-F02** 历史门店一对一回填为 unclaimed Organization，系统占位门店回填为 system；不根据 contact 或用户数据猜测 owner。
 - [x] **G5-F03** 新组织、公开资料和唯一 active owner 同事务创建；邀请只允许 active owner/admin 创建，不能邀请 owner，接受时匹配登录邮箱或已验证恢复邮箱，并保证过期与单次消费。
 - [x] **G5-F04** pre-v12 应用省略 `organization_id` 创建门店时自动生成 unclaimed Organization；旧应用删除门店时自动暂停对应租户。
-- [ ] **G5-F05** v6.1.0 候选通过完整本地与远端门禁，并回填 Commit、Run、迁移和回滚证据。
+- [x] **G5-F05** v6.1.0 基础候选通过完整本地与远端门禁；Commit `f548a29` / Run `29437366319`，迁移和回滚证据见 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
 
 G5.1 不包含组织自助 API、租户上下文、业务资源 scope、租户后台或完整角色授权，因此不能据此勾选 G5-R02、R04–R08，也不能把全局 Admin Token 描述为已被替换。
 
@@ -774,7 +774,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 Schema v12 租户基础候选验证中；完整授权、tenant scope、自助运营与审计尚未开始 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 Schema v12 租户基础已由 Commit f548a29 / Run 29437366319 通过远端候选门禁；下一切片为 G5.2 授权内核 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

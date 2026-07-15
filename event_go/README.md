@@ -182,7 +182,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 租户基础并行推进** — 免费活动自动化、JWT/Go 供应链安全与 P0/P1 清零已通过远端门禁；G4 仍待真实 staging SMTP 和两场受控活动。v6.1 当前只落地 Schema v12 租户基础、历史数据安全回填、成员/邀请存储不变量与 N/N-1 `/organizers` 写兼容，尚未开放自助组织 API，也未宣称业务资源已经 tenant scoped。
+**v6.0 验收与 v6.1 租户基础并行推进** — 免费活动自动化、JWT/Go 供应链安全与 P0/P1 清零已通过远端门禁；G4 仍待真实 staging SMTP 和两场受控活动。v6.1 Schema v12 租户基础、历史数据安全回填、成员/邀请存储不变量与 N/N-1 `/organizers` 写兼容已由 Commit `f548a29` / Run `29437366319` 通过远端候选门禁；尚未开放自助组织 API，也未宣称业务资源已经 tenant scoped。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
