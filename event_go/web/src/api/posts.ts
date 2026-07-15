@@ -5,15 +5,15 @@ export function listPosts(
   eventId: number,
   params?: { page?: number; page_size?: number }
 ) {
-  return get<Post[]>(`/api/events/${eventId}/posts`, params)
+  return get<Post[]>(`/events/${eventId}/posts`, params)
 }
 
 export function getPost(eventId: number, postId: number) {
-  return get<PostDetail>(`/api/events/${eventId}/posts/${postId}`)
+  return get<PostDetail>(`/events/${eventId}/posts/${postId}`)
 }
 
 export function createPost(eventId: number, data: CreatePostReq) {
-  return post<Post>(`/api/events/${eventId}/posts`, data)
+  return post<Post>(`/events/${eventId}/posts`, data)
 }
 
 export function createReply(
@@ -21,5 +21,5 @@ export function createReply(
   postId: number,
   data: CreateReplyReq
 ) {
-  return post<Reply>(`/api/events/${eventId}/posts/${postId}/replies`, data)
+  return post<Reply>(`/events/${eventId}/posts/${postId}/replies`, data)
 }

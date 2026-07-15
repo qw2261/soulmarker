@@ -136,36 +136,38 @@ User (用户) — 注册/登录获得 JWT
 
 ## 当前进度
 
-**v5.4 身份模型 v2 候选版** — 用户 ID 成为报名和讨论的身份源，共 **28 个 API 接口**。
+**v5.5 契约稳定候选版** — 27 个业务操作进入 `/api/v1`，前端默认使用 v1；旧 `/api` 路径保留一个兼容周期。
+
+机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
 ```
-POST   /api/auth/register                            用户注册
-POST   /api/auth/login                               用户登录（返回 JWT）
-GET    /api/me/registrations[?page=&page_size=]      当前用户报名列表
-GET    /api/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
-POST   /api/organizers                               创建门店 🔐
-GET    /api/organizers[?page=&page_size=]            门店列表（分页，含活动数）
-GET    /api/organizers/{id}                          门店详情
-PUT    /api/organizers/{id}                          编辑门店 🔐
-DELETE /api/organizers/{id}                          删除门店（活动解绑）🔐
-POST   /api/events                                    创建活动（必须归属门店）🔐
-GET    /api/events[?status=&price_type=&q=&organizer_id=&page=&page_size=] 活动列表（筛选 + 分页，含门店名）
-GET    /api/events/{id}                               活动详情（含门店名）
-PUT    /api/events/{id}                               编辑活动 🔐
-DELETE /api/events/{id}                               删除活动 🔐
-POST   /api/events/{id}/register                      报名活动（必须登录，身份来自 JWT）
-DELETE /api/events/{id}/register                      取消自己的报名（活动开始前24h）
-GET    /api/events/{id}/registration                  当前登录用户的报名状态
-GET    /api/events/{id}/registrations[?page=&page_size=] 报名列表（分页）🔐
-POST   /api/events/{id}/posts                         发帖（需已报名，支持 JWT 自动识别）
-GET    /api/events/{id}/posts[?page=&page_size=]      帖子列表（分页）
-GET    /api/events/{id}/posts/{postId}                帖子详情（含回复）
-POST   /api/events/{id}/posts/{postId}/replies        回复帖子（需已报名，支持 JWT 自动识别）
-POST   /api/events/{id}/tickets                       创建门票 🔐
-GET    /api/events/{id}/tickets[?page=&page_size=]    门票列表（分页）
-GET    /api/events/{id}/tickets/{ticketId}            门票详情
-PUT    /api/events/{id}/tickets/{ticketId}            编辑门票 🔐
-DELETE /api/events/{id}/tickets/{ticketId}            删除门票 🔐
+POST   /api/v1/auth/register                            用户注册
+POST   /api/v1/auth/login                               用户登录（返回 JWT）
+GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
+GET    /api/v1/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
+POST   /api/v1/organizers                               创建门店 🔐
+GET    /api/v1/organizers[?page=&page_size=]            门店列表（分页，含活动数）
+GET    /api/v1/organizers/{id}                          门店详情
+PUT    /api/v1/organizers/{id}                          编辑门店 🔐
+DELETE /api/v1/organizers/{id}                          删除门店（活动解绑）🔐
+POST   /api/v1/events                                   创建活动（必须归属门店）🔐
+GET    /api/v1/events[?status=&price_type=&q=&organizer_id=&page=&page_size=] 活动列表（筛选 + 分页，含门店名）
+GET    /api/v1/events/{id}                              活动详情（含门店名）
+PUT    /api/v1/events/{id}                              编辑活动 🔐
+DELETE /api/v1/events/{id}                              删除活动 🔐
+POST   /api/v1/events/{id}/register                     报名活动（必须登录，身份来自 JWT）
+DELETE /api/v1/events/{id}/register                     取消自己的报名（活动开始前24h）
+GET    /api/v1/events/{id}/registration                 当前登录用户的报名状态
+GET    /api/v1/events/{id}/registrations[?page=&page_size=] 报名列表（分页）🔐
+POST   /api/v1/events/{id}/posts                        发帖（需已报名，支持 JWT 自动识别）
+GET    /api/v1/events/{id}/posts[?page=&page_size=]     帖子列表（分页）
+GET    /api/v1/events/{id}/posts/{postId}               帖子详情（含回复）
+POST   /api/v1/events/{id}/posts/{postId}/replies       回复帖子（需已报名，支持 JWT 自动识别）
+POST   /api/v1/events/{id}/tickets                      创建门票 🔐
+GET    /api/v1/events/{id}/tickets[?page=&page_size=]   门票列表（分页）
+GET    /api/v1/events/{id}/tickets/{ticketId}           门票详情
+PUT    /api/v1/events/{id}/tickets/{ticketId}           编辑门票 🔐
+DELETE /api/v1/events/{id}/tickets/{ticketId}           删除门票 🔐
 GET    /health                                        健康检查
 ```
 
@@ -205,8 +207,8 @@ GET    /health                                        健康检查
 ### 0. 用户注册与登录
 
 ```
-注册 (POST /api/auth/register) → name + contact + password（≥6位，bcrypt 加密）
-登录 (POST /api/auth/login) → contact + password → 返回 JWT Token
+注册 (POST /api/v1/auth/register) → name + contact + password（≥6位，bcrypt 加密）
+登录 (POST /api/v1/auth/login) → contact + password → 返回 JWT Token
 
 JWT 有效期 7 天（可配置），前端 localStorage 持久化
 报名、发帖、回复、取消和“我的报名”均从 JWT user_id 加载持久化用户，不接受联系方式授权
@@ -215,21 +217,21 @@ JWT 有效期 7 天（可配置），前端 localStorage 持久化
 ### 1. 活动发布
 
 ```
-创建门店 (POST /api/organizers) 🔐 → 创建活动 (POST /api/events) 必选门店
-→ 设置门票 (POST /api/events/{id}/tickets)
+创建门店 (POST /api/v1/organizers) 🔐 → 创建活动 (POST /api/v1/events) 必选门店
+→ 设置门票 (POST /api/v1/events/{id}/tickets)
 → 活动状态为 published → 对外开放报名
 ```
 
 ### 2. 用户报名
 
 ```
-用户报名 (POST /api/events/{id}/register)
+用户报名 (POST /api/v1/events/{id}/register)
   ├── 必须登录，姓名和联系方式从账户资料读取
   ├── 可选传入 ticket_id 关联门票
   ├── 关联门票时自动扣减库存（原子操作，事务保障）
   ├── 不传 ticket_id → 纯报名，不涉及门票
   ├── 超出容量 / 重复报名 / 门票售罄 → 明确错误提示
-  └── 活动开始前24h可自由取消 (DELETE /api/events/{id}/register)
+  └── 活动开始前24h可自由取消 (DELETE /api/v1/events/{id}/register)
        ├── 取消时自动退还门票库存（事务内原子操作）
        └── 超过截止时间返回 400，无法取消
 ```
@@ -238,15 +240,15 @@ JWT 有效期 7 天（可配置），前端 localStorage 持久化
 
 ```
 报名成功 → 获得发帖/回复权限
-发帖 (POST /api/events/{id}/posts) → 通过 JWT user_id 验证报名
-回复 (POST /api/events/{id}/posts/{postId}/replies) → 同上，不接受 author_contact 回退
+发帖 (POST /api/v1/events/{id}/posts) → 通过 JWT user_id 验证报名
+回复 (POST /api/v1/events/{id}/posts/{postId}/replies) → 同上，不接受 author_contact 回退
 ```
 
 ### 4. 活动管理
 
 ```
-编辑活动 (PUT /api/events/{id}) → 局部更新，支持改标题/时间/状态等
-删除活动 (DELETE /api/events/{id}) → 事务级联清理：
+编辑活动 (PUT /api/v1/events/{id}) → 局部更新，支持改标题/时间/状态等
+删除活动 (DELETE /api/v1/events/{id}) → 事务级联清理：
   回复 → 帖子 → 门票 → 报名 → 活动
 ```
 
@@ -280,6 +282,9 @@ event_go/
 │   │   ├── handler_test.go      # Handler 集成测试
 │   │   ├── handler_identity.go  # 身份迁移报告 API
 │   │   └── middleware.go        # 中间件：日志、CORS、安全响应头、管理员认证
+│   ├── openapi/
+│   │   ├── openapi.go           # 内嵌并提供 OpenAPI v1 文档
+│   │   └── v1.json              # OpenAPI 3.1 机器可读契约
 │   ├── service/
 │   │   ├── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
 │   │   └── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
@@ -363,7 +368,7 @@ main.go
 
 | 选择 | 原因 |
 |------|------|
-| Go 标准库路由 | Go 1.25 `"POST /api/events/{id}/register"`，零外部依赖 |
+| Go 标准库路由 | Go 1.25 路由目录同时注册 `/api/v1` 与兼容 `/api`，零外部依赖 |
 | SQLite（modernc.org/sqlite） | 纯 Go，零 CGO，嵌入式，单文件数据库 |
 | Vue 3 + Element Plus + Vite | 渐进式前端，极速 HMR，TypeScript 支持 |
 | bcrypt + JWT (HS256) | 密码安全哈希 + 用户身份令牌 |
@@ -388,7 +393,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **224** 个顶层 Go 测试 |
+| 测试用例 | **228** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
@@ -418,33 +423,33 @@ cp data/event_go.db data/event_go.db.pre-upgrade.bak
 
 ```bash
 # 用户注册
-curl -s -X POST http://localhost:8080/api/auth/register \
+curl -s -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"张三","contact":"13800001111","password":"123456"}'
 
 # 用户登录
-curl -s -X POST http://localhost:8080/api/auth/login \
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"contact":"13800001111","password":"123456"}'
 
 # 创建门店（管理端）
-curl -s -X POST http://localhost:8080/api/organizers \
+curl -s -X POST http://localhost:8080/api/v1/organizers \
   -H "Content-Type: application/json" \
   -d '{"name":"XX大学","description":"综合大学","address":"大学路1号","tags":"教育,讲座"}'
 
 # 创建活动（归属门店）
-curl -s -X POST http://localhost:8080/api/events \
+curl -s -X POST http://localhost:8080/api/v1/events \
   -H "Content-Type: application/json" \
   -d '{"organizer_id":1,"title":"Go 进阶讲座","event_time":"2026-06-15T14:00:00+08:00","location":"线上","capacity":50,"price":19.9}'
 
 # 报名（已登录用户自动携带 JWT）
-curl -s -X POST http://localhost:8080/api/events/1/register \
+curl -s -X POST http://localhost:8080/api/v1/events/1/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <JWT_TOKEN>" \
   -d '{}'
 
 # 发帖（已登录 + 已报名）
-curl -s -X POST http://localhost:8080/api/events/1/posts \
+curl -s -X POST http://localhost:8080/api/v1/events/1/posts \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <JWT_TOKEN>" \
   -d '{"title":"好活动","content":"推荐"}'

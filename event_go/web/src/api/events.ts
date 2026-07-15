@@ -19,44 +19,44 @@ export interface ListEventsParams {
 }
 
 export function listEvents(params?: ListEventsParams) {
-  return get<Event[]>('/api/events', params)
+  return get<Event[]>('/events', params)
 }
 
 export function getEvent(id: number) {
-  return get<Event>(`/api/events/${id}`)
+  return get<Event>(`/events/${id}`)
 }
 
 export function createEvent(data: CreateEventReq) {
-  return post<Event>('/api/events', data)
+  return post<Event>('/events', data)
 }
 
 export function updateEvent(id: number, data: UpdateEventReq) {
-  return put<Event>(`/api/events/${id}`, data)
+  return put<Event>(`/events/${id}`, data)
 }
 
 export function deleteEvent(id: number) {
-  return del(`/api/events/${id}`)
+  return del(`/events/${id}`)
 }
 
 export function registerEvent(id: number, data: RegisterReq) {
-  return post<Registration>(`/api/events/${id}/register`, data)
+  return post<Registration>(`/events/${id}/register`, data)
 }
 
 export function cancelRegistration(id: number) {
-  return del(`/api/events/${id}/register`)
+  return del(`/events/${id}/register`)
 }
 
 export function listRegistrations(
   id: number,
   params?: { page?: number; page_size?: number }
 ) {
-  return get<Registration[]>(`/api/events/${id}/registrations`, params)
+  return get<Registration[]>(`/events/${id}/registrations`, params)
 }
 
 export function getRegistrationStatus(id: number) {
-  return get<RegistrationStatus>('/api/events/' + id + '/registration')
+  return get<RegistrationStatus>('/events/' + id + '/registration')
 }
 
 export function listMyRegistrations(params?: { page?: number; page_size?: number }) {
-  return get<MyRegistration[]>('/api/me/registrations', params)
+  return get<MyRegistration[]>('/me/registrations', params)
 }

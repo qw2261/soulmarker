@@ -22,21 +22,21 @@ export interface UpdateOrganizerReq {
 }
 
 export function listOrganizers(params?: { page?: number; page_size?: number }) {
-  return get<Organizer[]>('/api/organizers', params)
+  return get<Organizer[]>('/organizers', params)
 }
 
 export function getOrganizer(id: number) {
-  return get<Organizer>(`/api/organizers/${id}`)
+  return get<Organizer>(`/organizers/${id}`)
 }
 
 export function createOrganizer(data: CreateOrganizerReq) {
-  return post<Organizer>('/api/organizers', data)
+  return post<Organizer>('/organizers', data)
 }
 
 export function updateOrganizer(id: number, data: UpdateOrganizerReq) {
-  return put<Organizer>(`/api/organizers/${id}`, data)
+  return put<Organizer>(`/organizers/${id}`, data)
 }
 
 export function deleteOrganizer(id: number) {
-  return del(`/api/organizers/${id}`)
+  return del(`/organizers/${id}`)
 }

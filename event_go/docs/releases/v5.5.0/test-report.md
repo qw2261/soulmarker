@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01–R06 当前已实现范围均已通过本地和远端门禁
+> 状态：In Progress，G3-R01–R06 已远端验证；R07 OpenAPI/API v1 切片本地完整门禁已通过，等待候选提交与远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
-| 已验证基线 Commit | b91b8dbeb84f600950ccd09cba855a581b4e5ae6 |
-| 当前候选 Commit | e0605014a3b076db5920a843f66d145a7d88c998 |
+| 已验证基线 Commit | 95df8c98d16b3dd3fcd1d5967dd18e0deabe1dd2 |
+| 当前候选 Commit | 待提交 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -21,12 +21,13 @@
 | G3-R05 | ARCH-REPO-001 | fakeRegistrationRepository 编译期契约与 service 正常/拒绝/故障测试 |
 | G3-R06 | ARCH-DEPS-001 | TestJWTManagerSignAndVerifyUser、TestGenerateTokenUsesInjectedClockAndSigner、取消截止确定时间测试 |
 | G3-R04 | CT-DTO-001 | TestResponseEnvelopeContract、TestUserAndLoginResponseDoNotExposePassword、TestEntityMappersFixPublicFieldSets、TestPostDetailUsesStableEmptyArray、既有 Handler 契约回归 |
+| G3-R07 | CT-OPENAPI-001 | TestOpenAPIRoutesMatchRouterCatalog、TestOpenAPISchemasMatchDTOJSONFields、TestVersionedAndLegacyRoutesAreEquivalent、TestOpenAPISpecIsServedFromVersionedAPI |
 
 ## 本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 224 |
+| 顶层 Go Test 数量 | 228 |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
@@ -49,4 +50,4 @@
 
 ## Go/No-Go
 
-No-Go：R04 DTO 切片已完成验证；G3 仍有 OpenAPI 和业务错误码工作。
+No-Go：R07 切片仍需候选提交与远端 CI；G3 仍有稳定业务错误码工作。

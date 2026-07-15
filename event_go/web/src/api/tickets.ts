@@ -5,15 +5,15 @@ export function listTickets(
   eventId: number,
   params?: { page?: number; page_size?: number }
 ) {
-  return get<Ticket[]>(`/api/events/${eventId}/tickets`, params)
+  return get<Ticket[]>(`/events/${eventId}/tickets`, params)
 }
 
 export function getTicket(eventId: number, ticketId: number) {
-  return get<Ticket>(`/api/events/${eventId}/tickets/${ticketId}`)
+  return get<Ticket>(`/events/${eventId}/tickets/${ticketId}`)
 }
 
 export function createTicket(eventId: number, data: CreateTicketReq) {
-  return post<Ticket>(`/api/events/${eventId}/tickets`, data)
+  return post<Ticket>(`/events/${eventId}/tickets`, data)
 }
 
 export function updateTicket(
@@ -21,9 +21,9 @@ export function updateTicket(
   ticketId: number,
   data: UpdateTicketReq
 ) {
-  return put<Ticket>(`/api/events/${eventId}/tickets/${ticketId}`, data)
+  return put<Ticket>(`/events/${eventId}/tickets/${ticketId}`, data)
 }
 
 export function deleteTicket(eventId: number, ticketId: number) {
-  return del(`/api/events/${eventId}/tickets/${ticketId}`)
+  return del(`/events/${eventId}/tickets/${ticketId}`)
 }

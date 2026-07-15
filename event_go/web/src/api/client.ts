@@ -3,7 +3,7 @@ import type { APIResp } from './types'
 import { ElMessage } from 'element-plus'
 
 const client = axios.create({
-  baseURL: '/',
+  baseURL: '/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

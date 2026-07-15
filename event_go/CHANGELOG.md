@@ -34,6 +34,7 @@
 - JWT signer/verifier 与业务 Clock 改为显式依赖，取消截止边界和 Token 时间可确定性测试。
 - 讨论写入进入 DiscussionService，活动/帖子归属、报名资格和可信作者身份不再由 Handler 跨实体编排。
 - HTTP 请求、响应 Envelope 与公开资源 DTO 从数据库实体分离，所有 Handler 通过显式映射固定 JSON 字段集合。
+- 新增 `/api/v1` 稳定路由、内嵌 OpenAPI 3.1 文档和双向路由/Schema 契约测试；前端默认切换到 v1。
 
 ### Fixed
 

@@ -1,0 +1,383 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Soulmarker Event API",
+    "version": "1.0.0",
+    "description": "Versioned API contract for authentication, organizers, events, registrations, discussions and tickets. Legacy /api routes remain available for one compatibility cycle."
+  },
+  "servers": [{ "url": "/api/v1" }],
+  "tags": [
+    { "name": "Auth" },
+    { "name": "Me" },
+    { "name": "Admin" },
+    { "name": "Organizers" },
+    { "name": "Events" },
+    { "name": "Registrations" },
+    { "name": "Discussions" },
+    { "name": "Tickets" }
+  ],
+  "paths": {
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenAPISpec",
+        "tags": ["Admin"],
+        "summary": "Download this OpenAPI document",
+        "responses": { "200": { "description": "OpenAPI 3.1 JSON document" } }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "registerUser",
+        "tags": ["Auth"],
+        "summary": "Register a user and issue a JWT",
+        "requestBody": { "$ref": "#/components/requestBodies/RegisterUserRequest" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "loginUser",
+        "tags": ["Auth"],
+        "summary": "Authenticate and issue a JWT",
+        "requestBody": { "$ref": "#/components/requestBodies/LoginRequest" },
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/registrations": {
+      "get": {
+        "operationId": "listMyRegistrations",
+        "tags": ["Me"],
+        "summary": "List registrations owned by the current user",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/admin/identity-migration": {
+      "get": {
+        "operationId": "getIdentityMigrationReport",
+        "tags": ["Admin"],
+        "summary": "Get identity backfill statistics and legacy records",
+        "security": [{ "AdminToken": [] }],
+        "parameters": [{ "name": "legacy_limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 } }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/organizers": {
+      "post": {
+        "operationId": "createOrganizer",
+        "tags": ["Organizers"],
+        "summary": "Create an organizer",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateOrganizerRequest" },
+        "responses": {
+          "201": { "$ref": "#/components/responses/Created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "get": {
+        "operationId": "listOrganizers",
+        "tags": ["Organizers"],
+        "summary": "List organizers",
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" } }
+      }
+    },
+    "/organizers/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizerID" }],
+      "get": {
+        "operationId": "getOrganizer",
+        "tags": ["Organizers"],
+        "summary": "Get an organizer",
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "operationId": "updateOrganizer",
+        "tags": ["Organizers"],
+        "summary": "Update an organizer",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateOrganizerRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "deleteOrganizer",
+        "tags": ["Organizers"],
+        "summary": "Delete an organizer while preserving historical events",
+        "security": [{ "AdminToken": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events": {
+      "post": {
+        "operationId": "createEvent",
+        "tags": ["Events"],
+        "summary": "Create an event",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateEventRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      },
+      "get": {
+        "operationId": "listEvents",
+        "tags": ["Events"],
+        "summary": "List and filter events",
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["draft", "published", "cancelled", "ended"] } },
+          { "name": "price_type", "in": "query", "schema": { "type": "string", "enum": ["free", "paid"] } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "organizer_id", "in": "query", "schema": { "type": "integer", "format": "int64" } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/OK" } }
+      }
+    },
+    "/events/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "getEvent",
+        "tags": ["Events"],
+        "summary": "Get an event",
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "operationId": "updateEvent",
+        "tags": ["Events"],
+        "summary": "Update an event",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateEventRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "deleteEvent",
+        "tags": ["Events"],
+        "summary": "Delete an event and dependent records",
+        "security": [{ "AdminToken": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/register": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "registerForEvent",
+        "tags": ["Registrations"],
+        "summary": "Register the current user for an event",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/RegisterEventRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "delete": {
+        "operationId": "cancelEventRegistration",
+        "tags": ["Registrations"],
+        "summary": "Cancel the current user's registration",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/registration": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "getEventRegistrationStatus",
+        "tags": ["Registrations"],
+        "summary": "Get the current user's registration status",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/registrations": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "listEventRegistrations",
+        "tags": ["Registrations"],
+        "summary": "List event registrations with private contact data",
+        "security": [{ "AdminToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "createPost",
+        "tags": ["Discussions"],
+        "summary": "Create a post as a registered participant",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreatePostRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "get": {
+        "operationId": "listPosts",
+        "tags": ["Discussions"],
+        "summary": "List event posts",
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts/{postId}": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }],
+      "get": {
+        "operationId": "getPost",
+        "tags": ["Discussions"],
+        "summary": "Get a post and replies",
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/replies": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }],
+      "post": {
+        "operationId": "createReply",
+        "tags": ["Discussions"],
+        "summary": "Reply as a registered participant",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateReplyRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/tickets": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "createTicket",
+        "tags": ["Tickets"],
+        "summary": "Create an event ticket",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateTicketRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "get": {
+        "operationId": "listTickets",
+        "tags": ["Tickets"],
+        "summary": "List event tickets",
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/tickets/{ticketId}": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/TicketID" }],
+      "get": {
+        "operationId": "getTicket",
+        "tags": ["Tickets"],
+        "summary": "Get an event ticket",
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "operationId": "updateTicket",
+        "tags": ["Tickets"],
+        "summary": "Update an event ticket",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateTicketRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "deleteTicket",
+        "tags": ["Tickets"],
+        "summary": "Delete a ticket while retaining registration snapshots",
+        "security": [{ "AdminToken": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "AdminToken": { "type": "apiKey", "in": "header", "name": "X-Admin-Token" }
+    },
+    "parameters": {
+      "Page": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+      "PageSize": { "name": "page_size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+      "OrganizerID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "EventID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "PostID": { "name": "postId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "TicketID": { "name": "ticketId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } }
+    },
+    "requestBodies": {
+      "RegisterUserRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterUserRequest" } } } },
+      "LoginRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } } },
+      "CreateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateOrganizerRequest" } } } },
+      "UpdateOrganizerRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateOrganizerRequest" } } } },
+      "CreateEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateEventRequest" } } } },
+      "UpdateEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateEventRequest" } } } },
+      "RegisterEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterEventRequest" } } } },
+      "CreatePostRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePostRequest" } } } },
+      "CreateReplyRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateReplyRequest" } } } },
+      "CreateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } } },
+      "UpdateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTicketRequest" } } } }
+    },
+    "responses": {
+      "OK": { "description": "Successful response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/APIResponse" } } } },
+      "Created": { "description": "Resource created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/APIResponse" } } } },
+      "BadRequest": { "description": "Invalid request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Unauthorized": { "description": "Authentication failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Forbidden": { "description": "Authenticated but not allowed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "NotFound": { "description": "Resource not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Conflict": { "description": "Business state conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+    },
+    "schemas": {
+      "APIResponse": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "integer" },
+          "error_code": { "type": "string" },
+          "message": { "type": "string" },
+          "data": {},
+          "total": { "type": "integer", "minimum": 0 },
+          "page": { "type": "integer", "minimum": 1 },
+          "page_size": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["code", "error_code", "message"],
+        "properties": {
+          "code": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "error_code": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "RegisterUserRequest": { "type": "object", "additionalProperties": false, "required": ["name", "contact", "password"], "properties": { "name": { "type": "string" }, "contact": { "type": "string" }, "password": { "type": "string", "minLength": 6 } } },
+      "LoginRequest": { "type": "object", "additionalProperties": false, "required": ["contact", "password"], "properties": { "contact": { "type": "string" }, "password": { "type": "string" } } },
+      "CreateOrganizerRequest": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
+      "UpdateOrganizerRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" } } },
+      "CreateEventRequest": { "type": "object", "additionalProperties": false, "required": ["organizer_id", "title", "event_time", "location", "capacity", "price"], "properties": { "organizer_id": { "type": "integer", "format": "int64", "minimum": 1 }, "title": { "type": "string" }, "description": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer", "minimum": 1 }, "price": { "type": "number", "minimum": 0 } } },
+      "UpdateEventRequest": { "type": "object", "additionalProperties": false, "properties": { "organizer_id": { "type": "integer", "format": "int64", "minimum": 1 }, "title": { "type": "string" }, "description": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer", "minimum": 1 }, "price": { "type": "number", "minimum": 0 }, "status": { "type": "string", "enum": ["draft", "published", "cancelled", "ended"] } } },
+      "RegisterEventRequest": { "type": "object", "additionalProperties": false, "properties": { "ticket_id": { "type": "integer", "format": "int64", "minimum": 1 } } },
+      "CreatePostRequest": { "type": "object", "additionalProperties": false, "required": ["title", "content"], "properties": { "title": { "type": "string" }, "content": { "type": "string" } } },
+      "CreateReplyRequest": { "type": "object", "additionalProperties": false, "required": ["content"], "properties": { "content": { "type": "string" } } },
+      "CreateTicketRequest": { "type": "object", "additionalProperties": false, "required": ["name", "price", "stock"], "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 1 } } },
+      "UpdateTicketRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 0 } } },
+      "UserResponse": { "type": "object", "required": ["id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "LoginResponse": { "type": "object", "required": ["token", "user"], "properties": { "token": { "type": "string" }, "user": { "$ref": "#/components/schemas/UserResponse" } } },
+      "OrganizerResponse": { "type": "object", "required": ["id", "name", "description", "contact", "logo_url", "address", "website", "tags", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "description": { "type": "string" }, "contact": { "type": "string" }, "logo_url": { "type": "string" }, "address": { "type": "string" }, "website": { "type": "string" }, "tags": { "type": "string" }, "event_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "EventResponse": { "type": "object", "required": ["id", "organizer_id", "title", "description", "event_time", "location", "capacity", "price", "status", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "organizer_id": { "type": "integer", "format": "int64" }, "organizer_name": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "capacity": { "type": "integer" }, "price": { "type": "number" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "TicketResponse": { "type": "object", "required": ["id", "event_id", "name", "price", "stock", "created_at", "updated_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "price": { "type": "number" }, "stock": { "type": "integer" }, "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" } } },
+      "RegistrationResponse": { "type": "object", "required": ["id", "event_id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "identity_status": { "type": "string", "enum": ["verified", "backfilled", "legacy"] }, "created_at": { "type": "string", "format": "date-time" } } },
+      "RegistrationStatusResponse": { "type": "object", "required": ["registered"], "properties": { "registered": { "type": "boolean" } } },
+      "MyRegistrationResponse": { "type": "object", "required": ["id", "event_id", "event_title", "event_time", "location", "event_status", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "PostResponse": { "type": "object", "required": ["id", "event_id", "author_name", "title", "content", "reply_count", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "title": { "type": "string" }, "content": { "type": "string" }, "reply_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" } } },
+      "ReplyResponse": { "type": "object", "required": ["id", "post_id", "author_name", "content", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "content": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "PostDetailResponse": { "type": "object", "required": ["post", "replies"], "properties": { "post": { "$ref": "#/components/schemas/PostResponse" }, "replies": { "type": "array", "items": { "$ref": "#/components/schemas/ReplyResponse" } } } },
+      "IdentityEntityStatsResponse": { "type": "object", "required": ["total", "verified", "backfilled", "legacy"], "properties": { "total": { "type": "integer" }, "verified": { "type": "integer" }, "backfilled": { "type": "integer" }, "legacy": { "type": "integer" } } },
+      "LegacyIdentityRecordResponse": { "type": "object", "required": ["entity_type", "id", "parent_id", "name", "contact"], "properties": { "entity_type": { "type": "string" }, "id": { "type": "integer", "format": "int64" }, "parent_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" } } },
+      "IdentityMigrationReportResponse": { "type": "object", "required": ["registrations", "posts", "replies", "legacy_records"], "properties": { "registrations": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "posts": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "replies": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "legacy_records": { "type": "array", "items": { "$ref": "#/components/schemas/LegacyIdentityRecordResponse" } } } },
+      "HealthResponse": { "type": "object", "required": ["status", "version", "uptime_seconds", "db"], "properties": { "status": { "type": "string" }, "version": { "type": "string" }, "uptime_seconds": { "type": "integer", "format": "int64" }, "db": { "type": "string" } } }
+    }
+  }
+}

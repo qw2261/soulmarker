@@ -13,9 +13,9 @@ export interface LoginReq {
 }
 
 export function registerUser(data: RegisterUserReq) {
-  return post<LoginResp>('/api/auth/register', data)
+  return post<LoginResp>('/auth/register', data)
 }
 
 export function loginUser(data: LoginReq) {
-  return post<LoginResp>('/api/auth/login', data)
+  return post<LoginResp>('/auth/login', data)
 }

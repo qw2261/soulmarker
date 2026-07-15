@@ -14,8 +14,11 @@
 - 报名状态查询通过 RegistrationService，报名 Handler 不再直接组合 Event 与 Registration。
 - 新增 handler/dto，请求、响应 Envelope 和公开资源字段不再由 model 实体隐式决定。
 - DTO 契约测试固定敏感字段排除、分页 Envelope 和空数组行为。
+- 27 个业务操作同时提供 `/api/v1` 和兼容 `/api` 路径，前端默认调用 v1。
+- OpenAPI 3.1 文档内嵌在制品中，通过 `/api/v1/openapi.json` 提供。
+- 路由目录、operationId、requestBody 和 DTO Schema 字段由自动化测试双向校验。
 - 现有 API、Schema v5 和前端行为保持不变。
 
 ## 后续范围
 
-OpenAPI 和业务错误码继续拆分为独立切片，不在本次结构调整中混合实现。
+稳定业务错误码继续作为独立切片，不在本次 API 版本化变更中混合实现。
