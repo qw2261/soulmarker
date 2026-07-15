@@ -30,6 +30,7 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodPost, "/auth/login", "loginUser", "LoginRequest", plain(h.Login)},
 		{http.MethodGet, "/me/registrations", "listMyRegistrations", "", plain(h.ListMyRegistrations)},
 		{http.MethodGet, "/me/admissions", "listMyAdmissions", "", plain(h.ListMyAdmissions)},
+		{http.MethodGet, "/me/activities", "listMyActivities", "", plain(h.ListMyActivities)},
 		{http.MethodGet, "/admin/identity-migration", "getIdentityMigrationReport", "", admin(h.GetIdentityMigrationReport)},
 
 		{http.MethodPost, "/organizers", "createOrganizer", "CreateOrganizerRequest", admin(h.CreateOrganizer)},

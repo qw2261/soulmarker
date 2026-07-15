@@ -103,6 +103,116 @@ func (s *Store) ListMyAdmissions(userID int64, offset, limit int) ([]*model.MyAd
 	return admissions, total, nil
 }
 
+func (s *Store) ListMyActivities(userID int64, offset, limit int) ([]*model.MyActivity, int, error) {
+	var total int
+	if err := s.db.QueryRow(`SELECT
+		(SELECT COUNT(*) FROM admissions WHERE user_id = ?) +
+		(SELECT COUNT(*) FROM registrations r
+		 WHERE r.user_id = ?
+		   AND NOT EXISTS (SELECT 1 FROM admissions a WHERE a.registration_id = r.id))`,
+		userID, userID,
+	).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("查询用户活动总数失败: %w", err)
+	}
+
+	query := `SELECT kind, source_id, registration_id, event_id, event_title, event_time,
+		location, event_status, ticket_id, ticket_name, joined_at, admission_id,
+		credential_code, admission_status, issued_at, revoked_at, checked_in_at
+		FROM (
+			SELECT 'admission' AS kind, a.id AS source_id, a.registration_id,
+				a.event_id, e.title AS event_title, e.event_time, e.location,
+				e.status AS event_status, r.ticket_id, a.ticket_name, a.issued_at AS joined_at,
+				a.id AS admission_id, a.credential_code, a.status AS admission_status,
+				a.issued_at, a.revoked_at, c.checked_in_at
+			FROM admissions a
+			JOIN events e ON e.id = a.event_id
+			LEFT JOIN registrations r ON r.id = a.registration_id
+			LEFT JOIN checkins c ON c.admission_id = a.id
+			WHERE a.user_id = ?
+			UNION ALL
+			SELECT 'registration' AS kind, r.id AS source_id, r.id AS registration_id,
+				r.event_id, e.title AS event_title, e.event_time, e.location,
+				e.status AS event_status, r.ticket_id, r.ticket_name, r.created_at AS joined_at,
+				NULL AS admission_id, NULL AS credential_code, NULL AS admission_status,
+				NULL AS issued_at, NULL AS revoked_at, NULL AS checked_in_at
+			FROM registrations r
+			JOIN events e ON e.id = r.event_id
+			WHERE r.user_id = ?
+			  AND NOT EXISTS (SELECT 1 FROM admissions a WHERE a.registration_id = r.id)
+		)
+		ORDER BY datetime(event_time) DESC, datetime(joined_at) DESC, kind ASC, source_id DESC`
+	args := []interface{}{userID, userID}
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("查询用户活动列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	activities := make([]*model.MyActivity, 0)
+	for rows.Next() {
+		activity := &model.MyActivity{}
+		var registrationID, ticketID, admissionID sql.NullInt64
+		var joinedAt string
+		var credentialCode, admissionStatus, issuedAt, revokedAt, checkedInAt sql.NullString
+		if err := rows.Scan(
+			&activity.Kind, &activity.ID, &registrationID, &activity.EventID,
+			&activity.EventTitle, &activity.EventTime, &activity.Location, &activity.EventStatus,
+			&ticketID, &activity.TicketName, &joinedAt, &admissionID, &credentialCode,
+			&admissionStatus, &issuedAt, &revokedAt, &checkedInAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("读取用户活动记录失败: %w", err)
+		}
+		if registrationID.Valid {
+			value := registrationID.Int64
+			activity.RegistrationID = &value
+		}
+		if ticketID.Valid {
+			value := ticketID.Int64
+			activity.TicketID = &value
+		}
+		activity.JoinedAt, err = time.Parse(model.TimeFormat, joinedAt)
+		if err != nil {
+			return nil, 0, fmt.Errorf("解析用户参与时间失败: %w", err)
+		}
+		if admissionID.Valid {
+			admission := &model.Admission{
+				ID: admissionID.Int64, RegistrationID: activity.RegistrationID,
+				EventID: activity.EventID, UserID: userID, TicketName: activity.TicketName,
+				CredentialCode: credentialCode.String, Status: admissionStatus.String,
+			}
+			admission.IssuedAt, err = time.Parse(model.TimeFormat, issuedAt.String)
+			if err != nil {
+				return nil, 0, fmt.Errorf("解析活动凭证签发时间失败: %w", err)
+			}
+			if revokedAt.Valid {
+				value, err := time.Parse(model.TimeFormat, revokedAt.String)
+				if err != nil {
+					return nil, 0, fmt.Errorf("解析活动凭证吊销时间失败: %w", err)
+				}
+				admission.RevokedAt = &value
+			}
+			if checkedInAt.Valid {
+				value, err := time.Parse(model.TimeFormat, checkedInAt.String)
+				if err != nil {
+					return nil, 0, fmt.Errorf("解析活动凭证核销时间失败: %w", err)
+				}
+				admission.CheckedInAt = &value
+			}
+			activity.Admission = admission
+		}
+		activities = append(activities, activity)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("遍历用户活动记录失败: %w", err)
+	}
+	return activities, total, nil
+}
+
 func (s *Store) CheckIn(eventID int64, credentialCode, actor string, checkedInAt time.Time) (*model.Checkin, bool, error) {
 	s.checkinMu.Lock()
 	defer s.checkinMu.Unlock()

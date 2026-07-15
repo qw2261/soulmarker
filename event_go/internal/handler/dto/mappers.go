@@ -105,6 +105,28 @@ func MyAdmissions(admissions []*model.MyAdmission) []MyAdmissionResponse {
 	return result
 }
 
+func MyActivity(activity *model.MyActivity) MyActivityResponse {
+	response := MyActivityResponse{
+		ID: activity.ID, Kind: activity.Kind, RegistrationID: activity.RegistrationID,
+		EventID: activity.EventID, EventTitle: activity.EventTitle, EventTime: activity.EventTime,
+		Location: activity.Location, EventStatus: activity.EventStatus, TicketID: activity.TicketID,
+		TicketName: activity.TicketName, JoinedAt: activity.JoinedAt,
+	}
+	if activity.Admission != nil {
+		admission := Admission(activity.Admission)
+		response.Admission = &admission
+	}
+	return response
+}
+
+func MyActivities(activities []*model.MyActivity) []MyActivityResponse {
+	result := make([]MyActivityResponse, 0, len(activities))
+	for _, activity := range activities {
+		result = append(result, MyActivity(activity))
+	}
+	return result
+}
+
 func Checkin(checkin *model.Checkin) CheckinResponse {
 	return CheckinResponse{
 		ID: checkin.ID, AdmissionID: checkin.AdmissionID, EventID: checkin.EventID,

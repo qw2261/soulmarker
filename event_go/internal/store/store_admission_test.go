@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -188,5 +189,107 @@ func TestAdmissionMigrationCreatesForeignKeysAndTriggers(t *testing.T) {
 	var triggerCount int
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'checkins_immutable_%'`).Scan(&triggerCount); err != nil || triggerCount != 2 {
 		t.Fatalf("immutable triggers missing: count=%d err=%v", triggerCount, err)
+	}
+}
+
+func TestListMyActivitiesUsesExactStablePagination(t *testing.T) {
+	store, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	organizer := &model.Organizer{Name: "活动时间线门店"}
+	if err := store.CreateOrganizer(organizer); err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "时间线用户", Contact: "timeline@example.com", PasswordHash: "hash"}
+	if err := store.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+
+	base := time.Date(2031, 1, 1, 12, 0, 0, 0, time.UTC)
+	const activityCount = 23
+	for i := 0; i < activityCount; i++ {
+		price := 20.0
+		if i%2 == 0 {
+			price = 0
+		}
+		event := &model.Event{
+			OrganizerID: organizer.ID, Title: fmt.Sprintf("活动 %02d", i),
+			EventTime: base.Add(time.Duration(i) * 24 * time.Hour).Format(model.TimeFormat),
+			Location:  "测试场地", Capacity: 2, Price: price,
+		}
+		if err := store.CreateEvent(event); err != nil {
+			t.Fatal(err)
+		}
+		registration := &model.Registration{
+			EventID: event.ID, UserID: &user.ID, Name: user.Name, Contact: user.Contact,
+			Admission: &model.Admission{CredentialCode: fmt.Sprintf("%032x", i+1)},
+		}
+		if err := store.Register(registration); err != nil {
+			t.Fatal(err)
+		}
+		if i == 2 {
+			if err := store.CancelRegistrationByUserID(event.ID, user.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	seen := make(map[string]bool, activityCount)
+	var previousEventTime time.Time
+	for page := 0; page < 3; page++ {
+		activities, total, err := store.ListMyActivities(user.ID, page*10, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total != activityCount {
+			t.Fatalf("page %d: expected exact total %d, got %d", page+1, activityCount, total)
+		}
+		wantPageSize := 10
+		if page == 2 {
+			wantPageSize = 3
+		}
+		if len(activities) != wantPageSize {
+			t.Fatalf("page %d: expected %d records, got %d", page+1, wantPageSize, len(activities))
+		}
+		for _, activity := range activities {
+			key := fmt.Sprintf("%s:%d", activity.Kind, activity.ID)
+			if seen[key] {
+				t.Fatalf("activity repeated across pages: %s", key)
+			}
+			seen[key] = true
+			eventTime, err := time.Parse(model.TimeFormat, activity.EventTime)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !previousEventTime.IsZero() && eventTime.After(previousEventTime) {
+				t.Fatalf("unstable event ordering: %s after %s", eventTime, previousEventTime)
+			}
+			previousEventTime = eventTime
+			if activity.Kind == model.ActivityKindAdmission && activity.Admission == nil {
+				t.Fatalf("admission activity lost credential: %+v", activity)
+			}
+			if activity.Kind == model.ActivityKindRegistration && activity.Admission != nil {
+				t.Fatalf("paid registration received admission: %+v", activity)
+			}
+		}
+	}
+	if len(seen) != activityCount {
+		t.Fatalf("expected %d unique activities, got %d", activityCount, len(seen))
+	}
+
+	activities, _, err := store.ListMyActivities(user.ID, 0, activityCount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundRevoked := false
+	for _, activity := range activities {
+		if activity.EventTitle == "活动 02" {
+			foundRevoked = activity.RegistrationID == nil && activity.Admission != nil && activity.Admission.Status == model.AdmissionStatusRevoked
+		}
+	}
+	if !foundRevoked {
+		t.Fatal("cancelled admission history was not preserved in unified activities")
 	}
 }

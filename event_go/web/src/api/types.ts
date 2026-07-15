@@ -67,6 +67,21 @@ export interface MyAdmission extends Admission {
   event_status: string
 }
 
+export interface MyActivity {
+  id: number
+  kind: 'admission' | 'registration'
+  registration_id?: number
+  event_id: number
+  event_title: string
+  event_time: string
+  location: string
+  event_status: string
+  ticket_id?: number
+  ticket_name?: string
+  joined_at: string
+  admission?: Admission
+}
+
 export interface Checkin {
   id: number
   admission_id: number

@@ -17,6 +17,7 @@ type fakeAdmissionRepository struct {
 	err        error
 	admission  *model.MyAdmission
 	admissions []*model.MyAdmission
+	activities []*model.MyActivity
 	checkins   []*model.Checkin
 	total      int
 }
@@ -27,6 +28,10 @@ func (r *fakeAdmissionRepository) GetAdmissionByUser(int64, int64) (*model.MyAdm
 
 func (r *fakeAdmissionRepository) ListMyAdmissions(int64, int, int) ([]*model.MyAdmission, int, error) {
 	return r.admissions, r.total, r.err
+}
+
+func (r *fakeAdmissionRepository) ListMyActivities(int64, int, int) ([]*model.MyActivity, int, error) {
+	return r.activities, r.total, r.err
 }
 
 func (r *fakeAdmissionRepository) CheckIn(_ int64, credentialCode, actor string, checkedInAt time.Time) (*model.Checkin, bool, error) {
@@ -64,5 +69,15 @@ func TestAdmissionServiceRejectsMalformedCredential(t *testing.T) {
 	}
 	if repository.credential != "" {
 		t.Fatal("malformed credential reached repository")
+	}
+}
+
+func TestAdmissionServiceListsUnifiedActivities(t *testing.T) {
+	want := []*model.MyActivity{{ID: 9, Kind: model.ActivityKindAdmission}}
+	repository := &fakeAdmissionRepository{activities: want, total: 17}
+	service := NewAdmissionService(repository, fixedClock{})
+	got, total, err := service.ListActivitiesForUser(3, 10, 10)
+	if err != nil || total != 17 || len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("unexpected activity projection: activities=%+v total=%d err=%v", got, total, err)
 	}
 }

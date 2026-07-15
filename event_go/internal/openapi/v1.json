@@ -84,6 +84,22 @@
         }
       }
     },
+    "/me/activities": {
+      "get": {
+        "operationId": "listMyActivities",
+        "tags": ["Me", "Admissions"],
+        "summary": "List a stable unified timeline of registrations and admissions",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
     "/admin/identity-migration": {
       "get": {
         "operationId": "getIdentityMigrationReport",
@@ -437,6 +453,7 @@
       "RegistrationResponse": { "type": "object", "required": ["id", "event_id", "name", "contact", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "identity_status": { "type": "string", "enum": ["verified", "backfilled", "legacy"] }, "created_at": { "type": "string", "format": "date-time" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },
       "AdmissionResponse": { "type": "object", "required": ["id", "event_id", "credential_code", "credential", "status", "issued_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "credential_code": { "type": "string", "pattern": "^[0-9a-f]{32}$" }, "credential": { "type": "string" }, "status": { "type": "string", "enum": ["active", "revoked"] }, "issued_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": "string", "format": "date-time" }, "checked_in_at": { "type": "string", "format": "date-time" } } },
       "MyAdmissionResponse": { "type": "object", "required": ["id", "event_id", "credential_code", "credential", "status", "issued_at", "event_title", "event_time", "location", "event_status"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "credential_code": { "type": "string", "pattern": "^[0-9a-f]{32}$" }, "credential": { "type": "string" }, "status": { "type": "string", "enum": ["active", "revoked"] }, "issued_at": { "type": "string", "format": "date-time" }, "revoked_at": { "type": "string", "format": "date-time" }, "checked_in_at": { "type": "string", "format": "date-time" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" } } },
+      "MyActivityResponse": { "type": "object", "required": ["id", "kind", "event_id", "event_title", "event_time", "location", "event_status", "joined_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "kind": { "type": "string", "enum": ["admission", "registration"] }, "registration_id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "joined_at": { "type": "string", "format": "date-time" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },
       "CheckinResponse": { "type": "object", "required": ["id", "admission_id", "event_id", "checked_in_at", "checked_in_by"], "properties": { "id": { "type": "integer", "format": "int64" }, "admission_id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "credential_code": { "type": "string" }, "user_name": { "type": "string" }, "user_contact": { "type": "string" }, "checked_in_at": { "type": "string", "format": "date-time" }, "checked_in_by": { "type": "string" } } },
       "CheckinResultResponse": { "type": "object", "required": ["checkin", "already_checked_in"], "properties": { "checkin": { "$ref": "#/components/schemas/CheckinResponse" }, "already_checked_in": { "type": "boolean" } } },
       "RegistrationStatusResponse": { "type": "object", "required": ["registered"], "properties": { "registered": { "type": "boolean" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },

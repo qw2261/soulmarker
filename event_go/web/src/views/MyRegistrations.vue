@@ -8,32 +8,23 @@
           <span>{{ total }} 项</span>
         </div>
         <el-skeleton v-if="loading" :rows="6" animated />
-        <el-empty v-else-if="admissions.length === 0 && otherRegistrations.length === 0" description="暂无活动" />
+        <el-empty v-else-if="activities.length === 0" description="暂无活动" />
         <template v-else>
-          <section v-for="admission in admissions" :key="`admission-${admission.id}`" class="activity-item">
-            <button class="activity-header" type="button" @click="$router.push(`/events/${admission.event_id}`)">
-              <span>
-                <strong>{{ admission.event_title }}</strong>
-                <small>{{ formatDateTime(admission.event_time) }} · {{ admission.location }}</small>
-              </span>
-              <el-tag :type="activityStatus(admission).type">{{ activityStatus(admission).label }}</el-tag>
-            </button>
-            <AdmissionCredential :admission="admission" />
-          </section>
-
           <section
-            v-for="registration in otherRegistrations"
-            :key="`registration-${registration.id}`"
-            class="activity-item compact"
+            v-for="activity in activities"
+            :key="`${activity.kind}-${activity.id}`"
+            class="activity-item"
+            :class="{ compact: !activity.admission }"
           >
-            <button class="activity-header" type="button" @click="$router.push(`/events/${registration.event_id}`)">
+            <button class="activity-header" type="button" @click="$router.push(`/events/${activity.event_id}`)">
               <span>
-                <strong>{{ registration.event_title }}</strong>
-                <small>{{ formatDateTime(registration.event_time) }} · {{ registration.location }}</small>
+                <strong>{{ activity.event_title }}</strong>
+                <small>{{ formatDateTime(activity.event_time) }} · {{ activity.location }}</small>
               </span>
-              <el-tag>{{ eventStatusLabel(registration) }}</el-tag>
+              <el-tag :type="activityStatus(activity).type">{{ activityStatus(activity).label }}</el-tag>
             </button>
-            <p v-if="registration.ticket_name" class="ticket-line">门票：{{ registration.ticket_name }}</p>
+            <AdmissionCredential v-if="activity.admission" :admission="activity.admission" />
+            <p v-else-if="activity.ticket_name" class="ticket-line">门票：{{ activity.ticket_name }}</p>
           </section>
         </template>
         <Pagination
@@ -49,55 +40,39 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { listMyAdmissions, listMyRegistrations } from '@/api/events'
-import type { MyAdmission, MyRegistration } from '@/api/types'
+import { onMounted, ref } from 'vue'
+import { listMyActivities } from '@/api/events'
+import type { MyActivity } from '@/api/types'
 import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
 import Pagination from '@/components/Pagination.vue'
 import AdmissionCredential from '@/components/AdmissionCredential.vue'
 
-const admissions = ref<MyAdmission[]>([])
-const registrations = ref<MyRegistration[]>([])
+const activities = ref<MyActivity[]>([])
 const loading = ref(true)
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 
-const admissionEventIDs = computed(() => new Set(admissions.value.map((item) => item.event_id)))
-const otherRegistrations = computed(() =>
-  registrations.value.filter((item) => !admissionEventIDs.value.has(item.event_id))
-)
-
 async function fetchActivities() {
   loading.value = true
   try {
-    const [admissionResponse, registrationResponse] = await Promise.all([
-      listMyAdmissions({ page: page.value, page_size: pageSize.value }),
-      listMyRegistrations({ page: page.value, page_size: pageSize.value }),
-    ])
-    admissions.value = admissionResponse.data || []
-    registrations.value = registrationResponse.data || []
-    total.value = Math.max(admissionResponse.total || 0, registrationResponse.total || 0)
+    const response = await listMyActivities({ page: page.value, page_size: pageSize.value })
+    activities.value = response.data || []
+    total.value = response.total || 0
   } finally {
     loading.value = false
   }
 }
 
-function activityStatus(admission: MyAdmission): { label: string; type: 'success' | 'warning' | 'danger' | 'info' | 'primary' } {
-  if (admission.status === 'revoked') return { label: '已取消', type: 'danger' }
-  if (admission.checked_in_at) return { label: '已入场', type: 'success' }
-  if (admission.event_status === 'cancelled') return { label: '活动已取消', type: 'danger' }
-  if (admission.event_status === 'ended' || new Date(admission.event_time).getTime() < Date.now()) {
+function activityStatus(activity: MyActivity): { label: string; type: 'success' | 'warning' | 'danger' | 'info' | 'primary' } {
+  if (activity.admission?.status === 'revoked') return { label: '已取消', type: 'danger' }
+  if (activity.admission?.checked_in_at) return { label: '已入场', type: 'success' }
+  if (activity.event_status === 'cancelled') return { label: '活动已取消', type: 'danger' }
+  if (activity.event_status === 'ended' || new Date(activity.event_time).getTime() < Date.now()) {
     return { label: '已结束', type: 'info' }
   }
   return { label: '待参加', type: 'primary' }
-}
-
-function eventStatusLabel(registration: MyRegistration) {
-  if (registration.event_status === 'cancelled') return '活动已取消'
-  if (registration.event_status === 'ended' || new Date(registration.event_time).getTime() < Date.now()) return '已结束'
-  return '待参加'
 }
 
 function onPageChange(value: number) {

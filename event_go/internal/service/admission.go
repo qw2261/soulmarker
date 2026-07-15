@@ -14,6 +14,7 @@ const AdmissionCredentialPrefix = model.AdmissionCredentialPrefix
 type AdmissionRepository interface {
 	GetAdmissionByUser(eventID, userID int64) (*model.MyAdmission, error)
 	ListMyAdmissions(userID int64, offset, limit int) ([]*model.MyAdmission, int, error)
+	ListMyActivities(userID int64, offset, limit int) ([]*model.MyActivity, int, error)
 	CheckIn(eventID int64, credentialCode, actor string, checkedInAt time.Time) (*model.Checkin, bool, error)
 	ListCheckins(eventID int64, offset, limit int) ([]*model.Checkin, int, error)
 }
@@ -33,6 +34,10 @@ func (s *AdmissionService) GetForUser(eventID, userID int64) (*model.MyAdmission
 
 func (s *AdmissionService) ListForUser(userID int64, offset, limit int) ([]*model.MyAdmission, int, error) {
 	return s.repository.ListMyAdmissions(userID, offset, limit)
+}
+
+func (s *AdmissionService) ListActivitiesForUser(userID int64, offset, limit int) ([]*model.MyActivity, int, error) {
+	return s.repository.ListMyActivities(userID, offset, limit)
 }
 
 func normalizeCredential(value string) (string, bool) {

@@ -19,6 +19,7 @@
 - Schema v6 Admission/Checkin 模型、用户凭证 API、幂等核销 API 和运营审计列表。
 - 用户活动详情与“我的活动”二维码凭证，运营报名页核销工作台。
 - Vitest 组件测试、Playwright 桌面/移动核心旅程和 CI 浏览器证据。
+- `/me/activities` 统一参与时间线 API，合并 Admission 历史与没有 Admission 的 Registration。
 
 ### Changed
 
@@ -41,11 +42,13 @@
 - OpenAPI 固定 `ErrorResponse.error_code` 枚举，并与 Go 错误目录自动双向校验；未知错误码安全降级为通用内部错误。
 - 免费报名与 Admission 在同一事务内创建；取消会吊销凭证，已核销报名不可取消。
 - 移动导航改为抽屉，“我的报名”升级为显示参与状态与凭证的“我的活动”。
+- 前端从全量安装 Element Plus 改为显式注册实际使用组件，主 JS 降至约 479 KB。
 
 ### Fixed
 
 - 修复帖子详情页错误解析后端响应的问题。
 - 修复活动报名人数超过 100 时前端无法判断当前用户报名状态的问题。
+- 修复“我的活动”双路分页导致混合历史总数偏小、跨页重复和排序不一致的问题。
 
 ### Security
 

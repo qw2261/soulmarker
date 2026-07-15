@@ -2788,6 +2788,18 @@ func TestAdmissionAndCheckinHTTPJourney(t *testing.T) {
 		t.Fatalf("unexpected admission list: status=%d payload=%+v", listResponse.StatusCode, listPayload)
 	}
 
+	activityResponse := doUserJSON(t, http.MethodGet, server.URL+"/api/v1/me/activities", "", 0, "凭证用户", "admission-http@example.com")
+	var activityPayload model.APIResp
+	if err := json.NewDecoder(activityResponse.Body).Decode(&activityPayload); err != nil {
+		t.Fatal(err)
+	}
+	activityResponse.Body.Close()
+	activities := activityPayload.Data.([]interface{})
+	activity := activities[0].(map[string]interface{})
+	if activityResponse.StatusCode != http.StatusOK || activityPayload.Total == nil || *activityPayload.Total != 1 || activity["kind"] != model.ActivityKindAdmission || activity["admission"] == nil {
+		t.Fatalf("unexpected unified activity list: status=%d payload=%+v", activityResponse.StatusCode, activityPayload)
+	}
+
 	checkinBody := `{"credential":"` + credential + `"}`
 	first, err := http.Post(server.URL+"/api/events/"+itoa64(eventID)+"/checkins", "application/json", strings.NewReader(checkinBody))
 	if err != nil {

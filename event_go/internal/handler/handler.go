@@ -52,6 +52,7 @@ type DiscussionService interface {
 type AdmissionService interface {
 	GetForUser(eventID, userID int64) (*model.MyAdmission, error)
 	ListForUser(userID int64, offset, limit int) ([]*model.MyAdmission, int, error)
+	ListActivitiesForUser(userID int64, offset, limit int) ([]*model.MyActivity, int, error)
 	CheckIn(eventID int64, credential, actor string) (*model.Checkin, bool, error)
 	ListCheckins(eventID int64, offset, limit int) ([]*model.Checkin, int, error)
 }

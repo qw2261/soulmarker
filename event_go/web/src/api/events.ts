@@ -8,6 +8,7 @@ import type {
   MyRegistration,
   RegisterReq,
   MyAdmission,
+  MyActivity,
   Checkin,
   CheckinResult,
 } from './types'
@@ -66,6 +67,10 @@ export function listMyRegistrations(params?: { page?: number; page_size?: number
 
 export function listMyAdmissions(params?: { page?: number; page_size?: number }) {
   return get<MyAdmission[]>('/me/admissions', params)
+}
+
+export function listMyActivities(params?: { page?: number; page_size?: number }) {
+  return get<MyActivity[]>('/me/activities', params)
 }
 
 export function getMyAdmission(eventId: number) {

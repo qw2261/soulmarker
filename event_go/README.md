@@ -145,7 +145,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 31 个业务操作进入 `/api/v1`；Admission/Checkin 纵向切片已完成本地桌面和移动验收，G4 其余范围继续推进。
+**v6.0 免费活动可用版迭代中** — 32 个业务操作进入 `/api/v1`；Admission/Checkin 与统一“我的活动”时间线已完成本地桌面和移动验收，G4 其余范围继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -154,6 +154,7 @@ POST   /api/v1/auth/register                            用户注册
 POST   /api/v1/auth/login                               用户登录（返回 JWT）
 GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
+GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
 GET    /api/v1/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
 POST   /api/v1/organizers                               创建门店 🔐
 GET    /api/v1/organizers[?page=&page_size=]            门店列表（分页，含活动数）
@@ -421,15 +422,17 @@ main.go
 | 并发报名 | Store 内串行化关键写事务；容量、库存与取消均有并发回归测试 |
 | 重复核销 | Admission 唯一约束 + 串行化事务；重复/并发扫描返回原 Checkin |
 | 核销审计不可变 | SQLite 触发器拒绝 Checkin 的 UPDATE 与 DELETE |
+| 用户活动分页 | 单一 SQL 投影合并 Admission 与无凭证 Registration，统一排序、去重和精确计数 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **248** 个顶层 Go 测试、2 个 Vue Component 测试、2 个浏览器项目 |
+| 测试用例 | **250** 个顶层 Go 测试、3 个 Vue Component 测试、2 个浏览器项目 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
+| 前端构建 | Element Plus 按实际组件注册；主 JS 约 479 KB / 167 KB gzip，无 chunk size 告警 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |
 
 **测试命令**：
@@ -532,7 +535,7 @@ event_go/
 | `/organizers/:id` | 门店详情 | 门店信息 + 旗下活动列表（分页） |
 | `/login` | 用户登录 | contact + password |
 | `/register` | 用户注册 | name + contact + password（≥6 位） |
-| `/me/registrations` | 我的活动 | 待参加、已结束、已取消、已入场状态和 Admission 二维码；兼容其他报名 |
+| `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
 | `/admin` | 管理登录 | Token 认证（X-Admin-Token） |
 | `/admin/events` | 活动管理 | 列表 + 删除 |
 | `/admin/events/new` | 创建活动 | 表单（先选门店） |

@@ -12,6 +12,8 @@
 - 运营报名页支持扫码枪/粘贴凭证核销和审计列表。
 - 建立 Vitest 组件门禁与 Playwright 桌面/移动核心旅程，CI 保存浏览器证据。
 - 移动导航改为抽屉，用户凭证页与运营核销工具无页面级横向溢出。
+- 新增 `/me/activities` 统一只读投影，在服务端精确合并、排序和分页 Admission 历史与其他 Registration。
+- Element Plus 改为显式注册实际组件，主 JS 从约 1.03 MB 降至约 479 KB，消除 Vite chunk size 告警。
 
 ## 未完成范围
 

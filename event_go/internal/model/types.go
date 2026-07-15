@@ -115,6 +115,26 @@ type MyAdmission struct {
 	EventStatus string
 }
 
+const (
+	ActivityKindAdmission    = "admission"
+	ActivityKindRegistration = "registration"
+)
+
+type MyActivity struct {
+	ID             int64
+	Kind           string
+	RegistrationID *int64
+	EventID        int64
+	EventTitle     string
+	EventTime      string
+	Location       string
+	EventStatus    string
+	TicketID       *int64
+	TicketName     string
+	JoinedAt       time.Time
+	Admission      *Admission
+}
+
 type Checkin struct {
 	ID             int64
 	AdmissionID    int64

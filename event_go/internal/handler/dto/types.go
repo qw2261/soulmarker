@@ -168,6 +168,21 @@ type MyAdmissionResponse struct {
 	EventStatus string `json:"event_status"`
 }
 
+type MyActivityResponse struct {
+	ID             int64              `json:"id"`
+	Kind           string             `json:"kind"`
+	RegistrationID *int64             `json:"registration_id,omitempty"`
+	EventID        int64              `json:"event_id"`
+	EventTitle     string             `json:"event_title"`
+	EventTime      string             `json:"event_time"`
+	Location       string             `json:"location"`
+	EventStatus    string             `json:"event_status"`
+	TicketID       *int64             `json:"ticket_id,omitempty"`
+	TicketName     string             `json:"ticket_name,omitempty"`
+	JoinedAt       time.Time          `json:"joined_at"`
+	Admission      *AdmissionResponse `json:"admission,omitempty"`
+}
+
 type CheckinRequest struct {
 	Credential string `json:"credential"`
 }

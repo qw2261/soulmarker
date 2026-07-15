@@ -46,6 +46,20 @@ func (h *Handler) ListMyAdmissions(w http.ResponseWriter, r *http.Request) {
 	paginatedOK(w, dto.MyAdmissions(admissions), total, page, pageSize)
 }
 
+func (h *Handler) ListMyActivities(w http.ResponseWriter, r *http.Request) {
+	user, authenticated := h.requireUser(w, r)
+	if !authenticated {
+		return
+	}
+	page, pageSize := parsePagination(r)
+	activities, total, err := h.admissions.ListActivitiesForUser(user.ID, (page-1)*pageSize, pageSize)
+	if err != nil {
+		writeInternalError(w, "list_my_activities", err)
+		return
+	}
+	paginatedOK(w, dto.MyActivities(activities), total, page, pageSize)
+}
+
 func (h *Handler) CheckIn(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
