@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R09 内容治理已通过本地候选门禁，等待远端 CI 证据
+> 状态：In Progress，G4-R09 内容治理已通过本地与远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 工作树候选，待功能提交 |
+| 当前候选 Commit | 270d64de28b223ca937d3536c17ec6738babbfd8 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v9，新增帖子/回复治理元数据、举报与动作审计；保留 v8 活动封面、v7 认证与 v6 admissions/checkins |
 
@@ -65,7 +65,10 @@
 | [GitHub Actions Run 29394150565](https://github.com/qw2261/soulmarker/actions/runs/29394150565) | Commit 72dca57，响应式用户旅程与反馈闭环候选 success |
 | [backend job 87283755655](https://github.com/qw2261/soulmarker/actions/runs/29394150565/job/87283755655) | format、vet、265 tests、race、Schema v8 与 OpenAPI 契约 success |
 | [frontend job 87283755644](https://github.com/qw2261/soulmarker/actions/runs/29394150565/job/87283755644) | Node 22 build、10 unit/component tests、4 desktop/mobile Playwright cases success；6 张成功截图证据已上传 |
+| [GitHub Actions Run 29424593002](https://github.com/qw2261/soulmarker/actions/runs/29424593002) | Commit 270d64d，内容治理闭环候选 success |
+| [backend job 87383598780](https://github.com/qw2261/soulmarker/actions/runs/29424593002/job/87383598780) | format、vet、271 tests、race、Schema v9、DTO/错误码/OpenAPI/路由契约 success |
+| [frontend job 87383598785](https://github.com/qw2261/soulmarker/actions/runs/29424593002/job/87383598785) | Node 22 build、10 unit/component tests、4 desktop/mobile Playwright cases success；8 张成功截图证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R06、R07、R08 已通过本地和远端候选门禁；R09 已通过本地候选门禁，仍需绑定远端 Commit/Run 后关闭。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。
+No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。
