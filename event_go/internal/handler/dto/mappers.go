@@ -22,6 +22,22 @@ func User(user *model.User) UserResponse {
 	}
 }
 
+func Notification(notification *model.Notification) NotificationResponse {
+	return NotificationResponse{
+		ID: notification.ID, EventID: notification.EventID, Type: notification.Type,
+		Title: notification.Title, Body: notification.Body, ActionURL: notification.ActionURL,
+		ReadAt: notification.ReadAt, CreatedAt: notification.CreatedAt,
+	}
+}
+
+func Notifications(notifications []*model.Notification) []NotificationResponse {
+	result := make([]NotificationResponse, 0, len(notifications))
+	for _, notification := range notifications {
+		result = append(result, Notification(notification))
+	}
+	return result
+}
+
 func Organizer(organizer *model.Organizer) OrganizerResponse {
 	return OrganizerResponse{
 		ID: organizer.ID, Name: organizer.Name, Description: organizer.Description,

@@ -148,6 +148,20 @@ test('operator and attendee can complete the free event workflow', async ({ page
   await page.getByRole('button', { name: '确定' }).click()
   await expect(page.getByRole('button', { name: '立即报名' })).toBeVisible()
 
+  await page.goto('/me/notifications')
+  await expect(page.getByRole('heading', { name: '通知中心' })).toBeVisible()
+  await expect(page.getByText('报名成功', { exact: true })).toBeVisible()
+  await expect(page.getByText('报名已取消', { exact: true })).toBeVisible()
+  await expect(page.getByText(`你已成功报名活动“${eventTitle}”`, { exact: false })).toBeVisible()
+  await expect(page.getByText(`你已取消活动“${eventTitle}”的报名`, { exact: false })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.getByRole('button', { name: '全部标为已读' }).click()
+  await expect(page.getByRole('button', { name: /标记“/ })).toHaveCount(0)
+  await testInfo.attach('attendee-notification-center', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  })
+
   await page.goto('/me/registrations')
   await expect(page.getByText(eventTitle, { exact: true })).toBeVisible()
   await expect(page.getByText('已取消', { exact: true }).first()).toBeVisible()

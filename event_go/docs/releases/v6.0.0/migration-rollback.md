@@ -2,7 +2,7 @@
 
 ## 前向迁移
 
-Schema v6、v7、v8、v9 与 v10 都是 Expand 迁移，仅新增：
+Schema v6、v7、v8、v9、v10 与 v11 都是 Expand 迁移，仅新增：
 
 - `admissions`：Registration 之外的入场权益、随机凭证、active/revoked 状态和票种快照。
 - `checkins`：每个 Admission 最多一条成功核销事件。
@@ -17,6 +17,8 @@ Schema v6、v7、v8、v9 与 v10 都是 Expand 迁移，仅新增：
 - `content_moderation_actions`：移除、恢复和驳回的独立动作审计，不依赖目标当前是否公开可见。
 - `users.recovery_email` / `recovery_email_verified_at`：独立于登录 contact 的恢复身份；仅规范化后唯一的历史合法邮箱 contact 作为兼容基线回填，phone-only 和大小写碰撞账户保持空值。
 - `recovery_email_tokens`：保存邮箱验证 Token 的 SHA-256 摘要、目标邮箱、过期和消费状态；唯一/查询索引限制重复身份和支持限流。
+- `notifications`：保存用户站内通知、可空活动引用、类型、正文、跳转、全局唯一幂等键、已读时间和创建时间。
+- 通知用户时间线、未读和活动引用索引；`event_id ON DELETE SET NULL` 保证删除活动不丢失历史通知。
 
 迁移由 `schema_migrations` 独立事务执行。升级前仍按既有流程备份 SQLite 文件；失败时事务回滚，服务拒绝启动。
 
@@ -28,7 +30,8 @@ Schema v6、v7、v8、v9 与 v10 都是 Expand 迁移，仅新增：
 4. 若数据库已有 `moderation_status='removed'` 的帖子或回复，不得直接部署 pre-v9 公开应用；旧查询不会过滤治理状态，会重新暴露已移除内容。必须使用保留 v9 读取过滤的兼容回滚制品，或在维护模式下完成前滚修复。
 5. 回滚到 pre-v10 应用会忽略恢复邮箱列和验证令牌表；原 contact 登录继续可用，但 phone-only 用户已绑定的恢复邮箱不会被旧密码重置查询识别，账户安全与邮箱确认入口不可用。
 6. 在没有任何 removed 内容时，上一候选应用会忽略新增表、治理列和 `cover_url`，现有活动、报名、库存与讨论数据仍兼容；举报队列和治理入口暂不可用。
-7. 复验登录、报名、取消、库存、讨论公开可见性、恢复邮箱状态和管理员治理记录；核销入口在 pre-v6 应用中不可用，密码重置入口在 pre-v7 应用中不可用。
+7. 回滚到 pre-v11 应用会保留 `notifications` 表但不再创建或展示新通知，临近提醒调度停止；已有通知和已读状态不得为迁就旧版本而删除。
+8. 复验登录、报名、取消、库存、讨论公开可见性、恢复邮箱状态、通知历史和管理员治理记录；核销入口在 pre-v6 应用中不可用，密码重置入口在 pre-v7 应用中不可用。
 
 重新前滚到 v6 后，已签发凭证和核销审计继续可见。
 
@@ -36,4 +39,4 @@ Schema v6、v7、v8、v9 与 v10 都是 Expand 迁移，仅新增：
 
 ## 禁止操作
 
-生产回滚不得直接删除 `checkins`、修改核销时间、复用已吊销凭证、通过删除认证版本记录恢复会话、清空已验证恢复邮箱，或硬删除举报/治理动作来迁就旧版本。只有在确认没有任何真实 Admission/Checkin/PasswordReset/RecoveryEmail/ContentModeration 数据、已完成备份且明确放弃本候选时，才可离线删除新增表和迁移记录。
+生产回滚不得直接删除 `checkins`、修改核销时间、复用已吊销凭证、通过删除认证版本记录恢复会话、清空已验证恢复邮箱，或硬删除通知/举报/治理动作来迁就旧版本。只有在确认没有任何真实 Admission/Checkin/PasswordReset/RecoveryEmail/Notification/ContentModeration 数据、已完成备份且明确放弃本候选时，才可离线删除新增表和迁移记录。

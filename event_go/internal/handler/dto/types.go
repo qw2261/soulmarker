@@ -128,6 +128,25 @@ type UserResponse struct {
 	CreatedAt               time.Time  `json:"created_at"`
 }
 
+type NotificationResponse struct {
+	ID        int64      `json:"id"`
+	EventID   *int64     `json:"event_id,omitempty"`
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	ActionURL string     `json:"action_url"`
+	ReadAt    *time.Time `json:"read_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type NotificationUnreadCountResponse struct {
+	Unread int `json:"unread"`
+}
+
+type NotificationsMarkedReadResponse struct {
+	Updated int `json:"updated"`
+}
+
 type LoginResponse struct {
 	Token string       `json:"token"`
 	User  UserResponse `json:"user"`

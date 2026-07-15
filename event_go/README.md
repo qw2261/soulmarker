@@ -72,6 +72,7 @@ Organizer (门店/主办方)
 
 User (用户) — 注册/登录获得 JWT
   报名/发帖/回复时自动携带身份
+  └── Notification (站内通知) — 报名、取消、活动变更与临近提醒
 ```
 
 ### Organizer — 门店/主办方
@@ -153,11 +154,20 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 | ContentReport | 参与者对帖子/回复的分类举报；同一举报人与目标仅允许一条待处理记录 |
 | ContentModerationAction | 管理员移除、恢复或驳回的独立审计记录，不随公开内容隐藏而丢失 |
 
+### Notification — 站内通知
+
+| 能力 | 说明 |
+|---|---|
+| 事务通知 | 报名成功、取消和活动变更与业务写入同一 SQLite 事务 |
+| 临近提醒 | 单实例调度器扫描提醒窗口，唯一幂等键避免重复创建 |
+| 用户状态 | 支持分页、未读筛选、未读数、单条已读和全部已读 |
+| 历史保留 | 活动删除后通知保留，`event_id` 自动置空，不保存联系方式或入场凭证 |
+
 ***
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 48 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程、内容治理和 Schema v10 恢复邮箱代码侧均已完成远端门禁。历史 phone-only 用户可在保留原登录标识的前提下绑定已验证邮箱，确认后撤销旧会话和旧重置令牌。G4-R03 仅剩真实 staging SMTP 验收，G4-R05 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 52 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程、内容治理和 Schema v10 恢复邮箱代码侧均已完成远端门禁。Schema v11 站内通知与通知中心已形成报名、取消、活动变更和临近提醒本地候选，等待远端候选门禁。G4-R03 仅剩真实 staging SMTP 验收，受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -172,6 +182,10 @@ GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
 POST   /api/v1/me/recovery-email/request                校验当前密码并发送恢复邮箱验证链接
+GET    /api/v1/me/notifications[?unread_only=&page=&page_size=] 当前用户通知列表
+GET    /api/v1/me/notifications/unread-count            当前用户未读通知数
+PUT    /api/v1/me/notifications/{notificationId}/read   标记自己的单条通知已读
+PUT    /api/v1/me/notifications/read-all                标记自己的全部通知已读
 GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
 GET    /api/v1/admin/content-reports                    举报队列（状态/内容类型筛选）🔐
 PUT    /api/v1/admin/content-reports/{reportId}         移除内容并处理或驳回举报 🔐
@@ -230,7 +244,7 @@ GET    /health                                        健康检查
 | `q`          | string | 关键词搜索（标题+描述） | `Go`、`Docker`                                 |
 | `organizer_id` | int    | 按门店筛选活动 | `1` |
 
-**列表接口分页参数**（活动/报名/帖子/门票）：
+**列表接口分页参数**（活动/报名/帖子/门票/通知）：
 
 | 参数          | 类型 | 默认值 | 说明          |
 | ----------- | ---- | --- | ----------- |
@@ -247,7 +261,7 @@ GET    /health                                        健康检查
 |---|---|
 | 请求边界 | `VALIDATION_ERROR`、`INVALID_JSON`、`REQUEST_TOO_LARGE`、`API_ROUTE_NOT_FOUND`、`METHOD_NOT_ALLOWED` |
 | 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS`、`PASSWORD_RESET_TOKEN_INVALID`、`RECOVERY_EMAIL_IN_USE`、`RECOVERY_EMAIL_ALREADY_BOUND`、`RECOVERY_EMAIL_TOKEN_INVALID`、`RECOVERY_EMAIL_RATE_LIMITED` |
-| 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND` |
+| 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND`、`NOTIFICATION_NOT_FOUND` |
 | 报名与讨论 | `EVENT_NOT_PUBLISHED`、`REGISTRATION_DUPLICATE`、`EVENT_CAPACITY_FULL`、`TICKET_SOLD_OUT`、`REGISTRATION_NOT_FOUND`、`CANCELLATION_DEADLINE_EXCEEDED`、`PARTICIPATION_REQUIRED` |
 | 入场与核销 | `ADMISSION_NOT_FOUND`、`ADMISSION_REVOKED`、`ADMISSION_ALREADY_CHECKED_IN`、`EVENT_HAS_ADMISSIONS` |
 | 服务端 | `INTERNAL_ERROR` |
@@ -490,7 +504,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=10`。Schema v7 新增认证版本和密码重置 Token；Schema v8 新增活动封面；Schema v9 新增帖子/回复治理元数据、举报与动作审计；Schema v10 新增独立恢复邮箱、验证时间和一次性验证 Token，并只对规范化后唯一的历史合法邮箱 contact 做兼容回填，phone-only 和大小写碰撞账户保持未绑定。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=11`。Schema v7 新增认证版本和密码重置 Token；Schema v8 新增活动封面；Schema v9 新增帖子/回复治理元数据、举报与动作审计；Schema v10 新增独立恢复邮箱、验证时间和一次性验证 Token，并只对规范化后唯一的历史合法邮箱 contact 做兼容回填；Schema v11 新增持久化站内通知、用户未读索引、活动索引和全局唯一幂等键。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -585,6 +599,7 @@ event_go/
 | `/verify-recovery-email?token=...` | 验证恢复邮箱 | 消费一次性 Token，绑定邮箱并撤销旧会话 |
 | `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
 | `/me/security` | 账户安全 | 查看登录标识、恢复邮箱状态并用当前密码申请验证 |
+| `/me/notifications` | 通知中心 | 全部/未读筛选、分页、单条或全部已读，并跳转到关联活动 |
 | `/admin` | 管理登录 | 通过服务端 `/admin/session` 验证 X-Admin-Token |
 | `/admin/organizers` | 门店管理 | 门店列表、创建、编辑和保留历史活动的安全删除 |
 | `/admin/organizers/new`、`/:id/edit` | 门店表单 | 维护名称、联系方式、地址、官网、Logo 和标签 |
@@ -613,11 +628,13 @@ event_go/
 | `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置与恢复邮箱验证链接的公开站点地址；生产必须为 HTTPS |
 | `PASSWORD_RESET_TTL_MINUTES` | `30` | 密码重置 Token 有效分钟数，允许 1–1440 |
 | `RECOVERY_EMAIL_TTL_MINUTES` | `30` | 恢复邮箱验证 Token 有效分钟数，允许 1–1440 |
+| `NOTIFICATION_REMINDER_HOURS` | `24` | published 活动临近提醒窗口，允许 1–168 小时 |
+| `NOTIFICATION_SCAN_INTERVAL_SECONDS` | `60` | 单实例提醒调度扫描间隔，允许 1–3600 秒 |
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
 | `SMTP_FROM` | 空 | 密码重置与恢复邮箱验证邮件发件人 |
 
-staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 `PASSWORD_RESET_TTL_MINUTES` 或 `RECOVERY_EMAIL_TTL_MINUTES` 会拒绝启动。development 未配置 SMTP 时只把密码重置/邮箱验证链接写入服务日志，不发送邮件。
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置/邮箱验证链接写入服务日志，不发送邮件；业务通知不依赖 SMTP。
 
 ### 环境准备
 

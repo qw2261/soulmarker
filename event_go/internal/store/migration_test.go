@@ -36,6 +36,10 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "users", "recovery_email")
 	assertColumnExists(t, s.db, "users", "recovery_email_verified_at")
 	assertTableExists(t, s.db, "recovery_email_tokens")
+	assertTableExists(t, s.db, "notifications")
+	assertIndexExists(t, s.db, "idx_notifications_user_created")
+	assertIndexExists(t, s.db, "idx_notifications_user_unread")
+	assertIndexExists(t, s.db, "idx_notifications_event")
 }
 
 func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
@@ -504,6 +508,75 @@ func TestMigrationV6ToV7PreservesUsersAndInitializesAuthVersion(t *testing.T) {
 	}
 }
 
+func TestMigrationV10ToV11AddsNotificationsWithoutChangingExistingData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v10-to-v11.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	organizer := &model.Organizer{Name: "通知迁移门店"}
+	if err := s.CreateOrganizer(organizer); err != nil {
+		t.Fatal(err)
+	}
+	event := &model.Event{
+		OrganizerID: organizer.ID, Title: "迁移前活动", EventTime: "2099-01-01T00:00:00Z",
+		Location: "线上", Capacity: 10,
+	}
+	if err := s.CreateEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "迁移用户", Contact: "notification-migration@example.com", PasswordHash: "hash"}
+	if err := s.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`DROP INDEX idx_notifications_event`,
+		`DROP INDEX idx_notifications_user_unread`,
+		`DROP INDEX idx_notifications_user_created`,
+		`DROP TABLE notifications`,
+		`DELETE FROM schema_migrations WHERE version = 11`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v10 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v10 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	assertTableExists(t, s.db, "notifications")
+	assertIndexExists(t, s.db, "idx_notifications_user_created")
+	assertIndexExists(t, s.db, "idx_notifications_user_unread")
+	assertIndexExists(t, s.db, "idx_notifications_event")
+	if migrated, err := s.GetEvent(event.ID); err != nil || migrated == nil || migrated.Title != event.Title {
+		t.Fatalf("event changed during notification migration: event=%+v err=%v", migrated, err)
+	}
+	if migrated, err := s.GetUserByContact(user.Contact); err != nil || migrated == nil || migrated.ID != user.ID {
+		t.Fatalf("user changed during notification migration: user=%+v err=%v", migrated, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "notifications", "users", "user_id"); err != nil || !has {
+		t.Fatalf("notification user foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "notifications", "events", "event_id"); err != nil || !has {
+		t.Fatalf("notification event foreign key missing: exists=%v err=%v", has, err)
+	}
+}
+
 func TestMigrationRepeatedExecution(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "repeat.db")
 	for i := 0; i < 2; i++ {
@@ -583,6 +656,17 @@ func assertTableExists(t *testing.T, db *sql.DB, table string) {
 	}
 	if count != 1 {
 		t.Fatalf("expected table %s", table)
+	}
+}
+
+func assertIndexExists(t *testing.T, db *sql.DB, index string) {
+	t.Helper()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, index).Scan(&count); err != nil {
+		t.Fatalf("query index %s: %v", index, err)
+	}
+	if count != 1 {
+		t.Fatalf("expected index %s", index)
 	}
 }
 

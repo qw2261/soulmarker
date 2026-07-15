@@ -15,7 +15,8 @@
     { "name": "Registrations" },
     { "name": "Discussions" },
     { "name": "Tickets" },
-    { "name": "Admissions" }
+    { "name": "Admissions" },
+    { "name": "Notifications" }
   ],
   "paths": {
     "/openapi.json": {
@@ -162,6 +163,63 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/me/notifications": {
+      "get": {
+        "operationId": "listNotifications",
+        "tags": ["Me", "Notifications"],
+        "summary": "List notifications owned by the current user",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" },
+          { "name": "unread_only", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/notifications/unread-count": {
+      "get": {
+        "operationId": "getNotificationUnreadCount",
+        "tags": ["Me", "Notifications"],
+        "summary": "Count unread notifications owned by the current user",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/notifications/{notificationId}/read": {
+      "parameters": [{ "$ref": "#/components/parameters/NotificationID" }],
+      "put": {
+        "operationId": "markNotificationRead",
+        "tags": ["Me", "Notifications"],
+        "summary": "Mark one current-user notification as read",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/me/notifications/read-all": {
+      "put": {
+        "operationId": "markAllNotificationsRead",
+        "tags": ["Me", "Notifications"],
+        "summary": "Mark all current-user notifications as read",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
     },
@@ -563,6 +621,7 @@
       "PostID": { "name": "postId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "ReplyID": { "name": "replyId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "ReportID": { "name": "reportId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "NotificationID": { "name": "notificationId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "TicketID": { "name": "ticketId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } }
     },
     "requestBodies": {
@@ -602,7 +661,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -615,7 +674,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -652,6 +711,9 @@
       "CheckinResultResponse": { "type": "object", "required": ["checkin", "already_checked_in"], "properties": { "checkin": { "$ref": "#/components/schemas/CheckinResponse" }, "already_checked_in": { "type": "boolean" } } },
       "RegistrationStatusResponse": { "type": "object", "required": ["registered"], "properties": { "registered": { "type": "boolean" }, "admission": { "$ref": "#/components/schemas/AdmissionResponse" } } },
       "MyRegistrationResponse": { "type": "object", "required": ["id", "event_id", "event_title", "event_time", "location", "event_status", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "event_title": { "type": "string" }, "event_time": { "type": "string", "format": "date-time" }, "location": { "type": "string" }, "event_status": { "type": "string" }, "ticket_id": { "type": "integer", "format": "int64" }, "ticket_name": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "NotificationResponse": { "type": "object", "required": ["id", "type", "title", "body", "action_url", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "type": { "type": "string", "enum": ["registration_confirmed", "registration_cancelled", "event_updated", "event_reminder_24h"] }, "title": { "type": "string" }, "body": { "type": "string" }, "action_url": { "type": "string" }, "read_at": { "type": "string", "format": "date-time" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "NotificationUnreadCountResponse": { "type": "object", "required": ["unread"], "properties": { "unread": { "type": "integer", "minimum": 0 } } },
+      "NotificationsMarkedReadResponse": { "type": "object", "required": ["updated"], "properties": { "updated": { "type": "integer", "minimum": 0 } } },
       "PostResponse": { "type": "object", "required": ["id", "event_id", "author_name", "title", "content", "reply_count", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "title": { "type": "string" }, "content": { "type": "string" }, "reply_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" } } },
       "ReplyResponse": { "type": "object", "required": ["id", "post_id", "author_name", "content", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "content": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
       "PostDetailResponse": { "type": "object", "required": ["post", "replies"], "properties": { "post": { "$ref": "#/components/schemas/PostResponse" }, "replies": { "type": "array", "items": { "$ref": "#/components/schemas/ReplyResponse" } } } },

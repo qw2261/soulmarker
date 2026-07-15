@@ -112,6 +112,31 @@ export interface MyRegistration {
   created_at: string
 }
 
+export type NotificationType =
+  | 'registration_confirmed'
+  | 'registration_cancelled'
+  | 'event_updated'
+  | 'event_reminder_24h'
+
+export interface Notification {
+  id: number
+  event_id?: number
+  type: NotificationType
+  title: string
+  body: string
+  action_url: string
+  read_at?: string
+  created_at: string
+}
+
+export interface NotificationUnreadCount {
+  unread: number
+}
+
+export interface NotificationsMarkedRead {
+  updated: number
+}
+
 export interface RegistrationStatus {
   registered: boolean
   admission?: Admission

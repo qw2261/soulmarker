@@ -42,6 +42,9 @@ func main() {
 	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
 	moderation := service.NewContentModerationService(s, businessClock)
+	notifications := service.NewNotificationService(
+		s, businessClock, time.Duration(cfg.NotificationReminderHours)*time.Hour,
+	)
 	var resetSender notification.AuthenticationEmailSender = notification.LogPasswordResetSender{}
 	if cfg.SMTPHost != "" {
 		resetSender = notification.NewSMTPPasswordResetSender(
@@ -61,7 +64,15 @@ func main() {
 		Discussions:    discussions,
 		Authentication: authentication,
 		Moderation:     moderation,
+		Notifications:  notifications,
 	})
+	appContext, stopApp := context.WithCancel(context.Background())
+	defer stopApp()
+	go notifications.RunReminderDispatcher(
+		appContext,
+		time.Duration(cfg.NotificationScanIntervalSec)*time.Second,
+		func(err error) { log.Printf("活动提醒调度失败: %v", err) },
+	)
 
 	port := cfg.Port
 	addr := ":" + port
@@ -88,6 +99,10 @@ func main() {
 	log.Printf("  GET    /api/v1/me/admissions                    当前用户入场凭证")
 	log.Printf("  GET    /api/v1/me/activities                    当前用户统一活动时间线")
 	log.Printf("  POST   /api/v1/me/recovery-email/request        请求绑定恢复邮箱")
+	log.Printf("  GET    /api/v1/me/notifications                 当前用户通知列表")
+	log.Printf("  GET    /api/v1/me/notifications/unread-count    当前用户未读通知数")
+	log.Printf("  PUT    /api/v1/me/notifications/{id}/read       标记通知已读")
+	log.Printf("  PUT    /api/v1/me/notifications/read-all        全部通知已读")
 	log.Printf("  GET    /api/v1/admin/session                    校验平台管理员身份 🔐")
 	log.Printf("  GET    /api/v1/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/v1/organizers                       创建门店 🔐")
@@ -128,6 +143,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	stopApp()
 
 	log.Println("🛑 正在关闭服务...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

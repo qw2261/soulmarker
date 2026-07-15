@@ -1,15 +1,15 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R03 恢复邮箱绑定已通过本地与远端候选门禁
+> 状态：In Progress，G4-R03 恢复邮箱已通过远端代码门禁；G4-R05 基础通知为本地候选，等待远端门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 5880d132a0cea616c2aeb22e92ec44c575595c58 |
+| 当前候选 Commit | 待基础通知功能提交后回填 |
 | 候选分支 | origin/codex/update_project |
-| Schema | v10，新增恢复邮箱、验证时间和一次性验证令牌；保留 v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
+| Schema | v11，新增持久化站内通知、未读/活动索引和幂等键；保留 v10 恢复邮箱、v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
 
 ## 追溯范围
 
@@ -28,22 +28,24 @@
 | G4-R04 | MIG-EVENT-COVER-001、CT-EVENT-COVER-001、FE-REQUEST-STATE-001、E2E-UX-STATE-001 | v7→v8 保留历史活动并默认空封面；封面 URL 安全边界；加载失败重试、无匹配空状态、404、离线和恢复提示 |
 | G4-R09 | MIG-CONTENT-MODERATION-001、SEC-CONTENT-REPORT-001、DOM-CONTENT-MODERATION-001、CT-API-CONTENT-MODERATION-001 | v8→v9 保留历史讨论并默认 visible；仅活动参与者可举报他人可见内容；重复举报幂等；移除/恢复/驳回事务和独立动作审计；DTO、错误码、OpenAPI 与路由双向契约 |
 | G4-R09 browser | E2E-CONTENT-MODERATION-001 | desktop-chromium 与 Pixel 7：举报帖子/回复、移除回复、驳回举报、直接移除/恢复帖子、公开隐藏 removed 内容、核对 4 条本轮动作记录 |
+| G4-R05 | DOM-NOTIFICATION-001、MIG-NOTIFICATION-001、IT-NOTIFICATION-001、SEC-NOTIFICATION-001、SCHED-NOTIFICATION-001、CT-API-NOTIFICATION-001、FE-NOTIFICATION-001 | 报名/取消/活动变更事务通知；v10→v11 和空库/重复迁移；用户隔离、未读状态、活动删除保留；提醒幂等和时间变更；DTO/错误码/OpenAPI/路由契约；通知中心与未读徽标 |
+| G4-R05 browser | E2E-NOTIFICATION-001 | desktop-chromium 与 Pixel 7：报名和取消后通知中心显示对应标题、活动正文、无横向溢出并可全部标为已读 |
 
 ## 当前本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 277 |
-| Vue unit/component tests | 13 passed（8 files） |
+| 顶层 Go Test 数量 | 285 |
+| Vue unit/component tests | 17 passed（10 files） |
 | Playwright E2E | 4 passed（2 个场景 × desktop-chromium / Pixel 7） |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
-| npm run build | 通过；主 JS 499.43 KB / 173.52 KB gzip，无 chunk size 告警 |
+| npm run build | 通过；主 JS 544.28 KB / 190.74 KB gzip；存在大于 500 KB 的 chunk 提示，通知页本身保持路由懒加载 |
 | npm audit --omit=dev | 0 vulnerabilities |
 | Markdown 本地链接 / git diff --check / gofmt | 通过 |
-| Browser 可视验收 | 桌面/Pixel 7 账户安全、用户讨论回复、举报治理、取消状态、凭证与运营核销全流程通过；成功报告含 8 张截图附件；移动表格局部滚动 |
+| Browser 可视验收 | 4 passed（2 个场景 × desktop-chromium / Pixel 7）；通知中心报名、取消、全部已读、无横向溢出与截图证据通过 |
 
 本阶段继续不使用 covdata。
 
@@ -75,4 +77,4 @@
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过远端候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。
+No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过远端候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。R05 已形成完整本地候选，仍需功能 Commit、远端 CI 和证据回填；两场受控测试活动和 P0/P1 正式清零审计尚未完成。

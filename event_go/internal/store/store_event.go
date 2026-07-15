@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/model"
@@ -139,6 +140,7 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 	if event == nil {
 		return nil, model.ErrNotFound
 	}
+	before := *event
 
 	if req.Title != nil {
 		event.Title = *req.Title
@@ -168,8 +170,14 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 		event.Status = *req.Status
 	}
 
-	now := time.Now().UTC().Format(model.TimeFormat)
-	_, err = s.db.Exec(
+	nowTime := time.Now().UTC()
+	now := nowTime.Format(model.TimeFormat)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("开启活动更新事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(
 		`UPDATE events SET organizer_id=?, title=?, description=?, cover_url=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
 		 WHERE id=?`,
 		event.OrganizerID, event.Title, event.Description, event.CoverURL, event.EventTime, event.Location,
@@ -179,7 +187,82 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 		return nil, fmt.Errorf("更新活动失败: %w", err)
 	}
 
+	if summary := eventNotificationSummary(&before, event); summary != "" {
+		rows, err := tx.Query(`SELECT user_id FROM registrations WHERE event_id = ? AND user_id IS NOT NULL`, id)
+		if err != nil {
+			return nil, fmt.Errorf("查询活动通知用户失败: %w", err)
+		}
+		userIDs := make([]int64, 0)
+		for rows.Next() {
+			var userID int64
+			if err := rows.Scan(&userID); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("读取活动通知用户失败: %w", err)
+			}
+			userIDs = append(userIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("遍历活动通知用户失败: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("关闭活动通知用户查询失败: %w", err)
+		}
+		notificationTitle := "活动信息已更新"
+		if before.Status != event.Status && event.Status == "cancelled" {
+			notificationTitle = "活动已取消"
+		}
+		for _, userID := range userIDs {
+			eventID := id
+			if _, err := insertNotificationTx(tx, &model.Notification{
+				UserID: userID, EventID: &eventID,
+				Type: model.NotificationEventUpdated, Title: notificationTitle,
+				Body:           fmt.Sprintf("活动“%s”信息已更新：%s。", event.Title, summary),
+				ActionURL:      fmt.Sprintf("/events/%d", id),
+				IdempotencyKey: fmt.Sprintf("event-updated:%d:%d:%d", id, userID, nowTime.UnixNano()),
+				CreatedAt:      nowTime,
+			}); err != nil {
+				return nil, fmt.Errorf("创建活动更新通知失败: %w", err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("提交活动更新事务失败: %w", err)
+	}
+
 	return s.GetEvent(id)
+}
+
+func eventNotificationSummary(before, after *model.Event) string {
+	changes := make([]string, 0, 9)
+	if before.OrganizerID != after.OrganizerID {
+		changes = append(changes, "主办门店")
+	}
+	if before.Title != after.Title {
+		changes = append(changes, "标题")
+	}
+	if before.EventTime != after.EventTime {
+		changes = append(changes, "时间调整为 "+after.EventTime)
+	}
+	if before.Location != after.Location {
+		changes = append(changes, "地点调整为 "+after.Location)
+	}
+	if before.Status != after.Status {
+		changes = append(changes, "状态调整为 "+after.Status)
+	}
+	if before.Description != after.Description {
+		changes = append(changes, "活动说明")
+	}
+	if before.CoverURL != after.CoverURL {
+		changes = append(changes, "活动封面")
+	}
+	if before.Capacity != after.Capacity {
+		changes = append(changes, fmt.Sprintf("容量调整为 %d", after.Capacity))
+	}
+	if before.Price != after.Price {
+		changes = append(changes, fmt.Sprintf("价格调整为 %.2f", after.Price))
+	}
+	return strings.Join(changes, "、")
 }
 
 func (s *Store) DeleteEvent(id int64) error {

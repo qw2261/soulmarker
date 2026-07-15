@@ -77,6 +77,12 @@ const router = createRouter({
       meta: { requiresUser: true },
     },
     {
+      path: '/me/notifications',
+      name: 'notifications',
+      component: () => import('@/views/Notifications.vue'),
+      meta: { requiresUser: true },
+    },
+    {
       path: '/admin/events',
       name: 'admin-events',
       component: () => import('@/views/admin/EventManage.vue'),

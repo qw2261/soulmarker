@@ -96,6 +96,22 @@ func TestPostDetailUsesStableEmptyArray(t *testing.T) {
 	}
 }
 
+func TestNotificationDTOExposesOnlyUserFacingFields(t *testing.T) {
+	now := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	eventID := int64(8)
+	readAt := now.Add(time.Minute)
+	decoded := assertJSONKeys(t, Notification(&model.Notification{
+		ID: 1, UserID: 7, EventID: &eventID, Type: model.NotificationEventUpdated,
+		Title: "活动信息已更新", Body: "地点发生变化", ActionURL: "/events/8",
+		IdempotencyKey: "private-deduplication-key", ReadAt: &readAt, CreatedAt: now,
+	}), "id", "event_id", "type", "title", "body", "action_url", "read_at", "created_at")
+	for _, forbidden := range []string{"user_id", "idempotency_key"} {
+		if _, exists := decoded[forbidden]; exists {
+			t.Fatalf("%s must not be exposed by notification DTO", forbidden)
+		}
+	}
+}
+
 func TestContentModerationDTOsExposeAuditFieldsWithoutReporterContact(t *testing.T) {
 	now := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 	report := ContentReport(&model.ContentReport{

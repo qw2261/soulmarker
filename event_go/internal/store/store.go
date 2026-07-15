@@ -14,13 +14,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 10
+const CurrentSchemaVersion = 11
 
 type Store struct {
 	db             *sql.DB
 	registrationMu sync.Mutex
 	checkinMu      sync.Mutex
 	moderationMu   sync.Mutex
+	notificationMu sync.Mutex
 }
 
 type migration struct {
@@ -157,7 +158,30 @@ func migrations() []migration {
 		{version: 8, name: "event_cover_url", apply: migrateEventCoverURL},
 		{version: 9, name: "content_moderation", apply: migrateContentModeration},
 		{version: 10, name: "recovery_email", apply: migrateRecoveryEmail},
+		{version: 11, name: "in_app_notifications", apply: migrateInAppNotifications},
 	}
+}
+
+func migrateInAppNotifications(tx *sql.Tx) error {
+	return execStatements(tx, []string{
+		`CREATE TABLE notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			event_id INTEGER,
+			type TEXT NOT NULL CHECK (type IN ('registration_confirmed', 'registration_cancelled', 'event_updated', 'event_reminder_24h')),
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			action_url TEXT NOT NULL DEFAULT '',
+			idempotency_key TEXT NOT NULL UNIQUE,
+			read_at TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE SET NULL
+		)`,
+		`CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC, id DESC)`,
+		`CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read_at, created_at DESC)`,
+		`CREATE INDEX idx_notifications_event ON notifications(event_id)`,
+	})
 }
 
 func migrateRecoveryEmail(tx *sql.Tx) error {
@@ -625,6 +649,8 @@ func validateForeignKeys(db *sql.DB) error {
 		{"user_auth_versions", "users", "user_id"},
 		{"password_reset_tokens", "users", "user_id"},
 		{"recovery_email_tokens", "users", "user_id"},
+		{"notifications", "users", "user_id"},
+		{"notifications", "events", "event_id"},
 		{"content_reports", "events", "event_id"},
 		{"content_reports", "posts", "post_id"},
 		{"content_reports", "users", "reporter_user_id"},

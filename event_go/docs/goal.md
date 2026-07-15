@@ -63,10 +63,10 @@
 
 ### 3.1 已有优势
 
-- 已完成门店、活动、报名、门票、讨论、内容治理、用户认证和管理接口，共 48 个 API 操作。
+- 已完成门店、活动、报名、门票、讨论、内容治理、站内通知、用户认证和管理接口，共 52 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 277 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 285 个顶层测试，当前候选验证中 go test、race、vet、gofmt 均纳入门禁。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -301,6 +301,16 @@ G4-R03 恢复邮箱候选验收：
 - [x] 新增账户安全页、验证结果页和桌面/Pixel 7 响应式回归；新注册邮箱明确显示为“待验证”，不把格式校验误当所有权验证。
 - [x] 本地候选通过 277 个 Go 顶层测试、race、vet、13 个 Vue 测试、4 个 Playwright 用例、OpenAPI/DTO/错误码/路由契约和生产构建；不使用 covdata。
 - [x] 候选提交 5880d13 与远端 CI Run 29428887570 证据绑定，恢复邮箱代码侧候选关闭；G4-R03 仍等待真实 staging SMTP 验收。
+
+G4-R05 当前拆分验收：
+
+- [x] 按 [ADR-003](adr/003-notification-channel-and-delivery-semantics.md) 将持久化站内通知确定为业务事实源；密码重置与恢复邮箱继续使用 SMTP 安全邮件，G4 不同步发送业务邮件或短信。
+- [x] Schema v11 新增 `notifications`、用户/未读/活动索引和全局唯一 `idempotency_key`；活动删除后通知保留并通过 `ON DELETE SET NULL` 解除引用。
+- [x] 报名成功、取消和活动变更通知与对应业务写入同一 SQLite 事务；通知不复制用户联系方式、恢复令牌或 Admission 凭证。
+- [x] 单实例后台调度器扫描未来 24 小时内的 published 活动；重复扫描不重复创建，同一活动调整时间后可生成新提醒。
+- [x] 用户通知 API 支持精确分页、未读筛选/计数、单条已读和全部已读；跨用户读取或标记统一返回 `NOTIFICATION_NOT_FOUND`。
+- [x] 前端通知中心、导航未读徽标、空态/失败重试和桌面/Pixel 7 报名/取消通知旅程已纳入候选；本地门禁覆盖 285 个 Go 顶层测试、17 个 Vue 测试和 4 个 Playwright 用例，不使用 covdata。
+- [ ] 功能候选 Commit 与远端 CI Run 成功绑定后关闭 G4-R05；多实例调度、外部业务邮件/短信和到达率度量归 G6/G8。
 
 G4-R01 / G4-R04 当前拆分验收：
 
@@ -692,7 +702,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | D-003 支付渠道 | G7 前 | 商户接入、分账、退款、回调、费率和沙箱能力 |
 | D-004 资金路径 | G7 前 | 主办方直连、官方服务商或官方分账，禁止不合规归集 |
 | D-005 收费模式 | G8 前 | SaaS、按单服务费、套餐、免费额度和成本承担 |
-| D-006 通知渠道 | G4 前 | 邮件、短信、站内信的成本、到达率和隐私 |
+| [D-006 通知渠道](adr/003-notification-channel-and-delivery-semantics.md) | G4 前 | 已决策：G4 以持久化站内通知为事实源；外部业务邮件/短信与多实例投递在 G6/G8 复审 |
 
 每项决策必须形成 ADR，记录背景、选择、替代方案、后果、退出条件和复审日期。
 
@@ -741,7 +751,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 恢复邮箱代码侧已通过远端门禁、仅待真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 仅待真实 SMTP；R05 已形成完整本地候选并等待远端门禁；受控活动和 P0/P1 正式清零审计继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

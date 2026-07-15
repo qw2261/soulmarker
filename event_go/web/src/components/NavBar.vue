@@ -7,6 +7,9 @@
     <div class="navbar-right">
       <template v-if="user.isLoggedIn">
         <router-link to="/me/registrations">我的活动</router-link>
+        <el-badge :value="notifications.unreadCount" :hidden="notifications.unreadCount === 0" :max="99">
+          <router-link to="/me/notifications">通知</router-link>
+        </el-badge>
         <router-link to="/me/security">账户安全</router-link>
         <span class="user-name">{{ user.user?.name }}</span>
         <el-button text @click="logoutUser">退出</el-button>
@@ -36,6 +39,9 @@
         <router-link to="/organizers" @click="mobileMenuOpen = false">门店</router-link>
         <template v-if="user.isLoggedIn">
           <router-link to="/me/registrations" @click="mobileMenuOpen = false">我的活动</router-link>
+          <router-link to="/me/notifications" @click="mobileMenuOpen = false">
+            通知<span v-if="notifications.unreadCount">（{{ notifications.unreadCount }}）</span>
+          </router-link>
           <router-link to="/me/security" @click="mobileMenuOpen = false">账户安全</router-link>
           <span class="mobile-user">{{ user.user?.name }}</span>
           <el-button text @click="logoutUser">退出登录</el-button>
@@ -55,14 +61,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { Menu } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { logoutUser as revokeUserSession } from '@/api/auth'
 import { useRouter } from 'vue-router'
+import { useNotificationStore } from '@/stores/notifications'
 const auth = useAuthStore()
 const user = useUserStore()
+const notifications = useNotificationStore()
 const router = useRouter()
 const mobileMenuOpen = ref(false)
 
@@ -71,10 +79,20 @@ async function logoutUser() {
     await revokeUserSession()
   } finally {
     user.logout()
+    notifications.clear()
     mobileMenuOpen.value = false
     router.push('/')
   }
 }
+
+watch(() => user.isLoggedIn, (loggedIn) => {
+  if (loggedIn) notifications.fetchUnreadCount()
+  else notifications.clear()
+})
+
+onMounted(() => {
+  if (user.isLoggedIn) notifications.fetchUnreadCount()
+})
 
 function logoutAdmin() {
   auth.logout()

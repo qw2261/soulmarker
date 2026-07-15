@@ -119,6 +119,7 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		Admissions:     service.NewAdmissionService(s, businessClock),
 		Authentication: authentication,
 		Moderation:     service.NewContentModerationService(s, businessClock),
+		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 	})
 }
 
@@ -1461,6 +1462,7 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Admissions:     service.NewAdmissionService(s, businessClock),
 		Authentication: service.NewAuthenticationService(s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL, 30*time.Minute, 30*time.Minute),
 		Moderation:     service.NewContentModerationService(s, businessClock),
+		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 
@@ -3350,6 +3352,122 @@ func TestAdmissionAndCheckinHTTPJourney(t *testing.T) {
 	deleteResponse.Body.Close()
 	if deleteResponse.StatusCode != http.StatusConflict || deletePayload.ErrorCode != "EVENT_HAS_ADMISSIONS" {
 		t.Fatalf("event with admissions was deleted: status=%d payload=%+v", deleteResponse.StatusCode, deletePayload)
+	}
+}
+
+func TestNotificationHTTPJourneyIsUserScoped(t *testing.T) {
+	s, _, server := setupTestServer(t)
+	event := createStoreEvent(t, s, "通知 HTTP 活动")
+	userName, userContact := "通知用户", "notification-http@example.com"
+
+	registerResponse := doUserJSON(
+		t, http.MethodPost, server.URL+"/api/v1/events/"+itoa64(event.ID)+"/register",
+		`{}`, 0, userName, userContact,
+	)
+	if registerResponse.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(registerResponse.Body)
+		registerResponse.Body.Close()
+		t.Fatalf("register: expected 201, got %d: %s", registerResponse.StatusCode, body)
+	}
+	registerResponse.Body.Close()
+
+	type notificationListResponse struct {
+		Data  []dto.NotificationResponse `json:"data"`
+		Total int                        `json:"total"`
+	}
+	listResponse := doUserJSON(
+		t, http.MethodGet, server.URL+"/api/v1/me/notifications?unread_only=true&page=1&page_size=10",
+		"", 0, userName, userContact,
+	)
+	defer listResponse.Body.Close()
+	if listResponse.StatusCode != http.StatusOK {
+		t.Fatalf("list notifications: expected 200, got %d", listResponse.StatusCode)
+	}
+	var listed notificationListResponse
+	if err := json.NewDecoder(listResponse.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed.Total != 1 || len(listed.Data) != 1 || listed.Data[0].Type != model.NotificationRegistrationConfirmed {
+		t.Fatalf("registration notification missing: %+v", listed)
+	}
+	registrationNotificationID := listed.Data[0].ID
+
+	otherResponse := doUserJSON(
+		t, http.MethodPut,
+		server.URL+"/api/v1/me/notifications/"+itoa64(registrationNotificationID)+"/read",
+		"", 0, "其他通知用户", "other-notification-http@example.com",
+	)
+	defer otherResponse.Body.Close()
+	if otherResponse.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-user mark read: expected 404, got %d", otherResponse.StatusCode)
+	}
+	var otherPayload struct {
+		ErrorCode string `json:"error_code"`
+	}
+	if err := json.NewDecoder(otherResponse.Body).Decode(&otherPayload); err != nil {
+		t.Fatal(err)
+	}
+	if otherPayload.ErrorCode != string(api.CodeNotificationNotFound) {
+		t.Fatalf("unexpected cross-user error code: %q", otherPayload.ErrorCode)
+	}
+
+	markResponse := doUserJSON(
+		t, http.MethodPut,
+		server.URL+"/api/v1/me/notifications/"+itoa64(registrationNotificationID)+"/read",
+		"", 0, userName, userContact,
+	)
+	markResponse.Body.Close()
+	if markResponse.StatusCode != http.StatusOK {
+		t.Fatalf("mark own notification: expected 200, got %d", markResponse.StatusCode)
+	}
+
+	newLocation := "通知新场地"
+	if _, err := s.UpdateEvent(event.ID, model.UpdateEventReq{Location: &newLocation}); err != nil {
+		t.Fatal(err)
+	}
+	cancelResponse := doUserJSON(
+		t, http.MethodDelete, server.URL+"/api/v1/events/"+itoa64(event.ID)+"/register",
+		"", 0, userName, userContact,
+	)
+	cancelResponse.Body.Close()
+	if cancelResponse.StatusCode != http.StatusOK {
+		t.Fatalf("cancel registration: expected 200, got %d", cancelResponse.StatusCode)
+	}
+
+	unreadResponse := doUserJSON(
+		t, http.MethodGet, server.URL+"/api/v1/me/notifications/unread-count",
+		"", 0, userName, userContact,
+	)
+	defer unreadResponse.Body.Close()
+	if unreadResponse.StatusCode != http.StatusOK {
+		t.Fatalf("unread count: expected 200, got %d", unreadResponse.StatusCode)
+	}
+	var unreadPayload struct {
+		Data dto.NotificationUnreadCountResponse `json:"data"`
+	}
+	if err := json.NewDecoder(unreadResponse.Body).Decode(&unreadPayload); err != nil {
+		t.Fatal(err)
+	}
+	if unreadPayload.Data.Unread != 2 {
+		t.Fatalf("expected event update and cancellation unread, got %d", unreadPayload.Data.Unread)
+	}
+
+	markAllResponse := doUserJSON(
+		t, http.MethodPut, server.URL+"/api/v1/me/notifications/read-all",
+		"", 0, userName, userContact,
+	)
+	defer markAllResponse.Body.Close()
+	if markAllResponse.StatusCode != http.StatusOK {
+		t.Fatalf("mark all read: expected 200, got %d", markAllResponse.StatusCode)
+	}
+	var markAllPayload struct {
+		Data dto.NotificationsMarkedReadResponse `json:"data"`
+	}
+	if err := json.NewDecoder(markAllResponse.Body).Decode(&markAllPayload); err != nil {
+		t.Fatal(err)
+	}
+	if markAllPayload.Data.Updated != 2 {
+		t.Fatalf("expected two notifications marked read, got %d", markAllPayload.Data.Updated)
 	}
 }
 

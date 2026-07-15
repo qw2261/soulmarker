@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import {
   ElAlert,
+  ElBadge,
   ElButton,
   ElCard,
   ElDescriptions,
@@ -38,6 +39,7 @@ import { useUserStore } from './stores/user'
 import { USER_SESSION_EXPIRED_EVENT } from './auth/session'
 import { useAuthStore } from './stores/auth'
 import { ADMIN_SESSION_EXPIRED_EVENT } from './auth/admin-session'
+import { useNotificationStore } from './stores/notifications'
 
 const app = createApp(App)
 
@@ -46,6 +48,7 @@ app.use(router)
 
 const elementComponents = [
   ElAlert,
+  ElBadge,
   ElButton,
   ElCard,
   ElDescriptions,
@@ -83,6 +86,7 @@ app.directive('loading', ElLoading.directive)
 window.addEventListener(USER_SESSION_EXPIRED_EVENT, (event) => {
   const redirect = (event as CustomEvent<{ redirect?: string }>).detail?.redirect || '/'
   useUserStore().logout()
+  useNotificationStore().clear()
   if (router.currentRoute.value.path !== '/login') {
     router.push({ path: '/login', query: { reason: 'expired', redirect } })
   }

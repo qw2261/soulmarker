@@ -34,6 +34,7 @@ type Handler struct {
 	admissions     AdmissionService
 	authentication AuthenticationService
 	moderation     ContentModerationService
+	notifications  NotificationService
 	startTime      time.Time
 	version        string
 }
@@ -80,6 +81,13 @@ type ContentModerationService interface {
 	ListActions(offset, limit int) ([]*model.ContentModerationAction, int, error)
 }
 
+type NotificationService interface {
+	List(userID int64, unreadOnly bool, offset, limit int) ([]*model.Notification, int, error)
+	UnreadCount(userID int64) (int, error)
+	MarkRead(userID, notificationID int64) error
+	MarkAllRead(userID int64) (int, error)
+}
+
 type Dependencies struct {
 	Clock          clock.Clock
 	Tokens         auth.TokenManager
@@ -88,6 +96,7 @@ type Dependencies struct {
 	Admissions     AdmissionService
 	Authentication AuthenticationService
 	Moderation     ContentModerationService
+	Notifications  NotificationService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -102,6 +111,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		admissions:     dependencies.Admissions,
 		authentication: dependencies.Authentication,
 		moderation:     dependencies.Moderation,
+		notifications:  dependencies.Notifications,
 		startTime:      dependencies.Clock.Now(),
 		version:        cfg.Version,
 	}
@@ -123,6 +133,10 @@ func parseReplyID(r *http.Request) (int64, error) {
 
 func parseReportID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("reportId"), 10, 64)
+}
+
+func parseNotificationID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("notificationId"), 10, 64)
 }
 
 // parseTicketID 从URL路径中解析门票ID

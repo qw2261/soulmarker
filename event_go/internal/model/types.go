@@ -40,6 +40,7 @@ var (
 	ErrRecoveryEmailBound     = errors.New("该邮箱已绑定当前账户")
 	ErrRecoveryEmailInvalid   = errors.New("恢复邮箱验证链接无效或已过期")
 	ErrRecoveryEmailRateLimit = errors.New("恢复邮箱验证请求过于频繁")
+	ErrNotificationNotFound   = errors.New("通知不存在")
 	ErrContentReportNotFound  = errors.New("举报记录不存在")
 	ErrContentReportResolved  = errors.New("举报记录已处理")
 	ErrContentTargetNotFound  = errors.New("被举报内容不存在")
@@ -187,6 +188,33 @@ type UserClaims struct {
 	Contact     string `json:"contact"`
 	AuthVersion int    `json:"auth_version"`
 	jwt.RegisteredClaims
+}
+
+const (
+	NotificationRegistrationConfirmed = "registration_confirmed"
+	NotificationRegistrationCancelled = "registration_cancelled"
+	NotificationEventUpdated          = "event_updated"
+	NotificationEventReminder24H      = "event_reminder_24h"
+)
+
+type Notification struct {
+	ID             int64
+	UserID         int64
+	EventID        *int64
+	Type           string
+	Title          string
+	Body           string
+	ActionURL      string
+	IdempotencyKey string
+	ReadAt         *time.Time
+	CreatedAt      time.Time
+}
+
+type ListNotificationsParams struct {
+	UserID     int64
+	UnreadOnly bool
+	Offset     int
+	Limit      int
 }
 
 type contextKey string

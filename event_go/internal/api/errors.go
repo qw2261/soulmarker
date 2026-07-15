@@ -38,6 +38,7 @@ const (
 	CodeRecoveryEmailAlreadyBound    ErrorCode = "RECOVERY_EMAIL_ALREADY_BOUND"
 	CodeRecoveryEmailTokenInvalid    ErrorCode = "RECOVERY_EMAIL_TOKEN_INVALID"
 	CodeRecoveryEmailRateLimited     ErrorCode = "RECOVERY_EMAIL_RATE_LIMITED"
+	CodeNotificationNotFound         ErrorCode = "NOTIFICATION_NOT_FOUND"
 	CodeContentReportNotFound        ErrorCode = "CONTENT_REPORT_NOT_FOUND"
 	CodeContentReportNotAllowed      ErrorCode = "CONTENT_REPORT_NOT_ALLOWED"
 	CodeContentReportAlreadyResolved ErrorCode = "CONTENT_REPORT_ALREADY_RESOLVED"
@@ -78,6 +79,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeRecoveryEmailAlreadyBound:    "该邮箱已绑定当前账户",
 	CodeRecoveryEmailTokenInvalid:    "恢复邮箱验证链接无效或已过期",
 	CodeRecoveryEmailRateLimited:     "恢复邮箱验证请求过于频繁",
+	CodeNotificationNotFound:         "通知不存在",
 	CodeContentReportNotFound:        "举报记录不存在",
 	CodeContentReportNotAllowed:      "当前用户不能举报该内容",
 	CodeContentReportAlreadyResolved: "举报记录已处理",

@@ -116,6 +116,23 @@ func (s *Store) Register(r *model.Registration) error {
 		}
 	}
 
+	if r.UserID != nil {
+		eventID := r.EventID
+		body := fmt.Sprintf("你已成功报名活动“%s”，时间：%s，地点：%s。", event.Title, event.EventTime, event.Location)
+		if ticketName != "" {
+			body += " 票种：" + ticketName + "。"
+		}
+		if _, err := insertNotificationTx(tx, &model.Notification{
+			UserID: *r.UserID, EventID: &eventID,
+			Type: model.NotificationRegistrationConfirmed, Title: "报名成功",
+			Body: body, ActionURL: fmt.Sprintf("/events/%d", r.EventID),
+			IdempotencyKey: fmt.Sprintf("registration-confirmed:%d", id),
+			CreatedAt:      time.Now().UTC(),
+		}); err != nil {
+			return fmt.Errorf("创建报名成功通知失败: %w", err)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("提交事务失败: %w", err)
 	}
@@ -215,8 +232,9 @@ func (s *Store) cancelRegistration(eventID int64, identityColumn string, identit
 
 	var registrationID int64
 	var ticketID sql.NullInt64
-	query := fmt.Sprintf(`SELECT id, ticket_id FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
-	err = tx.QueryRow(query, eventID, identity).Scan(&registrationID, &ticketID)
+	var userID sql.NullInt64
+	query := fmt.Sprintf(`SELECT id, ticket_id, user_id FROM registrations WHERE event_id = ? AND %s = ?`, identityColumn)
+	err = tx.QueryRow(query, eventID, identity).Scan(&registrationID, &ticketID, &userID)
 	if err == sql.ErrNoRows {
 		return model.ErrNotRegistered
 	}
@@ -260,6 +278,25 @@ func (s *Store) cancelRegistration(eventID int64, identityColumn string, identit
 	_, err = tx.Exec(deleteQuery, eventID, identity)
 	if err != nil {
 		return fmt.Errorf("删除报名记录失败: %w", err)
+	}
+
+	if userID.Valid {
+		var eventTitle, eventTime, eventLocation string
+		if err := tx.QueryRow(
+			`SELECT title, event_time, location FROM events WHERE id = ?`, eventID,
+		).Scan(&eventTitle, &eventTime, &eventLocation); err != nil {
+			return fmt.Errorf("查询取消通知活动失败: %w", err)
+		}
+		if _, err := insertNotificationTx(tx, &model.Notification{
+			UserID: userID.Int64, EventID: &eventID,
+			Type: model.NotificationRegistrationCancelled, Title: "报名已取消",
+			Body:           fmt.Sprintf("你已取消活动“%s”的报名。原定时间：%s，地点：%s。", eventTitle, eventTime, eventLocation),
+			ActionURL:      fmt.Sprintf("/events/%d", eventID),
+			IdempotencyKey: fmt.Sprintf("registration-cancelled:%d", registrationID),
+			CreatedAt:      time.Now().UTC(),
+		}); err != nil {
+			return fmt.Errorf("创建取消报名通知失败: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
