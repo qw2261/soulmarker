@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：Verification，G3-R01–R07 已通过远端门禁，G3-R08 已通过本地门禁
+> 状态：Verification，G3-R01–R08 已通过本地和远端门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | f1b7227846cb6aa48e4e234523d77460b588999a |
-| 当前候选 Commit | 待提交与远端验证 |
+| 当前候选 Commit | 48f91a3135b662f46a91acfbed21ffb75ae5e4a5 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -49,7 +49,10 @@
 | [GitHub Actions Run 29379725406](https://github.com/qw2261/soulmarker/actions/runs/29379725406) | DiscussionService 候选 success |
 | [GitHub Actions Run 29380643861](https://github.com/qw2261/soulmarker/actions/runs/29380643861) | HTTP DTO 候选 success |
 | [GitHub Actions Run 29381736629](https://github.com/qw2261/soulmarker/actions/runs/29381736629) | API v1/OpenAPI 候选 success |
+| [GitHub Actions Run 29382749232](https://github.com/qw2261/soulmarker/actions/runs/29382749232) | 稳定业务错误码候选 success |
+| Run 29382749232 backend | format、vet、test、race success |
+| Run 29382749232 frontend | build success |
 
 ## Go/No-Go
 
-No-Go：G3 实现范围已冻结并进入验证；稳定业务错误码候选仍需远端 CI、候选 SHA、Tag 与正式发布证据。
+No-Go：G3-R01–R08 与候选 SHA 已通过本地和远端门禁；仍需 v5.5.0 Tag 与正式发布证据后才能标记 Done。
