@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R01/R04 响应式用户旅程与反馈闭环已通过本地候选门禁，等待提交与远端 CI
+> 状态：In Progress，G4-R01/R04 响应式用户旅程与反馈闭环已通过本地与远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 工作树候选，基于 4eb2080；首次提交后回填完整 SHA |
+| 当前候选 Commit | 72dca57ae167239119f923574595a11624af5eb4 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v8，新增活动 `cover_url`；保留 v7 认证版本/重置 Token 与 v6 admissions/checkins |
 
@@ -60,7 +60,10 @@
 | [GitHub Actions Run 29391643931](https://github.com/qw2261/soulmarker/actions/runs/29391643931) | Commit 4b753ee，免费活动运营闭环候选 success |
 | [backend job 87276252748](https://github.com/qw2261/soulmarker/actions/runs/29391643931/job/87276252748) | format、vet、263 tests、race success |
 | [frontend job 87276252755](https://github.com/qw2261/soulmarker/actions/runs/29391643931/job/87276252755) | Node 22 build、8 unit/component tests、desktop/mobile 完整运营 Playwright success；浏览器证据已上传 |
+| [GitHub Actions Run 29394150565](https://github.com/qw2261/soulmarker/actions/runs/29394150565) | Commit 72dca57，响应式用户旅程与反馈闭环候选 success |
+| [backend job 87283755655](https://github.com/qw2261/soulmarker/actions/runs/29394150565/job/87283755655) | format、vet、265 tests、race、Schema v8 与 OpenAPI 契约 success |
+| [frontend job 87283755644](https://github.com/qw2261/soulmarker/actions/runs/29394150565/job/87283755644) | Node 22 build、10 unit/component tests、4 desktop/mobile Playwright cases success；6 张成功截图证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R02、R06、R07、R08 已通过本地和远端候选门禁；R01/R04 及完整讨论/取消用户旅程已本地通过，但尚未绑定候选提交与远端 CI。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、R09 和两场受控测试活动尚未完成。
+No-Go：R01、R02、R04、R06、R07、R08 已通过本地和远端候选门禁，完整讨论/取消用户旅程已闭环。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、R09、两场受控测试活动和 P0/P1 正式清零审计尚未完成。

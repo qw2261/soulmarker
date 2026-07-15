@@ -146,7 +146,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选及运营闭环均已完成远端门禁。响应式用户旅程、Schema v8 活动封面、空/错/弱网反馈和讨论/取消闭环已通过本地桌面与 Pixel 7 候选门禁，等待远端 CI。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05、R09 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选、运营闭环以及响应式用户旅程均已完成远端门禁。Schema v8 活动封面、空/错/弱网反馈和讨论/取消闭环已通过桌面与 Pixel 7。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05、R09 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
