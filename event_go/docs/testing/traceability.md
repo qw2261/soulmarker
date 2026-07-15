@@ -24,7 +24,7 @@
 | G2-R07 | v5.4 | Critical | 每个 SQLite 连接启用外键，启动检查孤儿；删除语义有 ADR 和测试 | Store、ADR-001 | DB-FK-001 | — | v5.4 test-report | Local Pass |
 | G2-R08 | v5.4 | High | 真实文件空库、旧库、重复、失败和备份恢复通过 | migration_test.go | MIG-LEGACY-001 | — | v5.4 test-report | Local Pass |
 | G2-R09 | v5.4 | Critical | 并发报名不超容量、库存不为负、重复取消只退一次 | Store mutex + transaction | CONC-REG-001 | — | v5.4 test-report | Local Pass |
-| G3-R01 | v5.5 | High | Config 仅在启动入口加载校验，Handler 与中间件使用同一注入实例 | main、Handler、Router、Middleware | ARCH-CONFIG-001 | — | v5.5 test-report | Local Pass |
-| G3-R02 | v5.5 | High | NewStore 初始化失败返回 error，不 panic 或退出进程 | internal/store/store.go | ARCH-STORE-001 | — | v5.5 test-report | Local Pass |
+| G3-R01 | v5.5 | High | Config 仅在启动入口加载校验，Handler 与中间件使用同一注入实例 | main、Handler、Router、Middleware | ARCH-CONFIG-001 | — | v5.5 test-report | Remote Pass |
+| G3-R02 | v5.5 | High | NewStore 初始化失败返回 error，不 panic 或退出进程 | internal/store/store.go | ARCH-STORE-001 | — | v5.5 test-report | Remote Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

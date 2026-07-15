@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01/R02 本地门禁已通过，等待候选提交与远端 CI
+> 状态：In Progress，G3-R01/R02 本地与远端门禁已通过
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 基线 Commit | b4e97a8f6b20dfaa85bc3f1cdfea2c2242076a7d |
-| 候选 Commit | 待提交 |
+| 候选 Commit | fb6e0075925ca126086f6872ea3f68740f1ef550 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -31,6 +31,14 @@
 
 本阶段继续不使用 covdata。
 
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [GitHub Actions Run 29378239877](https://github.com/qw2261/soulmarker/actions/runs/29378239877) | success |
+| backend：format、vet、test、race | success |
+| frontend：build | success |
+
 ## Go/No-Go
 
-No-Go：G3 尚有 R03–R08；本切片还需候选提交与远端 CI 证据。
+No-Go：G3 尚有 R03–R08；R01/R02 已完成本地与远端验证。
