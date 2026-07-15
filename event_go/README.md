@@ -157,7 +157,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 48 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程和内容治理均已完成远端门禁。Schema v10 恢复邮箱候选已在本地通过：历史 phone-only 用户可在保留原登录标识的前提下绑定已验证邮箱，确认后撤销旧会话和旧重置令牌。G4-R03 仍需真实 staging SMTP，G4-R05 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 48 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程、内容治理和 Schema v10 恢复邮箱代码侧均已完成远端门禁。历史 phone-only 用户可在保留原登录标识的前提下绑定已验证邮箱，确认后撤销旧会话和旧重置令牌。G4-R03 仅剩真实 staging SMTP 验收，G4-R05 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 

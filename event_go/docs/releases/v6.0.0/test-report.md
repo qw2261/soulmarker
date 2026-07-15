@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R03 恢复邮箱绑定已通过本地候选门禁，等待远端 CI 证据
+> 状态：In Progress，G4-R03 恢复邮箱绑定已通过本地与远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 工作树候选，待功能提交 |
+| 当前候选 Commit | 5880d132a0cea616c2aeb22e92ec44c575595c58 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v10，新增恢复邮箱、验证时间和一次性验证令牌；保留 v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
 
@@ -69,7 +69,10 @@
 | [GitHub Actions Run 29424593002](https://github.com/qw2261/soulmarker/actions/runs/29424593002) | Commit 270d64d，内容治理闭环候选 success |
 | [backend job 87383598780](https://github.com/qw2261/soulmarker/actions/runs/29424593002/job/87383598780) | format、vet、271 tests、race、Schema v9、DTO/错误码/OpenAPI/路由契约 success |
 | [frontend job 87383598785](https://github.com/qw2261/soulmarker/actions/runs/29424593002/job/87383598785) | Node 22 build、10 unit/component tests、4 desktop/mobile Playwright cases success；8 张成功截图证据已上传 |
+| [GitHub Actions Run 29428887570](https://github.com/qw2261/soulmarker/actions/runs/29428887570) | Commit 5880d13，历史账户恢复邮箱候选 success |
+| [backend job 87398406467](https://github.com/qw2261/soulmarker/actions/runs/29428887570/job/87398406467) | format、vet、277 tests、race、Schema v10、恢复身份与 API 契约 success |
+| [frontend job 87398406297](https://github.com/qw2261/soulmarker/actions/runs/29428887570/job/87398406297) | Node 22 build、13 unit/component tests、4 desktop/mobile Playwright cases success；浏览器证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过本地候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。
+No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过远端候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。

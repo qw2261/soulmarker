@@ -300,7 +300,7 @@ G4-R03 恢复邮箱候选验收：
 - [x] 邮箱确认后事务更新恢复邮箱、撤销全部旧 JWT、旧密码重置令牌和其他待验证令牌；未验证的 phone-only 恢复邮箱不能接收密码重置邮件。
 - [x] 新增账户安全页、验证结果页和桌面/Pixel 7 响应式回归；新注册邮箱明确显示为“待验证”，不把格式校验误当所有权验证。
 - [x] 本地候选通过 277 个 Go 顶层测试、race、vet、13 个 Vue 测试、4 个 Playwright 用例、OpenAPI/DTO/错误码/路由契约和生产构建；不使用 covdata。
-- [ ] 候选提交与远端 CI Run 证据绑定后，关闭恢复邮箱代码侧候选；G4-R03 仍等待真实 staging SMTP 验收。
+- [x] 候选提交 5880d13 与远端 CI Run 29428887570 证据绑定，恢复邮箱代码侧候选关闭；G4-R03 仍等待真实 staging SMTP 验收。
 
 G4-R01 / G4-R04 当前拆分验收：
 
@@ -741,7 +741,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 恢复邮箱代码侧本地候选通过、仍待真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 恢复邮箱代码侧已通过远端门禁、仅待真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
