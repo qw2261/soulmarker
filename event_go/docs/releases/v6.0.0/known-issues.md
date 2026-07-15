@@ -1,6 +1,6 @@
 # v6.0.0 Known Issues
 
-> 缺陷等级、Owner 与最晚关闭阶段统一维护在 [缺陷台账](../../testing/defect-register.md)。当前没有已知开放 P0/P1；`GO-2025-3553` 修复等待远端候选门禁。
+> 缺陷等级、Owner 与最晚关闭阶段统一维护在 [缺陷台账](../../testing/defect-register.md)。JWT 与 Go 标准库 P1 修复等待远端候选门禁。
 
 - 当前运营核销使用全局 Admin Token；租户角色、核销员身份和完整 actor 审计归 G5。
 - 当前页面支持扫码枪或粘贴凭证，尚未集成移动浏览器摄像头扫码。

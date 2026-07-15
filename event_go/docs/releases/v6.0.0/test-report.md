@@ -1,6 +1,6 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，JWT `GO-2025-3553` 修复与 P0/P1 清零审计为本地候选
+> 状态：In Progress，JWT 与 Go 标准库漏洞修复、P0/P1 清零审计为本地候选
 
 ## 版本身份
 
@@ -31,6 +31,7 @@
 | G4-R05 | DOM-NOTIFICATION-001、MIG-NOTIFICATION-001、IT-NOTIFICATION-001、SEC-NOTIFICATION-001、SCHED-NOTIFICATION-001、CT-API-NOTIFICATION-001、FE-NOTIFICATION-001 | 报名/取消/活动变更事务通知；v10→v11 和空库/重复迁移；用户隔离、未读状态、活动删除保留；提醒幂等和时间变更；DTO/错误码/OpenAPI/路由契约；通知中心与未读徽标 |
 | G4-R05 browser | E2E-NOTIFICATION-001 | desktop-chromium 与 Pixel 7：报名和取消后通知中心显示对应标题、活动正文、无横向溢出并可全部标为已读 |
 | BUG-G4-004 | REG-BUG-G4-001、SEC-GOVULN-001 | delimiter-flood JWT 必须拒绝；`jwt/v5.2.2` 修复 `GO-2025-3553`；CI pinned `govulncheck@v1.6.0` 阻断可达 Go 漏洞 |
+| BUG-G4-005 | SEC-GO-TOOLCHAIN-001、SEC-GOVULN-001 | 首次 Run `29433701071` 因 Go `1.25.0` 标准库可达漏洞正确失败；工具链提升到 Go `1.25.12` 后必须通过同一扫描与全量门禁 |
 
 ## 当前本地结果
 
@@ -42,7 +43,7 @@
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
-| govulncheck@v1.6.0 | 修复前发现 1 个可达漏洞 `GO-2025-3553`；升级 `jwt/v5.2.2` 后 0 个可达漏洞 |
+| govulncheck@v1.6.0 | 修复前发现 JWT `GO-2025-3553`；首次远端候选进一步发现 Go `1.25.0` 标准库漏洞；`jwt/v5.2.2` + Go `1.25.12` 本地扫描为 0 个可达漏洞 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
 | npm run build | 通过；主 JS 544.28 KB / 190.74 KB gzip；存在大于 500 KB 的 chunk 提示，通知页本身保持路由懒加载 |
 | npm audit --omit=dev | 0 vulnerabilities |
@@ -82,4 +83,4 @@
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R05、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 仍缺真实 staging SMTP 验收，两场受控活动尚未执行。P0/P1 台账已建立，`GO-2025-3553` 已本地修复但仍需候选远端 CI 后正式清零。
+No-Go：R01、R02、R04、R05、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 仍缺真实 staging SMTP 验收，两场受控活动尚未执行。P0/P1 台账已建立，JWT 与 Go 标准库漏洞已本地修复但仍需候选远端 CI 后正式清零。
