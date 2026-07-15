@@ -103,6 +103,15 @@ User (用户) — 注册/登录获得 JWT
 | price          | float64 | 活动基础价格                                   |
 | status         | string  | 状态：draft / published / cancelled / ended |
 
+### User Recovery Identity — 用户恢复身份
+
+| 字段/实体 | 说明 |
+|---|---|
+| `users.contact` | 登录标识；历史手机号账户绑定邮箱后仍保留原手机号登录 |
+| `users.recovery_email` | 独立密码恢复邮箱；phone-only 账户只有验证成功后才可用于重置 |
+| `users.recovery_email_verified_at` | 邮箱所有权确认时间；新注册邮箱在确认前显示“待验证” |
+| `recovery_email_tokens` | 只保存一次性验证 Token 的 SHA-256 摘要、目标邮箱、过期和消费状态 |
+
 ### Ticket — 门票
 
 | 字段        | 类型      | 说明                 |
@@ -148,7 +157,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 46 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选、运营闭环、响应式用户旅程和 Schema v9 内容治理均已完成远端门禁。桌面与 Pixel 7 已通过举报、移除、驳回、恢复和动作审计旅程，G4-R09 正式关闭。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 48 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、运营闭环、响应式用户旅程和内容治理均已完成远端门禁。Schema v10 恢复邮箱候选已在本地通过：历史 phone-only 用户可在保留原登录标识的前提下绑定已验证邮箱，确认后撤销旧会话和旧重置令牌。G4-R03 仍需真实 staging SMTP，G4-R05 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -158,9 +167,11 @@ POST   /api/v1/auth/login                               用户登录（返回 JW
 POST   /api/v1/auth/logout                              退出并撤销该用户全部现有 JWT
 POST   /api/v1/auth/password-reset/request              请求一次性密码重置链接
 POST   /api/v1/auth/password-reset/confirm              使用一次性 Token 重置密码
+POST   /api/v1/auth/recovery-email/confirm              确认恢复邮箱并撤销旧会话
 GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
+POST   /api/v1/me/recovery-email/request                校验当前密码并发送恢复邮箱验证链接
 GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
 GET    /api/v1/admin/content-reports                    举报队列（状态/内容类型筛选）🔐
 PUT    /api/v1/admin/content-reports/{reportId}         移除内容并处理或驳回举报 🔐
@@ -235,7 +246,7 @@ GET    /health                                        健康检查
 | 类别 | `error_code` |
 |---|---|
 | 请求边界 | `VALIDATION_ERROR`、`INVALID_JSON`、`REQUEST_TOO_LARGE`、`API_ROUTE_NOT_FOUND`、`METHOD_NOT_ALLOWED` |
-| 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS`、`PASSWORD_RESET_TOKEN_INVALID` |
+| 认证 | `USER_AUTH_REQUIRED`、`USER_TOKEN_INVALID`、`ADMIN_AUTH_INVALID`、`INVALID_CREDENTIALS`、`USER_ALREADY_EXISTS`、`PASSWORD_RESET_TOKEN_INVALID`、`RECOVERY_EMAIL_IN_USE`、`RECOVERY_EMAIL_ALREADY_BOUND`、`RECOVERY_EMAIL_TOKEN_INVALID`、`RECOVERY_EMAIL_RATE_LIMITED` |
 | 资源 | `EVENT_NOT_FOUND`、`ORGANIZER_NOT_FOUND`、`TICKET_NOT_FOUND`、`POST_NOT_FOUND` |
 | 报名与讨论 | `EVENT_NOT_PUBLISHED`、`REGISTRATION_DUPLICATE`、`EVENT_CAPACITY_FULL`、`TICKET_SOLD_OUT`、`REGISTRATION_NOT_FOUND`、`CANCELLATION_DEADLINE_EXCEEDED`、`PARTICIPATION_REQUIRED` |
 | 入场与核销 | `ADMISSION_NOT_FOUND`、`ADMISSION_REVOKED`、`ADMISSION_ALREADY_CHECKED_IN`、`EVENT_HAS_ADMISSIONS` |
@@ -254,12 +265,13 @@ GET    /health                                        健康检查
 登录 (POST /api/v1/auth/login) → contact + password → 返回带 auth_version 的 JWT Token
 退出 (POST /api/v1/auth/logout) → 服务端递增 auth_version，撤销该用户全部旧 JWT
 忘记密码 → 申请 30 分钟一次性链接 → 设置新密码 → 撤销全部旧 JWT
+历史手机号账户 → 保留手机号登录 → 当前密码确认 → 邮箱链接确认 → 启用恢复邮箱并撤销旧会话
 
 JWT 有效期 7 天（可配置），前端 localStorage 持久化
 报名、发帖、回复、取消和“我的活动”均从 JWT user_id 加载持久化用户，不接受联系方式授权
 ```
 
-新注册仅接受邮箱；历史 contact 登录保持兼容。密码重置 Token 使用 256 位随机数，数据库只保存 SHA-256 摘要；新申请会替代旧 Token，同一用户一分钟内只接受一次申请。已知和未知账户均返回相同 202 响应。
+新注册仅接受邮箱，但格式合法不等于邮箱所有权已验证，账户安全页会明确显示“待验证”。历史 contact 登录保持兼容；恢复邮箱绑定不会覆盖手机号。密码重置和恢复邮箱验证 Token 均使用 256 位随机数，数据库只保存 SHA-256 摘要；新申请会替代旧 Token，同一用户一分钟内只接受一次申请。密码重置对已知和未知邮箱均返回相同 202 响应。
 
 免费报名成功时会同时生成 Admission。用户二维码内容为 `soulmark:admission:<32位随机码>`；运营端首次核销返回 201，重复核销返回原 Checkin 且 `already_checked_in=true`，不会新增记录。
 
@@ -320,6 +332,8 @@ event_go/
 │   │   └── clock.go             # 可注入业务时钟
 │   ├── config/
 │   │   └── config.go            # 配置管理：环境变量统一加载
+│   ├── emailaddr/
+│   │   └── email.go             # 裸邮箱地址的严格规范化与大小写收口
 │   ├── handler/
 │   │   ├── dto/                 # HTTP 请求/响应 DTO、实体映射与 JSON 契约测试
 │   │   ├── handler.go           # 基础设施：Handler 结构体, parseID, paginatedOK, getEventOr404 等
@@ -450,6 +464,7 @@ main.go
 | 用户活动分页 | 单一 SQL 投影合并 Admission 与无凭证 Registration，统一排序、去重和精确计数 |
 | 会话撤销 | JWT 携带 auth_version；退出和密码重置递增数据库版本，旧 JWT 随即失效 |
 | 密码重置 | 256 位一次性 Token、SHA-256 摘要存储、30 分钟默认过期、替代和消费均不可复用 |
+| 恢复邮箱绑定 | 当前密码 + 邮箱链接双重确认；确认事务撤销旧 JWT、旧重置 Token 和其他验证 Token，原登录 contact 不变 |
 | 内容治理 | Post/Reply 使用 `visible/removed` 软删除；举报处理与动作审计在事务内写入，公开查询只返回 visible 内容 |
 
 ### 自动化测试
@@ -457,7 +472,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **271** 个顶层 Go 测试、10 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
+| 测试用例 | **277** 个顶层 Go 测试、13 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
@@ -475,7 +490,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=9`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器；Schema v8 为活动增加可空语义的 `cover_url` 默认空字符串列；Schema v9 为帖子/回复增加治理元数据，并新增 `content_reports`、`content_moderation_actions`、幂等唯一索引和队列查询索引。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=10`。Schema v7 新增认证版本和密码重置 Token；Schema v8 新增活动封面；Schema v9 新增帖子/回复治理元数据、举报与动作审计；Schema v10 新增独立恢复邮箱、验证时间和一次性验证 Token，并只对规范化后唯一的历史合法邮箱 contact 做兼容回填，phone-only 和大小写碰撞账户保持未绑定。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -567,7 +582,9 @@ event_go/
 | `/register` | 用户注册 | name + email + password（8–72 字节） |
 | `/forgot-password` | 忘记密码 | 申请一次性密码重置链接，未知账户返回相同结果 |
 | `/reset-password?token=...` | 重置密码 | 消费一次性 Token 并撤销旧会话 |
+| `/verify-recovery-email?token=...` | 验证恢复邮箱 | 消费一次性 Token，绑定邮箱并撤销旧会话 |
 | `/me/registrations` | 我的活动 | 基于统一活动时间线展示待参加、已结束、已取消、已入场和 Admission 二维码 |
+| `/me/security` | 账户安全 | 查看登录标识、恢复邮箱状态并用当前密码申请验证 |
 | `/admin` | 管理登录 | 通过服务端 `/admin/session` 验证 X-Admin-Token |
 | `/admin/organizers` | 门店管理 | 门店列表、创建、编辑和保留历史活动的安全删除 |
 | `/admin/organizers/new`、`/:id/edit` | 门店表单 | 维护名称、联系方式、地址、官网、Logo 和标签 |
@@ -593,13 +610,14 @@ event_go/
 | `JWT_EXPIRE_HOURS` | `168`（7 天） | JWT 有效期 |
 | `CORS_ORIGIN` | `*` | 允许的跨域来源 |
 | `CANCEL_DEADLINE_HOURS` | `24` | 取消报名截止小时数 |
-| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置链接的公开站点地址；生产必须为 HTTPS |
+| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置与恢复邮箱验证链接的公开站点地址；生产必须为 HTTPS |
 | `PASSWORD_RESET_TTL_MINUTES` | `30` | 密码重置 Token 有效分钟数，允许 1–1440 |
+| `RECOVERY_EMAIL_TTL_MINUTES` | `30` | 恢复邮箱验证 Token 有效分钟数，允许 1–1440 |
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
-| `SMTP_FROM` | 空 | 密码重置邮件发件人 |
+| `SMTP_FROM` | 空 | 密码重置与恢复邮箱验证邮件发件人 |
 
-staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 `PASSWORD_RESET_TTL_MINUTES` 会拒绝启动。development 未配置 SMTP 时只把重置链接写入服务日志，不发送邮件。
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 `PASSWORD_RESET_TTL_MINUTES` 或 `RECOVERY_EMAIL_TTL_MINUTES` 会拒绝启动。development 未配置 SMTP 时只把密码重置/邮箱验证链接写入服务日志，不发送邮件。
 
 ### 环境准备
 

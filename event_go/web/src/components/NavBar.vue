@@ -7,6 +7,7 @@
     <div class="navbar-right">
       <template v-if="user.isLoggedIn">
         <router-link to="/me/registrations">我的活动</router-link>
+        <router-link to="/me/security">账户安全</router-link>
         <span class="user-name">{{ user.user?.name }}</span>
         <el-button text @click="logoutUser">退出</el-button>
       </template>
@@ -35,6 +36,7 @@
         <router-link to="/organizers" @click="mobileMenuOpen = false">门店</router-link>
         <template v-if="user.isLoggedIn">
           <router-link to="/me/registrations" @click="mobileMenuOpen = false">我的活动</router-link>
+          <router-link to="/me/security" @click="mobileMenuOpen = false">账户安全</router-link>
           <span class="mobile-user">{{ user.user?.name }}</span>
           <el-button text @click="logoutUser">退出登录</el-button>
         </template>

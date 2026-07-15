@@ -5,12 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/mail"
 	"strings"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/emailaddr"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
@@ -30,8 +30,8 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "密码必须为 8 到 72 个字节")
 		return
 	}
-	parsedContact, err := mail.ParseAddress(strings.TrimSpace(req.Contact))
-	if err != nil || !strings.EqualFold(parsedContact.Address, strings.TrimSpace(req.Contact)) {
+	normalizedEmail, valid := emailaddr.Normalize(req.Contact)
+	if !valid {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "请使用有效邮箱注册")
 		return
 	}
@@ -43,9 +43,10 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := &model.User{
-		Name:         req.Name,
-		Contact:      strings.ToLower(parsedContact.Address),
-		PasswordHash: string(hash),
+		Name:          req.Name,
+		Contact:       normalizedEmail,
+		RecoveryEmail: normalizedEmail,
+		PasswordHash:  string(hash),
 	}
 	if err := h.store.CreateUser(u); err != nil {
 		if errors.Is(err, model.ErrUserExists) {
@@ -65,6 +66,62 @@ func (h *Handler) RegisterUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, dto.Response{
 		Code: 201, Message: "注册成功",
 		Data: dto.LoginResponse{Token: token, User: dto.User(u)},
+	})
+}
+
+func (h *Handler) RequestRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+	user, authenticated := h.requireUser(w, r)
+	if !authenticated {
+		return
+	}
+	var req dto.RecoveryEmailRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Email) == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "恢复邮箱和当前密码不能为空")
+		return
+	}
+	if err := h.authentication.RequestRecoveryEmail(r.Context(), user, req.Email, req.Password); err != nil {
+		switch {
+		case errors.Is(err, service.ErrRecoveryEmailFormatInvalid):
+			writeError(w, http.StatusBadRequest, api.CodeValidationError, err.Error())
+		case errors.Is(err, model.ErrInvalidCreds):
+			writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, "当前密码错误")
+		case errors.Is(err, model.ErrRecoveryEmailInUse):
+			writeError(w, http.StatusConflict, api.CodeRecoveryEmailInUse, "")
+		case errors.Is(err, model.ErrRecoveryEmailBound):
+			writeError(w, http.StatusConflict, api.CodeRecoveryEmailAlreadyBound, "")
+		case errors.Is(err, model.ErrRecoveryEmailRateLimit):
+			writeError(w, http.StatusTooManyRequests, api.CodeRecoveryEmailRateLimited, "")
+		default:
+			writeInternalError(w, "request_recovery_email", err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dto.Response{
+		Code: http.StatusAccepted, Message: "验证邮件已发送，请在有效期内完成绑定",
+	})
+}
+
+func (h *Handler) ConfirmRecoveryEmail(w http.ResponseWriter, r *http.Request) {
+	var req dto.RecoveryEmailConfirmRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.authentication.ConfirmRecoveryEmail(req.Token); err != nil {
+		switch {
+		case errors.Is(err, model.ErrRecoveryEmailInvalid):
+			writeError(w, http.StatusBadRequest, api.CodeRecoveryEmailTokenInvalid, "")
+		case errors.Is(err, model.ErrRecoveryEmailInUse):
+			writeError(w, http.StatusConflict, api.CodeRecoveryEmailInUse, "")
+		default:
+			writeInternalError(w, "confirm_recovery_email", err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.Response{
+		Code: http.StatusOK, Message: "恢复邮箱已绑定，旧会话已失效，请重新登录",
 	})
 }
 

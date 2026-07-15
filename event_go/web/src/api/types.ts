@@ -263,6 +263,8 @@ export interface User {
   id: number
   name: string
   contact: string
+  recovery_email?: string
+  recovery_email_verified_at?: string
   created_at: string
 }
 

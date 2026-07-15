@@ -41,12 +41,14 @@ func TestResponseEnvelopeContract(t *testing.T) {
 }
 
 func TestUserAndLoginResponseDoNotExposePassword(t *testing.T) {
+	verifiedAt := time.Date(2030, 1, 1, 3, 4, 5, 0, time.UTC)
 	user := &model.User{
-		ID: 1, Name: "用户", Contact: "user@example.com", PasswordHash: "secret",
+		ID: 1, Name: "用户", Contact: "user@example.com", RecoveryEmail: "user@example.com",
+		RecoveryEmailVerifiedAt: &verifiedAt, PasswordHash: "secret",
 		CreatedAt: time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
 	userResponse := User(user)
-	assertJSONKeys(t, userResponse, "id", "name", "contact", "created_at")
+	assertJSONKeys(t, userResponse, "id", "name", "contact", "recovery_email", "recovery_email_verified_at", "created_at")
 	login := assertJSONKeys(t, LoginResponse{Token: "token", User: userResponse}, "token", "user")
 	userJSON := login["user"].(map[string]interface{})
 	if _, exists := userJSON["password_hash"]; exists {

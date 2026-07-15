@@ -21,6 +21,15 @@ export interface PasswordResetConfirmRequest {
   password: string
 }
 
+export interface RecoveryEmailRequest {
+  email: string
+  password: string
+}
+
+export interface RecoveryEmailConfirmRequest {
+  token: string
+}
+
 export function registerUser(data: RegisterUserReq) {
   return post<LoginResp>('/auth/register', data)
 }
@@ -39,4 +48,12 @@ export function requestPasswordReset(data: PasswordResetRequest) {
 
 export function confirmPasswordReset(data: PasswordResetConfirmRequest) {
   return post('/auth/password-reset/confirm', data)
+}
+
+export function requestRecoveryEmail(data: RecoveryEmailRequest) {
+  return post('/me/recovery-email/request', data)
+}
+
+export function confirmRecoveryEmail(data: RecoveryEmailConfirmRequest) {
+  return post('/auth/recovery-email/confirm', data)
 }

@@ -15,6 +15,15 @@ type PasswordResetSender interface {
 	SendPasswordReset(ctx context.Context, contact, resetURL string, expiresAt time.Time) error
 }
 
+type RecoveryEmailVerificationSender interface {
+	SendRecoveryEmailVerification(ctx context.Context, email, verificationURL string, expiresAt time.Time) error
+}
+
+type AuthenticationEmailSender interface {
+	PasswordResetSender
+	RecoveryEmailVerificationSender
+}
+
 type SMTPPasswordResetSender struct {
 	host     string
 	port     string
@@ -55,6 +64,34 @@ func (s *SMTPPasswordResetSender) SendPasswordReset(_ context.Context, contact, 
 	return nil
 }
 
+func (s *SMTPPasswordResetSender) SendRecoveryEmailVerification(_ context.Context, email, verificationURL string, expiresAt time.Time) error {
+	recipient, err := mail.ParseAddress(strings.TrimSpace(email))
+	if err != nil || !strings.EqualFold(recipient.Address, strings.TrimSpace(email)) {
+		return fmt.Errorf("recovery email is not a valid email address")
+	}
+	from, err := mail.ParseAddress(s.from)
+	if err != nil {
+		return fmt.Errorf("parse recovery email sender: %w", err)
+	}
+	message := strings.Join([]string{
+		"From: " + from.String(),
+		"To: " + recipient.String(),
+		"Subject: Soulmark recovery email verification",
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=UTF-8",
+		"",
+		"Use this link to verify your recovery email:",
+		verificationURL,
+		"",
+		"This link expires at " + expiresAt.UTC().Format(time.RFC3339) + ".",
+	}, "\r\n")
+	auth := smtp.PlainAuth("", s.username, s.password, s.host)
+	if err := smtp.SendMail(net.JoinHostPort(s.host, s.port), auth, from.Address, []string{recipient.Address}, []byte(message)); err != nil {
+		return fmt.Errorf("send recovery email verification: %w", err)
+	}
+	return nil
+}
+
 type LogPasswordResetSender struct{}
 
 func (LogPasswordResetSender) SendPasswordReset(_ context.Context, contact, resetURL string, expiresAt time.Time) error {
@@ -62,8 +99,17 @@ func (LogPasswordResetSender) SendPasswordReset(_ context.Context, contact, rese
 	return nil
 }
 
+func (LogPasswordResetSender) SendRecoveryEmailVerification(_ context.Context, email, verificationURL string, expiresAt time.Time) error {
+	slog.Warn("development recovery email verification link", "email", email, "verification_url", verificationURL, "expires_at", expiresAt)
+	return nil
+}
+
 type DiscardPasswordResetSender struct{}
 
 func (DiscardPasswordResetSender) SendPasswordReset(context.Context, string, string, time.Time) error {
+	return nil
+}
+
+func (DiscardPasswordResetSender) SendRecoveryEmailVerification(context.Context, string, string, time.Time) error {
 	return nil
 }

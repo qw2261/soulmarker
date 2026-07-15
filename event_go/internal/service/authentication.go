@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
+	"github.com/qw2261/soulmarker/event_go/internal/emailaddr"
 	"github.com/qw2261/soulmarker/event_go/internal/identifier"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/notification"
@@ -21,33 +22,42 @@ const (
 	MaxPasswordLength = 72
 )
 
+var ErrRecoveryEmailFormatInvalid = fmt.Errorf("恢复邮箱格式无效")
+
 type AuthenticationRepository interface {
 	GetUserByContact(contact string) (*model.User, error)
+	GetUserByRecoveryEmail(email string) (*model.User, error)
 	CreatePasswordResetToken(userID int64, tokenHash string, createdAt, expiresAt time.Time) error
 	ResetPassword(tokenHash, passwordHash string, resetAt time.Time) error
 	RevokeUserSessions(userID int64, revokedAt time.Time) error
+	CreateRecoveryEmailToken(userID int64, email, tokenHash string, createdAt, expiresAt time.Time) error
+	InvalidateRecoveryEmailTokens(userID int64, invalidatedAt time.Time) error
+	ConfirmRecoveryEmail(tokenHash string, confirmedAt time.Time) error
 }
 
 type AuthenticationService struct {
-	repository AuthenticationRepository
-	clock      clock.Clock
-	tokens     identifier.ResetTokenGenerator
-	sender     notification.PasswordResetSender
-	baseURL    string
-	ttl        time.Duration
+	repository       AuthenticationRepository
+	clock            clock.Clock
+	tokens           identifier.ResetTokenGenerator
+	sender           notification.AuthenticationEmailSender
+	baseURL          string
+	resetTTL         time.Duration
+	recoveryEmailTTL time.Duration
 }
 
 func NewAuthenticationService(
 	repository AuthenticationRepository,
 	businessClock clock.Clock,
 	tokens identifier.ResetTokenGenerator,
-	sender notification.PasswordResetSender,
+	sender notification.AuthenticationEmailSender,
 	baseURL string,
-	ttl time.Duration,
+	resetTTL time.Duration,
+	recoveryEmailTTL time.Duration,
 ) *AuthenticationService {
 	return &AuthenticationService{
 		repository: repository, clock: businessClock, tokens: tokens,
-		sender: sender, baseURL: strings.TrimRight(baseURL, "/"), ttl: ttl,
+		sender: sender, baseURL: strings.TrimRight(baseURL, "/"),
+		resetTTL: resetTTL, recoveryEmailTTL: recoveryEmailTTL,
 	}
 }
 
@@ -66,7 +76,11 @@ func (s *AuthenticationService) RequestPasswordReset(ctx context.Context, contac
 	if err != nil {
 		return err
 	}
-	user, err := s.repository.GetUserByContact(strings.TrimSpace(contact))
+	email, valid := emailaddr.Normalize(contact)
+	if !valid {
+		return nil
+	}
+	user, err := s.repository.GetUserByRecoveryEmail(email)
 	if err != nil {
 		return fmt.Errorf("load password reset user: %w", err)
 	}
@@ -74,7 +88,7 @@ func (s *AuthenticationService) RequestPasswordReset(ctx context.Context, contac
 		return nil
 	}
 	now := s.clock.Now().UTC()
-	expiresAt := now.Add(s.ttl)
+	expiresAt := now.Add(s.resetTTL)
 	if err := s.repository.CreatePasswordResetToken(user.ID, resetTokenHash(rawToken), now, expiresAt); err != nil {
 		return err
 	}
@@ -85,10 +99,55 @@ func (s *AuthenticationService) RequestPasswordReset(ctx context.Context, contac
 	query := resetURL.Query()
 	query.Set("token", rawToken)
 	resetURL.RawQuery = query.Encode()
-	if err := s.sender.SendPasswordReset(ctx, user.Contact, resetURL.String(), expiresAt); err != nil {
+	if err := s.sender.SendPasswordReset(ctx, user.RecoveryEmail, resetURL.String(), expiresAt); err != nil {
 		return fmt.Errorf("deliver password reset: %w", err)
 	}
 	return nil
+}
+
+func (s *AuthenticationService) RequestRecoveryEmail(ctx context.Context, user *model.User, email, password string) error {
+	normalizedEmail, valid := emailaddr.Normalize(email)
+	if !valid {
+		return ErrRecoveryEmailFormatInvalid
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return model.ErrInvalidCreds
+	}
+	if user.RecoveryEmailVerifiedAt != nil && user.RecoveryEmail == normalizedEmail {
+		return model.ErrRecoveryEmailBound
+	}
+	rawToken, err := s.tokens.NewResetToken()
+	if err != nil {
+		return err
+	}
+	now := s.clock.Now().UTC()
+	expiresAt := now.Add(s.recoveryEmailTTL)
+	if err := s.repository.CreateRecoveryEmailToken(
+		user.ID, normalizedEmail, resetTokenHash(rawToken), now, expiresAt,
+	); err != nil {
+		return err
+	}
+	verificationURL, err := url.Parse(s.baseURL + "/verify-recovery-email")
+	if err != nil {
+		return fmt.Errorf("build recovery email verification URL: %w", err)
+	}
+	query := verificationURL.Query()
+	query.Set("token", rawToken)
+	verificationURL.RawQuery = query.Encode()
+	if err := s.sender.SendRecoveryEmailVerification(ctx, normalizedEmail, verificationURL.String(), expiresAt); err != nil {
+		if invalidateErr := s.repository.InvalidateRecoveryEmailTokens(user.ID, now); invalidateErr != nil {
+			return fmt.Errorf("deliver recovery email verification: %w; invalidate token: %v", err, invalidateErr)
+		}
+		return fmt.Errorf("deliver recovery email verification: %w", err)
+	}
+	return nil
+}
+
+func (s *AuthenticationService) ConfirmRecoveryEmail(rawToken string) error {
+	if strings.TrimSpace(rawToken) == "" {
+		return model.ErrRecoveryEmailInvalid
+	}
+	return s.repository.ConfirmRecoveryEmail(resetTokenHash(rawToken), s.clock.Now())
 }
 
 func (s *AuthenticationService) ResetPassword(rawToken, password string) error {

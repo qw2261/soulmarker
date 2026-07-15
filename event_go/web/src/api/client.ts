@@ -9,7 +9,12 @@ const publicAuthPaths = new Set([
   '/auth/login',
   '/auth/password-reset/request',
   '/auth/password-reset/confirm',
+  '/auth/recovery-email/confirm',
 ])
+
+export function isPublicAuthPath(url: string) {
+  return publicAuthPaths.has(url)
+}
 
 const client = axios.create({
   baseURL: '/api/v1',
@@ -21,7 +26,7 @@ const client = axios.create({
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('user_token')
-  if (token && !publicAuthPaths.has(config.url || '')) {
+  if (token && !isPublicAuthPath(config.url || '')) {
     config.headers.Authorization = `Bearer ${token}`
     ;(config as typeof config & { soulmarkUserToken?: string }).soulmarkUserToken = token
   }

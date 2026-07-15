@@ -64,6 +64,8 @@ type AuthenticationService interface {
 	RequestPasswordReset(ctx context.Context, contact string) error
 	ResetPassword(token, password string) error
 	Logout(userID int64) error
+	RequestRecoveryEmail(ctx context.Context, user *model.User, email, password string) error
+	ConfirmRecoveryEmail(token string) error
 }
 
 type ContentModerationService interface {

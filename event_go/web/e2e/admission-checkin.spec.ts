@@ -109,6 +109,12 @@ test('operator and attendee can complete the free event workflow', async ({ page
   await page.getByPlaceholder('8 到 72 位').fill('e2e-password')
   await page.getByRole('button', { name: '注册' }).click()
   await expect(page).toHaveURL(/\/$/)
+  await page.goto('/me/security')
+  await expect(page.getByRole('heading', { name: '账户安全' })).toBeVisible()
+  await expect(page.getByText(discussionUserEmail, { exact: true })).toBeVisible()
+  await expect(page.getByText('待验证', { exact: true })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.goto('/')
   await expect(page.getByAltText(`${eventTitle}活动封面`)).toBeVisible()
   await expectNoHorizontalOverflow(page)
 

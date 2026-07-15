@@ -15,7 +15,11 @@ func (r UpdateTicketRequest) Command() model.UpdateTicketReq {
 }
 
 func User(user *model.User) UserResponse {
-	return UserResponse{ID: user.ID, Name: user.Name, Contact: user.Contact, CreatedAt: user.CreatedAt}
+	return UserResponse{
+		ID: user.ID, Name: user.Name, Contact: user.Contact,
+		RecoveryEmail: user.RecoveryEmail, RecoveryEmailVerifiedAt: user.RecoveryEmailVerifiedAt,
+		CreatedAt: user.CreatedAt,
+	}
 }
 
 func Organizer(organizer *model.Organizer) OrganizerResponse {

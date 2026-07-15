@@ -4,8 +4,8 @@ import "testing"
 
 func TestErrorCodeCatalog(t *testing.T) {
 	codes := ErrorCodes()
-	if len(codes) != 33 {
-		t.Fatalf("expected 33 stable error codes, got %d", len(codes))
+	if len(codes) != 37 {
+		t.Fatalf("expected 37 stable error codes, got %d", len(codes))
 	}
 	seen := make(map[ErrorCode]bool, len(codes))
 	for _, code := range codes {

@@ -36,6 +36,10 @@ var (
 	ErrEventHasAdmissions     = errors.New("活动已有入场凭证，不能删除")
 	ErrPasswordResetInvalid   = errors.New("密码重置链接无效或已过期")
 	ErrPasswordResetRateLimit = errors.New("密码重置请求过于频繁")
+	ErrRecoveryEmailInUse     = errors.New("该邮箱已绑定其他账户")
+	ErrRecoveryEmailBound     = errors.New("该邮箱已绑定当前账户")
+	ErrRecoveryEmailInvalid   = errors.New("恢复邮箱验证链接无效或已过期")
+	ErrRecoveryEmailRateLimit = errors.New("恢复邮箱验证请求过于频繁")
 	ErrContentReportNotFound  = errors.New("举报记录不存在")
 	ErrContentReportResolved  = errors.New("举报记录已处理")
 	ErrContentTargetNotFound  = errors.New("被举报内容不存在")
@@ -167,12 +171,14 @@ type UpdateEventReq struct {
 }
 
 type User struct {
-	ID           int64     `json:"id"`
-	Name         string    `json:"name"`
-	Contact      string    `json:"contact"`
-	PasswordHash string    `json:"-"`
-	AuthVersion  int       `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                      int64      `json:"id"`
+	Name                    string     `json:"name"`
+	Contact                 string     `json:"contact"`
+	RecoveryEmail           string     `json:"recovery_email"`
+	RecoveryEmailVerifiedAt *time.Time `json:"recovery_email_verified_at,omitempty"`
+	PasswordHash            string     `json:"-"`
+	AuthVersion             int        `json:"-"`
+	CreatedAt               time.Time  `json:"created_at"`
 }
 
 type UserClaims struct {

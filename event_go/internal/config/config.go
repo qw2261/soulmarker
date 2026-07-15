@@ -25,6 +25,7 @@ type Config struct {
 	JWTExpireHours      int
 	PublicBaseURL       string
 	PasswordResetTTLMin int
+	RecoveryEmailTTLMin int
 	SMTPHost            string
 	SMTPPort            string
 	SMTPUsername        string
@@ -48,6 +49,7 @@ func Load() *Config {
 		JWTExpireHours:      getEnvInt("JWT_EXPIRE_HOURS", 168),
 		PublicBaseURL:       getEnv("PUBLIC_BASE_URL", "http://localhost:"+port),
 		PasswordResetTTLMin: getEnvIntStrict("PASSWORD_RESET_TTL_MINUTES", 30),
+		RecoveryEmailTTLMin: getEnvIntStrict("RECOVERY_EMAIL_TTL_MINUTES", 30),
 		SMTPHost:            getEnv("SMTP_HOST", ""),
 		SMTPPort:            getEnv("SMTP_PORT", "587"),
 		SMTPUsername:        getEnv("SMTP_USERNAME", ""),
@@ -62,6 +64,9 @@ func (c *Config) Validate() error {
 	}
 	if c.PasswordResetTTLMin <= 0 || c.PasswordResetTTLMin > 1440 {
 		return fmt.Errorf("PASSWORD_RESET_TTL_MINUTES 必须在 1 到 1440 之间")
+	}
+	if c.RecoveryEmailTTLMin <= 0 || c.RecoveryEmailTTLMin > 1440 {
+		return fmt.Errorf("RECOVERY_EMAIL_TTL_MINUTES 必须在 1 到 1440 之间")
 	}
 	env := strings.ToLower(strings.TrimSpace(c.Environment))
 	switch env {

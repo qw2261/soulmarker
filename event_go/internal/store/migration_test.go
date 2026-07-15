@@ -33,6 +33,9 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "replies", "moderation_status")
 	assertTableExists(t, s.db, "content_reports")
 	assertTableExists(t, s.db, "content_moderation_actions")
+	assertColumnExists(t, s.db, "users", "recovery_email")
+	assertColumnExists(t, s.db, "users", "recovery_email_verified_at")
+	assertTableExists(t, s.db, "recovery_email_tokens")
 }
 
 func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
@@ -56,6 +59,10 @@ func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
 		`CREATE TABLE password_reset_tokens (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))`,
 		`INSERT INTO organizers VALUES (1, '封面迁移门店', '', '', '', '', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO events VALUES (1, 1, '迁移前活动', '', '2099-12-31T18:00:00+08:00', '线上', 10, 0, 'published', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO users VALUES (1, '邮箱用户', 'LegacyUnique@Example.COM', 'hash', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO users VALUES (2, '手机用户', '13800138000', 'hash', '2026-01-02T00:00:00Z')`,
+		`INSERT INTO users VALUES (3, '碰撞用户一', 'Collision@Example.COM', 'hash', '2026-01-03T00:00:00Z')`,
+		`INSERT INTO users VALUES (4, '碰撞用户二', 'collision@example.com', 'hash', '2026-01-04T00:00:00Z')`,
 		`INSERT INTO posts VALUES (1, 1, NULL, '历史作者', 'legacy@example.com', '历史帖子', '历史内容', 'legacy', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO replies VALUES (1, 1, NULL, '历史回复者', 'legacy-reply@example.com', '历史回复', 'legacy', '2026-01-01T00:00:00Z')`,
 	}
@@ -81,6 +88,8 @@ func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
 	assertColumnExists(t, s.db, "replies", "moderation_status")
 	assertTableExists(t, s.db, "content_reports")
 	assertTableExists(t, s.db, "content_moderation_actions")
+	assertColumnExists(t, s.db, "users", "recovery_email")
+	assertTableExists(t, s.db, "recovery_email_tokens")
 	var title, coverURL string
 	if err := s.db.QueryRow(`SELECT title, cover_url FROM events WHERE id = 1`).Scan(&title, &coverURL); err != nil {
 		t.Fatal(err)
@@ -97,6 +106,34 @@ func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
 	}
 	if postStatus != model.ModerationStatusVisible || replyStatus != model.ModerationStatusVisible {
 		t.Fatalf("historical content not visible after migration: post=%q reply=%q", postStatus, replyStatus)
+	}
+	var recoveryEmail string
+	var recoveryVerifiedAt sql.NullString
+	if err := s.db.QueryRow(
+		`SELECT recovery_email, recovery_email_verified_at FROM users WHERE id = 1`,
+	).Scan(&recoveryEmail, &recoveryVerifiedAt); err != nil {
+		t.Fatal(err)
+	}
+	if recoveryEmail != "legacyunique@example.com" || !recoveryVerifiedAt.Valid {
+		t.Fatalf("email account recovery identity not backfilled: email=%q verified=%v", recoveryEmail, recoveryVerifiedAt.Valid)
+	}
+	if err := s.db.QueryRow(
+		`SELECT recovery_email, recovery_email_verified_at FROM users WHERE id = 2`,
+	).Scan(&recoveryEmail, &recoveryVerifiedAt); err != nil {
+		t.Fatal(err)
+	}
+	if recoveryEmail != "" || recoveryVerifiedAt.Valid {
+		t.Fatalf("phone-only account must remain unbound: email=%q verified=%v", recoveryEmail, recoveryVerifiedAt.Valid)
+	}
+	for _, userID := range []int64{3, 4} {
+		if err := s.db.QueryRow(
+			`SELECT recovery_email, recovery_email_verified_at FROM users WHERE id = ?`, userID,
+		).Scan(&recoveryEmail, &recoveryVerifiedAt); err != nil {
+			t.Fatal(err)
+		}
+		if recoveryEmail != "" || recoveryVerifiedAt.Valid {
+			t.Fatalf("case-colliding account %d must remain unbound: email=%q verified=%v", userID, recoveryEmail, recoveryVerifiedAt.Valid)
+		}
 	}
 }
 

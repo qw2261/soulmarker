@@ -28,6 +28,15 @@ type PasswordResetConfirmRequest struct {
 	Password string `json:"password"`
 }
 
+type RecoveryEmailRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type RecoveryEmailConfirmRequest struct {
+	Token string `json:"token"`
+}
+
 type CreateOrganizerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -111,10 +120,12 @@ type ModerateContentRequest struct {
 }
 
 type UserResponse struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Contact   string    `json:"contact"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                      int64      `json:"id"`
+	Name                    string     `json:"name"`
+	Contact                 string     `json:"contact"`
+	RecoveryEmail           string     `json:"recovery_email,omitempty"`
+	RecoveryEmailVerifiedAt *time.Time `json:"recovery_email_verified_at,omitempty"`
+	CreatedAt               time.Time  `json:"created_at"`
 }
 
 type LoginResponse struct {

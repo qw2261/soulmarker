@@ -63,10 +63,10 @@
 
 ### 3.1 已有优势
 
-- 已完成门店、活动、报名、门票、讨论、内容治理、用户认证和管理接口，共 46 个 API 操作。
+- 已完成门店、活动、报名、门票、讨论、内容治理、用户认证和管理接口，共 48 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 271 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 277 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -290,8 +290,17 @@ G4-R03 当前拆分验收：
 - [x] 前端受保护路由、401 过期清理、安全回跳和迟到 401 竞态回归。
 - [x] 256 位一次性密码重置 Token、摘要存储、过期、替代、限流和统一 202 响应。
 - [x] staging/production 对 HTTPS 公开地址、SMTP 和合法 Token TTL 配置 fail-closed。
-- [ ] 为历史 phone-only 账户提供邮箱绑定或人工恢复流程。
+- [x] 为历史 phone-only 账户提供不改变原登录联系方式的恢复邮箱绑定流程。
 - [ ] 在真实 staging SMTP 完成已知账户收件、链接跳转、重置和旧会话撤销验收。
+
+G4-R03 恢复邮箱候选验收：
+
+- [x] Schema v10 新增独立 `recovery_email`、验证时间和一次性验证令牌；仅对规范化后唯一的历史邮箱 contact 兼容回填，phone-only 和大小写碰撞账户保持未绑定。
+- [x] 绑定申请必须同时通过当前 JWT、当前密码和邮箱格式校验；验证令牌使用 256 位随机值、数据库仅存 SHA-256 摘要，并实施过期、替代、单次消费和一分钟限流。
+- [x] 邮箱确认后事务更新恢复邮箱、撤销全部旧 JWT、旧密码重置令牌和其他待验证令牌；未验证的 phone-only 恢复邮箱不能接收密码重置邮件。
+- [x] 新增账户安全页、验证结果页和桌面/Pixel 7 响应式回归；新注册邮箱明确显示为“待验证”，不把格式校验误当所有权验证。
+- [x] 本地候选通过 277 个 Go 顶层测试、race、vet、13 个 Vue 测试、4 个 Playwright 用例、OpenAPI/DTO/错误码/路由契约和生产构建；不使用 covdata。
+- [ ] 候选提交与远端 CI Run 证据绑定后，关闭恢复邮箱代码侧候选；G4-R03 仍等待真实 staging SMTP 验收。
 
 G4-R01 / G4-R04 当前拆分验收：
 
@@ -732,7 +741,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08、R09 已通过远端门禁；R03 恢复邮箱代码侧本地候选通过、仍待真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

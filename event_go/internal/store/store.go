@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qw2261/soulmarker/event_go/internal/emailaddr"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 9
+const CurrentSchemaVersion = 10
 
 type Store struct {
 	db             *sql.DB
@@ -155,7 +156,82 @@ func migrations() []migration {
 		{version: 7, name: "authentication_session_and_password_reset", apply: migrateAuthenticationSessionAndPasswordReset},
 		{version: 8, name: "event_cover_url", apply: migrateEventCoverURL},
 		{version: 9, name: "content_moderation", apply: migrateContentModeration},
+		{version: 10, name: "recovery_email", apply: migrateRecoveryEmail},
 	}
+}
+
+func migrateRecoveryEmail(tx *sql.Tx) error {
+	columns := []struct {
+		column, definition string
+	}{
+		{"recovery_email", "recovery_email TEXT NOT NULL DEFAULT ''"},
+		{"recovery_email_verified_at", "recovery_email_verified_at TEXT"},
+	}
+	for _, column := range columns {
+		if err := addColumnIfMissing(tx, "users", column.column, column.definition); err != nil {
+			return err
+		}
+	}
+	if err := execStatements(tx, []string{
+		`CREATE TABLE recovery_email_tokens (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			email TEXT NOT NULL,
+			token_hash TEXT NOT NULL UNIQUE,
+			expires_at TEXT NOT NULL,
+			used_at TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)`,
+	}); err != nil {
+		return err
+	}
+	type recoveryEmailBackfill struct {
+		userID     int64
+		email      string
+		verifiedAt string
+	}
+	rows, err := tx.Query(`SELECT id, contact, created_at FROM users WHERE recovery_email = ''`)
+	if err != nil {
+		return fmt.Errorf("查询恢复邮箱回填用户失败: %w", err)
+	}
+	candidates := make(map[string][]recoveryEmailBackfill)
+	for rows.Next() {
+		var userID int64
+		var contact, createdAt string
+		if err := rows.Scan(&userID, &contact, &createdAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("读取恢复邮箱回填用户失败: %w", err)
+		}
+		if email, ok := emailaddr.Normalize(contact); ok {
+			candidates[email] = append(candidates[email], recoveryEmailBackfill{
+				userID: userID, email: email, verifiedAt: createdAt,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("遍历恢复邮箱回填用户失败: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("关闭恢复邮箱回填查询失败: %w", err)
+	}
+	for _, matches := range candidates {
+		if len(matches) != 1 {
+			continue
+		}
+		backfill := matches[0]
+		if _, err := tx.Exec(
+			`UPDATE users SET recovery_email = ?, recovery_email_verified_at = ? WHERE id = ?`,
+			backfill.email, backfill.verifiedAt, backfill.userID,
+		); err != nil {
+			return fmt.Errorf("回填恢复邮箱失败: %w", err)
+		}
+	}
+	return execStatements(tx, []string{
+		`CREATE UNIQUE INDEX idx_users_recovery_email ON users(recovery_email) WHERE recovery_email <> ''`,
+		`CREATE INDEX idx_recovery_email_tokens_user ON recovery_email_tokens(user_id, created_at DESC)`,
+	})
 }
 
 func migrateContentModeration(tx *sql.Tx) error {
@@ -548,6 +624,7 @@ func validateForeignKeys(db *sql.DB) error {
 		{"checkins", "events", "event_id"},
 		{"user_auth_versions", "users", "user_id"},
 		{"password_reset_tokens", "users", "user_id"},
+		{"recovery_email_tokens", "users", "user_id"},
 		{"content_reports", "events", "event_id"},
 		{"content_reports", "posts", "post_id"},
 		{"content_reports", "users", "reporter_user_id"},

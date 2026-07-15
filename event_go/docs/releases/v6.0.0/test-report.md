@@ -1,15 +1,15 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R09 内容治理已通过本地与远端候选门禁
+> 状态：In Progress，G4-R03 恢复邮箱绑定已通过本地候选门禁，等待远端 CI 证据
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 270d64de28b223ca937d3536c17ec6738babbfd8 |
+| 当前候选 Commit | 工作树候选，待功能提交 |
 | 候选分支 | origin/codex/update_project |
-| Schema | v9，新增帖子/回复治理元数据、举报与动作审计；保留 v8 活动封面、v7 认证与 v6 admissions/checkins |
+| Schema | v10，新增恢复邮箱、验证时间和一次性验证令牌；保留 v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
 
 ## 追溯范围
 
@@ -19,8 +19,9 @@
 | G4-R07 | DOM-ADMISSION-001、MIG-ADMISSION-001、SEC-CREDENTIAL-001 | 免费/付费签发、v5→v6 数据保留、迁移外键/触发器、随机凭证、可信用户作用域与 HTTP 旅程 |
 | G4-R08 | CONC-CHECKIN-001、SEC-CHECKIN-001、IT-CHECKIN-001 | 首次/重复/并发核销、不可变触发器、吊销、跨活动、已核销取消、审计列表 |
 | G4 browser gate | E2E-ADMISSION-001 | desktop-chromium 与 Pixel 7：注册、浏览、报名、凭证、首次/重复核销、审计、已入场状态 |
-| G4-R03 | SEC-AUTH-SESSION-001、SEC-PASSWORD-RESET-001、MIG-AUTH-V7-001、CT-API-AUTH-001、FE-AUTH-SESSION-001 | 注册邮箱/密码策略；旧 JWT 版本兼容与撤销；一次性重置 Token；v6→v7 迁移；生产配置 fail-closed；迟到 401 不清除新会话 |
+| G4-R03 | SEC-AUTH-SESSION-001、SEC-PASSWORD-RESET-001、MIG-AUTH-V7-001、MIG-RECOVERY-EMAIL-001、SEC-RECOVERY-EMAIL-001、CT-API-AUTH-001、CT-API-RECOVERY-EMAIL-001、FE-AUTH-SESSION-001、FE-RECOVERY-EMAIL-001 | 注册邮箱/密码策略；旧 JWT 版本兼容与撤销；一次性重置 Token；v6→v7 与 v9→v10 迁移；phone-only 登录标识保留；当前密码 + 邮箱链接绑定；确认后撤销旧会话/重置令牌；生产配置 fail-closed |
 | G4-R03 browser | E2E-AUTH-001 | desktop-chromium 与 Pixel 7：无效 JWT 清理、安全回跳重新登录、服务端退出、受保护路由、未知邮箱统一重置成功页 |
+| G4-R03 recovery browser | E2E-RECOVERY-EMAIL-001 | desktop-chromium 与 Pixel 7：账户安全入口、登录邮箱“待验证”状态和无横向溢出；phone-only 申请/确认/撤销/重置由 HTTP 集成旅程覆盖 |
 | G4-R06 | SEC-ADMIN-SESSION-001、FE-ADMIN-SESSION-001、FE-CSV-001、CT-API-ADMIN-001 | 管理 Token 服务端校验和失效竞态；门店/活动/票种运营页面；CSV 转义、UTF-8 与公式注入防护；OpenAPI 双向契约 |
 | G4-R06 browser | E2E-OPERATOR-001 | desktop-chromium 与 Pixel 7：后台守卫/登录、门店增删改、活动创建、票种增删改、用户报名、CSV 下载内容、首次/重复核销、管理退出 |
 | G4-R01 | FE-RESPONSIVE-001、E2E-ATTENDEE-001 | 活动列表、封面详情、报名、二维码凭证、发帖、回复、取消、“我的活动”取消/已入场状态；关键用户页断言无页面级横向溢出 |
@@ -32,17 +33,17 @@
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 271 |
-| Vue unit/component tests | 10 passed（6 files） |
+| 顶层 Go Test 数量 | 277 |
+| Vue unit/component tests | 13 passed（8 files） |
 | Playwright E2E | 4 passed（2 个场景 × desktop-chromium / Pixel 7） |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
-| npm run build | 通过；主 JS 498.90 KB / 173.37 KB gzip，无 chunk size 告警 |
+| npm run build | 通过；主 JS 499.43 KB / 173.52 KB gzip，无 chunk size 告警 |
 | npm audit --omit=dev | 0 vulnerabilities |
 | Markdown 本地链接 / git diff --check / gofmt | 通过 |
-| Browser 可视验收 | 桌面/Pixel 7 用户讨论回复、举报治理、取消状态、凭证与运营核销全流程通过；成功报告含 8 张截图附件；移动表格局部滚动 |
+| Browser 可视验收 | 桌面/Pixel 7 账户安全、用户讨论回复、举报治理、取消状态、凭证与运营核销全流程通过；成功报告含 8 张截图附件；移动表格局部滚动 |
 
 本阶段继续不使用 covdata。
 
@@ -71,4 +72,4 @@
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁。R03 仍缺 legacy phone-only 恢复和真实 staging SMTP；R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。
+No-Go：R01、R02、R04、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过本地候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。R05、两场受控测试活动和 P0/P1 正式清零审计尚未完成。

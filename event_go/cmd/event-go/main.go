@@ -42,7 +42,7 @@ func main() {
 	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
 	moderation := service.NewContentModerationService(s, businessClock)
-	var resetSender notification.PasswordResetSender = notification.LogPasswordResetSender{}
+	var resetSender notification.AuthenticationEmailSender = notification.LogPasswordResetSender{}
 	if cfg.SMTPHost != "" {
 		resetSender = notification.NewSMTPPasswordResetSender(
 			cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom,
@@ -51,6 +51,7 @@ func main() {
 	authentication := service.NewAuthenticationService(
 		s, businessClock, identifier.CryptoResetTokenGenerator{}, resetSender,
 		cfg.PublicBaseURL, time.Duration(cfg.PasswordResetTTLMin)*time.Minute,
+		time.Duration(cfg.RecoveryEmailTTLMin)*time.Minute,
 	)
 	h := handler.NewHandler(s, cfg, handler.Dependencies{
 		Clock:          businessClock,
@@ -82,9 +83,11 @@ func main() {
 	log.Printf("  POST   /api/v1/auth/logout                      退出并撤销用户会话")
 	log.Printf("  POST   /api/v1/auth/password-reset/request      请求密码重置")
 	log.Printf("  POST   /api/v1/auth/password-reset/confirm      确认密码重置")
+	log.Printf("  POST   /api/v1/auth/recovery-email/confirm      确认恢复邮箱绑定")
 	log.Printf("  GET    /api/v1/me/registrations                 当前用户报名列表")
 	log.Printf("  GET    /api/v1/me/admissions                    当前用户入场凭证")
 	log.Printf("  GET    /api/v1/me/activities                    当前用户统一活动时间线")
+	log.Printf("  POST   /api/v1/me/recovery-email/request        请求绑定恢复邮箱")
 	log.Printf("  GET    /api/v1/admin/session                    校验平台管理员身份 🔐")
 	log.Printf("  GET    /api/v1/admin/identity-migration         身份迁移报告 🔐")
 	log.Printf("  POST   /api/v1/organizers                       创建门店 🔐")

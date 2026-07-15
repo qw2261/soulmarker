@@ -27,6 +27,7 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/notification"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var testServerStores sync.Map
@@ -61,15 +62,24 @@ func (g *sequenceResetTokenGenerator) NewResetToken() (string, error) {
 }
 
 type recordingPasswordResetSender struct {
-	contact   string
-	resetURL  string
-	expiresAt time.Time
-	calls     int
+	contact           string
+	resetURL          string
+	expiresAt         time.Time
+	verificationEmail string
+	verificationURL   string
+	verificationCalls int
+	calls             int
 }
 
 func (s *recordingPasswordResetSender) SendPasswordReset(_ context.Context, contact, resetURL string, expiresAt time.Time) error {
 	s.contact, s.resetURL, s.expiresAt = contact, resetURL, expiresAt
 	s.calls++
+	return nil
+}
+
+func (s *recordingPasswordResetSender) SendRecoveryEmailVerification(_ context.Context, email, verificationURL string, _ time.Time) error {
+	s.verificationEmail, s.verificationURL = email, verificationURL
+	s.verificationCalls++
 	return nil
 }
 
@@ -99,6 +109,7 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		s, businessClock, identifier.CryptoResetTokenGenerator{},
 		notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL,
 		time.Duration(cfg.PasswordResetTTLMin)*time.Minute,
+		time.Duration(cfg.RecoveryEmailTTLMin)*time.Minute,
 	)
 	return NewHandler(s, cfg, Dependencies{
 		Clock:          businessClock,
@@ -1448,7 +1459,7 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Registrations:  service.NewRegistrationService(s, businessClock, 24*time.Hour, identifier.CryptoCredentialGenerator{}),
 		Discussions:    service.NewDiscussionService(s),
 		Admissions:     service.NewAdmissionService(s, businessClock),
-		Authentication: service.NewAuthenticationService(s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL, 30*time.Minute),
+		Authentication: service.NewAuthenticationService(s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL, 30*time.Minute, 30*time.Minute),
 		Moderation:     service.NewContentModerationService(s, businessClock),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
@@ -2597,7 +2608,7 @@ func TestPasswordResetAndLogoutHTTPJourney(t *testing.T) {
 	sender := &recordingPasswordResetSender{}
 	generator := &sequenceResetTokenGenerator{tokens: []string{"known-reset-token", "throttled-reset-token", "unknown-reset-token"}}
 	h.authentication = service.NewAuthenticationService(
-		s, clock.System{}, generator, sender, "https://events.example.com", 30*time.Minute,
+		s, clock.System{}, generator, sender, "https://events.example.com", 30*time.Minute, 30*time.Minute,
 	)
 
 	registerResponse, err := http.Post(srv.URL+"/api/v1/auth/register", "application/json", strings.NewReader(
@@ -2725,6 +2736,106 @@ func TestPasswordResetAndLogoutHTTPJourney(t *testing.T) {
 	revokedResponse.Body.Close()
 	if revokedResponse.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("logout did not revoke JWT: %d", revokedResponse.StatusCode)
+	}
+}
+
+func TestRecoveryEmailBindingHTTPJourney(t *testing.T) {
+	s, h, srv := setupTestServer(t)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("legacy-password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{Name: "历史手机用户", Contact: "13800138000", PasswordHash: string(passwordHash)}
+	if err := s.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	sender := &recordingPasswordResetSender{}
+	generator := &sequenceResetTokenGenerator{tokens: []string{
+		"known-recovery-token", "pre-confirm-reset-token", "post-confirm-reset-token",
+	}}
+	h.authentication = service.NewAuthenticationService(
+		s, clock.System{}, generator, sender, "https://events.example.com", 30*time.Minute, 20*time.Minute,
+	)
+	oldToken := makeTestJWT(t, user.ID, user.Name, user.Contact)
+	bindRequest, _ := http.NewRequest(
+		http.MethodPost, srv.URL+"/api/v1/me/recovery-email/request",
+		strings.NewReader(`{"email":"Recovery@Example.COM","password":"legacy-password"}`),
+	)
+	bindRequest.Header.Set("Content-Type", "application/json")
+	bindRequest.Header.Set("Authorization", "Bearer "+oldToken)
+	bindResponse, err := http.DefaultClient.Do(bindRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindResponse.Body.Close()
+	if bindResponse.StatusCode != http.StatusAccepted || sender.verificationCalls != 1 || sender.verificationEmail != "recovery@example.com" {
+		t.Fatalf("request recovery email: status=%d sender=%+v", bindResponse.StatusCode, sender)
+	}
+	verificationURL, err := url.Parse(sender.verificationURL)
+	if err != nil || verificationURL.Query().Get("token") != "known-recovery-token" {
+		t.Fatalf("unexpected verification URL %q: %v", sender.verificationURL, err)
+	}
+	preConfirmReset, err := http.Post(
+		srv.URL+"/api/v1/auth/password-reset/request", "application/json",
+		strings.NewReader(`{"contact":"recovery@example.com"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preConfirmReset.Body.Close()
+	if preConfirmReset.StatusCode != http.StatusAccepted || sender.calls != 0 {
+		t.Fatalf("unverified recovery email received reset: status=%d sender=%+v", preConfirmReset.StatusCode, sender)
+	}
+	confirmResponse, err := http.Post(
+		srv.URL+"/api/v1/auth/recovery-email/confirm", "application/json",
+		strings.NewReader(`{"token":"known-recovery-token"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmResponse.Body.Close()
+	if confirmResponse.StatusCode != http.StatusOK {
+		t.Fatalf("confirm recovery email: expected 200, got %d", confirmResponse.StatusCode)
+	}
+	oldSessionRequest, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/me/activities", nil)
+	oldSessionRequest.Header.Set("Authorization", "Bearer "+oldToken)
+	oldSessionResponse, err := http.DefaultClient.Do(oldSessionRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSessionResponse.Body.Close()
+	if oldSessionResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("recovery email confirmation did not revoke old JWT: %d", oldSessionResponse.StatusCode)
+	}
+	postConfirmReset, err := http.Post(
+		srv.URL+"/api/v1/auth/password-reset/request", "application/json",
+		strings.NewReader(`{"contact":"recovery@example.com"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postConfirmReset.Body.Close()
+	if postConfirmReset.StatusCode != http.StatusAccepted || sender.calls != 1 || sender.contact != "recovery@example.com" {
+		t.Fatalf("verified recovery email did not receive reset: status=%d sender=%+v", postConfirmReset.StatusCode, sender)
+	}
+	loginResponse, err := http.Post(
+		srv.URL+"/api/v1/auth/login", "application/json",
+		strings.NewReader(`{"contact":"13800138000","password":"legacy-password"}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loginPayload model.APIResp
+	if err := json.NewDecoder(loginResponse.Body).Decode(&loginPayload); err != nil {
+		t.Fatal(err)
+	}
+	loginResponse.Body.Close()
+	if loginResponse.StatusCode != http.StatusOK {
+		t.Fatalf("legacy phone login changed after binding: %d", loginResponse.StatusCode)
+	}
+	userData := loginPayload.Data.(map[string]interface{})["user"].(map[string]interface{})
+	if userData["contact"] != "13800138000" || userData["recovery_email"] != "recovery@example.com" {
+		t.Fatalf("unexpected bound login identity: %#v", userData)
 	}
 }
 

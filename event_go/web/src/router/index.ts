@@ -60,9 +60,20 @@ const router = createRouter({
       component: () => import('@/views/auth/ResetPassword.vue'),
     },
     {
+      path: '/verify-recovery-email',
+      name: 'verify-recovery-email',
+      component: () => import('@/views/auth/VerifyRecoveryEmail.vue'),
+    },
+    {
       path: '/me/registrations',
       name: 'my-registrations',
       component: () => import('@/views/MyRegistrations.vue'),
+      meta: { requiresUser: true },
+    },
+    {
+      path: '/me/security',
+      name: 'account-security',
+      component: () => import('@/views/AccountSecurity.vue'),
       meta: { requiresUser: true },
     },
     {
