@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
@@ -21,6 +25,60 @@ func (h *Handler) getRegistrationEventOr404(w http.ResponseWriter, eventID int64
 		return nil, false
 	}
 	return event, true
+}
+
+func spreadsheetSafeCell(value string) string {
+	if value == "" {
+		return value
+	}
+	trimmed := strings.TrimLeft(value, " \t\r\n")
+	if trimmed != "" && strings.ContainsRune("=+-@", rune(trimmed[0])) {
+		return "'" + value
+	}
+	return value
+}
+
+func (h *Handler) ExportRegistrations(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
+		return
+	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	if event, err := h.operations.GetEvent(organizationID, eventID); err != nil {
+		writeInternalError(w, "get_export_event_scope", err)
+		return
+	} else if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
+		return
+	}
+	registrations, _, err := h.operations.ListRegistrations(organizationID, eventID, 0, 0)
+	if err != nil {
+		writeInternalError(w, "export_registrations", err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="event-%d-registrations.csv"`, eventID))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"ID", "姓名", "联系方式", "票种", "报名时间"})
+	for _, registration := range registrations {
+		_ = writer.Write([]string{
+			fmt.Sprintf("%d", registration.ID),
+			spreadsheetSafeCell(registration.Name),
+			spreadsheetSafeCell(registration.Contact),
+			spreadsheetSafeCell(registration.TicketName),
+			registration.CreatedAt.Format(model.TimeFormat),
+		})
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		slog.Error("write registration export", "event_id", eventID, "error", err)
+	}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -172,16 +230,22 @@ func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
-
-	_, ok := h.getEventOr404(w, eventID)
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
 	if !ok {
+		return
+	}
+	if event, err := h.operations.GetEvent(organizationID, eventID); err != nil {
+		writeInternalError(w, "get_registration_event_scope", err)
+		return
+	} else if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
 		return
 	}
 
 	page, pageSize := parsePagination(r)
 	offset := (page - 1) * pageSize
 
-	registrations, total, err := h.store.ListRegistrations(eventID, offset, pageSize)
+	registrations, total, err := h.operations.ListRegistrations(organizationID, eventID, offset, pageSize)
 	if err != nil {
 		writeInternalError(w, "list_registrations", err)
 		return

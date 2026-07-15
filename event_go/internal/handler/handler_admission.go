@@ -66,7 +66,8 @@ func (h *Handler) CheckIn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
-	if _, ok := h.getEventOr404(w, eventID); !ok {
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
 		return
 	}
 	var request dto.CheckinRequest
@@ -77,7 +78,7 @@ func (h *Handler) CheckIn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "入场凭证不能为空")
 		return
 	}
-	checkin, duplicate, err := h.admissions.CheckIn(eventID, request.Credential, "platform_admin")
+	checkin, duplicate, err := h.operations.CheckIn(organizationID, eventID, request.Credential, managedActor(r))
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrAdmissionNotFound):
@@ -107,11 +108,19 @@ func (h *Handler) ListCheckins(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
-	if _, ok := h.getEventOr404(w, eventID); !ok {
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	if event, err := h.operations.GetEvent(organizationID, eventID); err != nil {
+		writeInternalError(w, "get_checkin_event_scope", err)
+		return
+	} else if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
 		return
 	}
 	page, pageSize := parsePagination(r)
-	checkins, total, err := h.admissions.ListCheckins(eventID, (page-1)*pageSize, pageSize)
+	checkins, total, err := h.operations.ListCheckins(organizationID, eventID, (page-1)*pageSize, pageSize)
 	if err != nil {
 		writeInternalError(w, "list_checkins", err)
 		return

@@ -10,14 +10,37 @@ import (
 )
 
 func (s *Store) CreateEvent(e *model.Event) error {
+	if e.OrganizationID > 0 {
+		return s.CreateEventForOrganization(e.OrganizationID, e)
+	}
+	var organizationID int64
+	if err := s.db.QueryRow(`SELECT organization_id FROM organizers WHERE id = ?`, e.OrganizerID).Scan(&organizationID); err != nil {
+		if err == sql.ErrNoRows {
+			return model.ErrOrganizerNotFound
+		}
+		return fmt.Errorf("读取活动租户失败: %w", err)
+	}
+	return s.CreateEventForOrganization(organizationID, e)
+}
+
+func (s *Store) CreateEventForOrganization(organizationID int64, e *model.Event) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
-		`INSERT INTO events (organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?)`,
-		e.OrganizerID, e.Title, e.Description, e.CoverURL, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
+		`INSERT INTO events (organization_id, organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at)
+		 SELECT ?, id, ?, ?, ?, ?, ?, ?, ?, 'published', ?, ?
+		 FROM organizers WHERE id = ? AND organization_id = ?`,
+		organizationID, e.Title, e.Description, e.CoverURL, e.EventTime, e.Location, e.Capacity, e.Price, now, now,
+		e.OrganizerID, organizationID,
 	)
 	if err != nil {
 		return fmt.Errorf("创建活动失败: %w", err)
+	}
+	created, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("读取活动创建结果失败: %w", err)
+	}
+	if created != 1 {
+		return model.ErrOrganizerNotFound
 	}
 
 	id, err := result.LastInsertId()
@@ -25,6 +48,7 @@ func (s *Store) CreateEvent(e *model.Event) error {
 		return fmt.Errorf("获取活动 ID 失败: %w", err)
 	}
 	e.ID = id
+	e.OrganizationID = organizationID
 	e.Status = "published"
 	e.CreatedAt, _ = time.Parse(model.TimeFormat, now)
 	e.UpdatedAt = e.CreatedAt
@@ -38,6 +62,10 @@ func buildEventsQuery(params model.ListEventsParams) (string, []interface{}) {
 	if params.OrganizerID > 0 {
 		where += " AND e.organizer_id = ?"
 		args = append(args, params.OrganizerID)
+	}
+	if params.OrganizationID > 0 {
+		where += " AND e.organization_id = ?"
+		args = append(args, params.OrganizationID)
 	}
 	if params.Status != "" {
 		where += " AND e.status = ?"
@@ -65,7 +93,7 @@ func (s *Store) ListEvents(params model.ListEventsParams) ([]*model.Event, int, 
 		return nil, 0, fmt.Errorf("查询活动总数失败: %w", err)
 	}
 
-	query := `SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+	query := `SELECT e.id, e.organization_id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
 		FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id` + where + ` ORDER BY e.created_at DESC`
 	if params.Limit > 0 {
 		query += " LIMIT ? OFFSET ?"
@@ -82,7 +110,7 @@ func (s *Store) ListEvents(params model.ListEventsParams) ([]*model.Event, int, 
 	for rows.Next() {
 		e := &model.Event{}
 		var createdAt, updatedAt string
-		if err := rows.Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
+		if err := rows.Scan(&e.ID, &e.OrganizationID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
 			&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt); err != nil {
 			return nil, 0, fmt.Errorf("读取活动记录失败: %w", err)
 		}
@@ -105,13 +133,34 @@ func (s *Store) ListEvents(params model.ListEventsParams) ([]*model.Event, int, 
 	return events, total, nil
 }
 
+func (s *Store) ListEventsForOrganization(
+	organizationID int64,
+	params model.ListEventsParams,
+) ([]*model.Event, int, error) {
+	params.OrganizationID = organizationID
+	return s.ListEvents(params)
+}
+
 func (s *Store) GetEvent(id int64) (*model.Event, error) {
+	return s.getEvent(id, 0)
+}
+
+func (s *Store) GetEventForOrganization(organizationID, id int64) (*model.Event, error) {
+	return s.getEvent(id, organizationID)
+}
+
+func (s *Store) getEvent(id, organizationID int64) (*model.Event, error) {
 	e := &model.Event{}
 	var createdAt, updatedAt string
-	err := s.db.QueryRow(
-		`SELECT e.id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
-		 FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id WHERE e.id = ?`, id,
-	).Scan(&e.ID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
+	query :=
+		`SELECT e.id, e.organization_id, e.organizer_id, COALESCE(o.name, ''), e.title, e.description, e.cover_url, e.event_time, e.location, e.capacity, e.price, e.status, e.created_at, e.updated_at
+		 FROM events e LEFT JOIN organizers o ON e.organizer_id = o.id WHERE e.id = ?`
+	args := []interface{}{id}
+	if organizationID > 0 {
+		query += ` AND e.organization_id = ?`
+		args = append(args, organizationID)
+	}
+	err := s.db.QueryRow(query, args...).Scan(&e.ID, &e.OrganizationID, &e.OrganizerID, &e.OrganizerName, &e.Title, &e.Description, &e.CoverURL, &e.EventTime, &e.Location,
 		&e.Capacity, &e.Price, &e.Status, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -140,12 +189,33 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 	if event == nil {
 		return nil, model.ErrNotFound
 	}
+	return s.UpdateEventForOrganization(event.OrganizationID, id, req)
+}
+
+func (s *Store) UpdateEventForOrganization(organizationID, id int64, req model.UpdateEventReq) (*model.Event, error) {
+	event, err := s.GetEventForOrganization(organizationID, id)
+	if err != nil {
+		return nil, err
+	}
+	if event == nil {
+		return nil, model.ErrNotFound
+	}
 	before := *event
 
 	if req.Title != nil {
 		event.Title = *req.Title
 	}
 	if req.OrganizerID != nil {
+		var exists int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM organizers WHERE id = ? AND organization_id = ?`,
+			*req.OrganizerID, organizationID,
+		).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("校验活动门店租户失败: %w", err)
+		}
+		if exists == 0 {
+			return nil, model.ErrOrganizerNotFound
+		}
 		event.OrganizerID = *req.OrganizerID
 	}
 	if req.Description != nil {
@@ -177,14 +247,21 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 		return nil, fmt.Errorf("开启活动更新事务失败: %w", err)
 	}
 	defer tx.Rollback()
-	_, err = tx.Exec(
+	result, err := tx.Exec(
 		`UPDATE events SET organizer_id=?, title=?, description=?, cover_url=?, event_time=?, location=?, capacity=?, price=?, status=?, updated_at=?
-		 WHERE id=?`,
+		 WHERE id=? AND organization_id=?`,
 		event.OrganizerID, event.Title, event.Description, event.CoverURL, event.EventTime, event.Location,
-		event.Capacity, event.Price, event.Status, now, id,
+		event.Capacity, event.Price, event.Status, now, id, organizationID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("更新活动失败: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("读取活动更新结果失败: %w", err)
+	}
+	if updated != 1 {
+		return nil, model.ErrNotFound
 	}
 
 	if summary := eventNotificationSummary(&before, event); summary != "" {
@@ -230,7 +307,7 @@ func (s *Store) UpdateEvent(id int64, req model.UpdateEventReq) (*model.Event, e
 		return nil, fmt.Errorf("提交活动更新事务失败: %w", err)
 	}
 
-	return s.GetEvent(id)
+	return s.GetEventForOrganization(organizationID, id)
 }
 
 func eventNotificationSummary(before, after *model.Event) string {
@@ -266,6 +343,17 @@ func eventNotificationSummary(before, after *model.Event) string {
 }
 
 func (s *Store) DeleteEvent(id int64) error {
+	event, err := s.GetEvent(id)
+	if err != nil {
+		return err
+	}
+	if event == nil {
+		return model.ErrNotFound
+	}
+	return s.DeleteEventForOrganization(event.OrganizationID, id)
+}
+
+func (s *Store) DeleteEventForOrganization(organizationID, id int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return fmt.Errorf("开启事务失败: %w", err)
@@ -273,41 +361,45 @@ func (s *Store) DeleteEvent(id int64) error {
 	defer tx.Rollback()
 
 	var admissionCount int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM admissions WHERE event_id = ?`, id).Scan(&admissionCount); err != nil {
+	if err := tx.QueryRow(
+		`SELECT COUNT(*) FROM admissions a JOIN events e ON e.id = a.event_id
+		 WHERE a.event_id = ? AND e.organization_id = ?`, id, organizationID,
+	).Scan(&admissionCount); err != nil {
 		return fmt.Errorf("查询活动入场凭证失败: %w", err)
 	}
 	if admissionCount > 0 {
 		return model.ErrEventHasAdmissions
 	}
 
-	if _, err = tx.Exec(`DELETE FROM content_moderation_actions WHERE event_id = ?`, id); err != nil {
+	scopedEvent := `SELECT id FROM events WHERE id = ? AND organization_id = ?`
+	if _, err = tx.Exec(`DELETE FROM content_moderation_actions WHERE event_id IN (`+scopedEvent+`)`, id, organizationID); err != nil {
 		return fmt.Errorf("删除内容治理审计失败: %w", err)
 	}
-	if _, err = tx.Exec(`DELETE FROM content_reports WHERE event_id = ?`, id); err != nil {
+	if _, err = tx.Exec(`DELETE FROM content_reports WHERE event_id IN (`+scopedEvent+`)`, id, organizationID); err != nil {
 		return fmt.Errorf("删除内容举报失败: %w", err)
 	}
 
-	_, err = tx.Exec(`DELETE FROM replies WHERE post_id IN (SELECT id FROM posts WHERE event_id = ?)`, id)
+	_, err = tx.Exec(`DELETE FROM replies WHERE post_id IN (SELECT id FROM posts WHERE event_id IN (`+scopedEvent+`))`, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("删除回复失败: %w", err)
 	}
 
-	_, err = tx.Exec(`DELETE FROM posts WHERE event_id = ?`, id)
+	_, err = tx.Exec(`DELETE FROM posts WHERE event_id IN (`+scopedEvent+`)`, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("删除帖子失败: %w", err)
 	}
 
-	_, err = tx.Exec(`DELETE FROM registrations WHERE event_id = ?`, id)
+	_, err = tx.Exec(`DELETE FROM registrations WHERE event_id IN (`+scopedEvent+`)`, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("删除报名记录失败: %w", err)
 	}
 
-	_, err = tx.Exec(`DELETE FROM tickets WHERE event_id = ?`, id)
+	_, err = tx.Exec(`DELETE FROM tickets WHERE event_id IN (`+scopedEvent+`)`, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("删除门票失败: %w", err)
 	}
 
-	result, err := tx.Exec(`DELETE FROM events WHERE id = ?`, id)
+	result, err := tx.Exec(`DELETE FROM events WHERE id = ? AND organization_id = ?`, id, organizationID)
 	if err != nil {
 		return fmt.Errorf("删除活动失败: %w", err)
 	}

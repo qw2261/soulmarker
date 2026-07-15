@@ -17,7 +17,7 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, ok := h.getEventOr404(w, eventID)
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
 	if !ok {
 		return
 	}
@@ -46,12 +46,69 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		Price:   req.Price,
 		Stock:   req.Stock,
 	}
-	if err := h.store.CreateTicket(ticket); err != nil {
-		writeInternalError(w, "create_ticket", err)
+	if err := h.operations.CreateTicket(organizationID, ticket); err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			writeError(w, http.StatusNotFound, api.CodeEventNotFound, err.Error())
+		} else {
+			writeInternalError(w, "create_ticket", err)
+		}
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, dto.Response{Code: 201, Message: "门票创建成功", Data: dto.Ticket(ticket)})
+}
+
+func (h *Handler) ListOrganizationTickets(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
+		return
+	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	page, pageSize := parsePagination(r)
+	tickets, total, err := h.operations.ListTickets(organizationID, eventID, (page-1)*pageSize, pageSize)
+	if err != nil {
+		writeInternalError(w, "list_organization_tickets", err)
+		return
+	}
+	if event, err := h.operations.GetEvent(organizationID, eventID); err != nil {
+		writeInternalError(w, "get_organization_ticket_event", err)
+		return
+	} else if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
+		return
+	}
+	paginatedOK(w, dto.Tickets(tickets), total, page, pageSize)
+}
+
+func (h *Handler) GetOrganizationTicket(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
+		return
+	}
+	ticketID, err := parseTicketID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门票 ID")
+		return
+	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	ticket, err := h.operations.GetTicket(organizationID, eventID, ticketID)
+	if err != nil {
+		writeInternalError(w, "get_organization_ticket", err)
+		return
+	}
+	if ticket == nil {
+		writeError(w, http.StatusNotFound, api.CodeTicketNotFound, model.ErrTicketNotFound.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.Ticket(ticket)})
 }
 
 func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +117,6 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
-
 	_, ok := h.getEventOr404(w, eventID)
 	if !ok {
 		return
@@ -105,14 +161,14 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的门票 ID")
-		return
-	}
-
-	if _, ok := h.getTicketForEventOr404(w, eventID, ticketID); !ok {
 		return
 	}
 
@@ -134,7 +190,7 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ticket, err := h.store.UpdateTicket(ticketID, req.Command())
+	ticket, err := h.operations.UpdateTicket(organizationID, eventID, ticketID, req.Command())
 	if err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
 			writeError(w, http.StatusNotFound, api.CodeTicketNotFound, err.Error())
@@ -153,6 +209,10 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
@@ -160,11 +220,7 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := h.getTicketForEventOr404(w, eventID, ticketID); !ok {
-		return
-	}
-
-	if err := h.store.DeleteTicket(ticketID); err != nil {
+	if err := h.operations.DeleteTicket(organizationID, eventID, ticketID); err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
 			writeError(w, http.StatusNotFound, api.CodeTicketNotFound, err.Error())
 		} else {

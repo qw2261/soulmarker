@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -37,6 +38,7 @@ type Handler struct {
 	moderation     ContentModerationService
 	notifications  NotificationService
 	organizations  OrganizationAuthorizationService
+	operations     OrganizationOperationsService
 	startTime      time.Time
 	version        string
 }
@@ -95,6 +97,22 @@ type OrganizationAuthorizationService interface {
 	Authorize(userID, organizationID int64, capability authorization.Capability) (*authorization.OrganizationContext, error)
 }
 
+type OrganizationOperationsService interface {
+	CreateEvent(organizationID int64, event *model.Event) error
+	ListEvents(organizationID int64, params model.ListEventsParams) ([]*model.Event, int, error)
+	GetEvent(organizationID, eventID int64) (*model.Event, error)
+	UpdateEvent(organizationID, eventID int64, req model.UpdateEventReq) (*model.Event, error)
+	DeleteEvent(organizationID, eventID int64) error
+	CreateTicket(organizationID int64, ticket *model.Ticket) error
+	ListTickets(organizationID, eventID int64, offset, limit int) ([]*model.Ticket, int, error)
+	GetTicket(organizationID, eventID, ticketID int64) (*model.Ticket, error)
+	UpdateTicket(organizationID, eventID, ticketID int64, req model.UpdateTicketReq) (*model.Ticket, error)
+	DeleteTicket(organizationID, eventID, ticketID int64) error
+	ListRegistrations(organizationID, eventID int64, offset, limit int) ([]*model.Registration, int, error)
+	CheckIn(organizationID, eventID int64, credential, actor string) (*model.Checkin, bool, error)
+	ListCheckins(organizationID, eventID int64, offset, limit int) ([]*model.Checkin, int, error)
+}
+
 type Dependencies struct {
 	Clock          clock.Clock
 	Tokens         auth.TokenManager
@@ -105,6 +123,7 @@ type Dependencies struct {
 	Moderation     ContentModerationService
 	Notifications  NotificationService
 	Organizations  OrganizationAuthorizationService
+	Operations     OrganizationOperationsService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -121,6 +140,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		moderation:     dependencies.Moderation,
 		notifications:  dependencies.Notifications,
 		organizations:  dependencies.Organizations,
+		operations:     dependencies.Operations,
 		startTime:      dependencies.Clock.Now(),
 		version:        cfg.Version,
 	}
@@ -202,6 +222,29 @@ func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Ev
 		return nil, false
 	}
 	return event, true
+}
+
+func (h *Handler) organizationIDForManagedEvent(w http.ResponseWriter, r *http.Request, eventID int64) (int64, bool) {
+	if value, ok := authorization.OrganizationContextFromContext(r.Context()); ok {
+		return value.OrganizationID, true
+	}
+	event, err := h.store.GetEvent(eventID)
+	if err != nil {
+		writeInternalError(w, "resolve_event_organization", err)
+		return 0, false
+	}
+	if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
+		return 0, false
+	}
+	return event.OrganizationID, true
+}
+
+func managedActor(r *http.Request) string {
+	if value, ok := authorization.OrganizationContextFromContext(r.Context()); ok {
+		return fmt.Sprintf("organization_member:%d", value.UserID)
+	}
+	return authorization.PrincipalTypePlatformAdmin
 }
 
 // getTicketForEventOr404 确保门票存在且属于 URL 指定的活动。

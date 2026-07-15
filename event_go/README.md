@@ -64,13 +64,13 @@
 ```
 Organization (授权、审计、未来计费租户)
   ├── OrganizationMember (owner/admin/editor/checker/finance)
-  └── OrganizerProfile (公开门店/品牌资料)
-        └── Event (活动)
-              ├── Registration (报名记录)
-              │     └── Ticket (门票) — N:1，报名可选关联一张门票
-              ├── Post (帖子)
-              │     └── Reply (回复) — N:1，一个帖子有多个回复
-              └── Ticket (门票) — N:1，一个活动可创建多种门票
+  ├── OrganizerProfile (公开门店/品牌资料)
+  └── Event (稳定 tenant scope；可关联 OrganizerProfile 展示)
+      ├── Registration (报名记录)
+      │     └── Ticket (门票) — N:1，报名可选关联一张门票
+      ├── Post (帖子)
+      │     └── Reply (回复) — N:1，一个帖子有多个回复
+      └── Ticket (门票) — N:1，一个活动可创建多种门票
 
 User (用户) — 注册/登录获得 JWT
   报名/发帖/回复时自动携带身份
@@ -79,7 +79,7 @@ User (用户) — 注册/登录获得 JWT
 
 ### Organization & OrganizerProfile — 租户与公开资料
 
-Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员权限、审计和未来计费的租户；`OrganizerProfile` 继续承载现有 `/organizers` API 的门店/品牌公开资料。当前基础切片保持一对一关系，历史门店迁移为 `unclaimed` Organization，不根据联系方式猜测 owner。
+Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员权限、审计和未来计费的租户；`OrganizerProfile` 继续承载现有 `/organizers` API 的门店/品牌公开资料。Schema v13 进一步把 `events.organization_id` 固化为稳定授权边界，`organizer_id` 仅表示公开资料归属；删除资料不会丢失历史 Event 的 tenant。当前基础切片保持 Organization/Profile 一对一，历史门店迁移为 `unclaimed` Organization，不根据联系方式猜测 owner。
 
 | 实体 | 说明 |
 |---|---|
@@ -98,7 +98,7 @@ Schema v12 开始把授权边界与公开展示拆开：`Organization` 是成员
 | 实时角色 | JWT 不保存租户角色；每次请求从 Membership 和 Organization 状态解析，撤销/暂停立即生效 |
 | 最小权限 | owner/admin/editor/checker/finance 映射到集中 capability Policy，未知角色默认拒绝 |
 | 组织选择 | 租户 ID 来自 `/organizations/{organizationId}/...` 路径，跨租户和能力不足统一返回 403 |
-| 可控回退 | `ORGANIZATION_AUTH_ENABLED=false` 关闭只读租户入口，旧 platform admin 路由继续工作 |
+| 可控回退 | `ORGANIZATION_AUTH_ENABLED=false` 关闭全部租户入口，scoped platform admin 兼容路由继续工作 |
 
 ### OrganizerProfile 字段
 
@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关已由 Commit `780c496` / Run `29440070376` 通过远端门禁。现有业务资源仍未 tenant scoped，G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
+**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关已由 Commit `780c496` / Run `29440070376` 通过远端门禁。G5.3 Schema v13 与业务资源 tenant scope 已进入候选门禁，尚未形成 Commit/Run 证据；G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -213,6 +213,16 @@ PUT    /api/v1/me/notifications/{notificationId}/read   标记自己的单条通
 PUT    /api/v1/me/notifications/read-all                标记自己的全部通知已读
 GET    /api/v1/me/organizations                         当前用户组织、角色与实时 capability
 GET    /api/v1/organizations/{organizationId}/session   校验租户身份与 capability（需用户 JWT）
+POST   /api/v1/organizations/{organizationId}/events   在租户内创建活动（events.manage）
+GET    /api/v1/organizations/{organizationId}/events   租户活动列表（organization.read）
+GET    /api/v1/organizations/{organizationId}/events/{id} 租户活动详情（organization.read）
+PUT    /api/v1/organizations/{organizationId}/events/{id} 编辑租户活动（events.manage）
+DELETE /api/v1/organizations/{organizationId}/events/{id} 删除租户活动（events.manage）
+POST   /api/v1/organizations/{organizationId}/events/{id}/tickets 创建租户票种（tickets.manage）
+GET    /api/v1/organizations/{organizationId}/events/{id}/registrations 查看租户报名（registrations.read）
+GET    /api/v1/organizations/{organizationId}/events/{id}/registrations/export 导出租户报名 CSV（registrations.export）
+POST   /api/v1/organizations/{organizationId}/events/{id}/checkins 租户核销（checkins.manage）
+GET    /api/v1/organizations/{organizationId}/events/{id}/checkins 租户核销记录（checkins.manage）
 GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
 GET    /api/v1/admin/content-reports                    举报队列（状态/内容类型筛选）🔐
 PUT    /api/v1/admin/content-reports/{reportId}         移除内容并处理或驳回举报 🔐
@@ -515,6 +525,7 @@ main.go
 | 租户基础 | Organization 与 OrganizerProfile 分离；历史资料回填为 unclaimed；单 active owner、邀请邮箱/过期/单次消费由约束和事务保护 |
 | N/N-1 门店写兼容 | 旧应用省略 `organization_id` 创建资料时由触发器生成 unclaimed 租户；旧应用删除资料时自动暂停对应租户 |
 | 租户授权撤销 | capability 不写入 JWT；每次请求读取 Membership/Organization，revoked、suspended、跨租户和能力不足统一拒绝 |
+| 资源租户隔离 | Event 保存稳定 `organization_id`；Event/Ticket/Registration/Checkin/Export 的管理 SQL 与统一 Service 双重绑定 tenant scope |
 
 ### 自动化测试
 
@@ -540,7 +551,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=12`。Schema v7–v11 分别覆盖认证、活动封面、内容治理、恢复邮箱和站内通知；Schema v12 新增 `organizations`、`organization_members`、`organization_invitations`，并为 `organizers` 增加 `organization_id`。历史资料一对一回填为 unclaimed 租户，系统占位资料对应 system 租户，不猜测历史 owner；兼容触发器保护 pre-v12 应用的创建和删除写入。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=13`。Schema v7–v11 分别覆盖认证、活动封面、内容治理、恢复邮箱和站内通知；Schema v12 新增 Organization/Member/Invitation 与 OrganizerProfile tenant；Schema v13 为 Event 增加稳定 `organization_id`、外键、索引和 N/N-1 写兼容触发器。v12→v13 按 OrganizerProfile 回填历史 Event，不猜测 owner；删除 OrganizerProfile 后 Event tenant 仍保留。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 
@@ -549,7 +560,7 @@ cd event_go
 cp data/event_go.db data/event_go.db.pre-upgrade.bak
 ```
 
-身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。Schema v12 的升级、兼容和回滚步骤见 [docs/releases/v6.1.0/migration-rollback.md](docs/releases/v6.1.0/migration-rollback.md)。
+身份迁移会精确匹配已注册用户联系方式；无法匹配的数据保留为只读 legacy 并进入管理员处理清单。Schema v12–v13 的升级、兼容和回滚步骤见 [docs/releases/v6.1.0/migration-rollback.md](docs/releases/v6.1.0/migration-rollback.md)，稳定租户边界见 [ADR-006](docs/adr/006-stable-event-tenant-scope.md)。
 
 ### API 速查
 
@@ -666,7 +677,7 @@ event_go/
 | `RECOVERY_EMAIL_TTL_MINUTES` | `30` | 恢复邮箱验证 Token 有效分钟数，允许 1–1440 |
 | `NOTIFICATION_REMINDER_HOURS` | `24` | published 活动临近提醒窗口，允许 1–168 小时 |
 | `NOTIFICATION_SCAN_INTERVAL_SECONDS` | `60` | 单实例提醒调度扫描间隔，允许 1–3600 秒 |
-| `ORGANIZATION_AUTH_ENABLED` | `true` | G5.2 只读租户授权入口开关；false 时返回 404，非法布尔值拒绝启动 |
+| `ORGANIZATION_AUTH_ENABLED` | `true` | 租户授权与业务入口开关；false 时 `/me/organizations` 和 `/organizations/...` 返回 404，非法布尔值拒绝启动 |
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
 | `SMTP_FROM` | 空 | 密码重置与恢复邮箱验证邮件发件人 |

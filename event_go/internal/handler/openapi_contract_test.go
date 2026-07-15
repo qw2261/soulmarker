@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
+	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/openapi"
 )
@@ -44,7 +45,9 @@ func parseOpenAPIDocument(t *testing.T) openAPIDocument {
 }
 
 func TestOpenAPIRoutesMatchRouterCatalog(t *testing.T) {
-	_, h, _ := setupTestServer(t)
+	s := mustNewStore(t)
+	defer s.Close()
+	h := newTestHandler(s, config.Load())
 	document := parseOpenAPIDocument(t)
 	if document.OpenAPI != "3.1.0" {
 		t.Fatalf("expected OpenAPI 3.1.0, got %q", document.OpenAPI)

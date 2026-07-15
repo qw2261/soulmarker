@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
+	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
@@ -31,6 +32,10 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	if org == nil {
 		writeError(w, http.StatusBadRequest, api.CodeOrganizerNotFound, model.ErrOrganizerNotFound.Error())
 		return
+	}
+	organizationID := org.OrganizationID
+	if value, ok := authorization.OrganizationContextFromContext(r.Context()); ok {
+		organizationID = value.OrganizationID
 	}
 
 	if strings.TrimSpace(req.Title) == "" {
@@ -64,22 +69,72 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	event := &model.Event{
-		OrganizerID:   req.OrganizerID,
-		OrganizerName: org.Name,
-		Title:         req.Title,
-		Description:   req.Description,
-		CoverURL:      coverURL,
-		EventTime:     req.EventTime,
-		Location:      req.Location,
-		Capacity:      req.Capacity,
-		Price:         req.Price,
+		OrganizationID: organizationID,
+		OrganizerID:    req.OrganizerID,
+		OrganizerName:  org.Name,
+		Title:          req.Title,
+		Description:    req.Description,
+		CoverURL:       coverURL,
+		EventTime:      req.EventTime,
+		Location:       req.Location,
+		Capacity:       req.Capacity,
+		Price:          req.Price,
 	}
-	if err := h.store.CreateEvent(event); err != nil {
-		writeInternalError(w, "create_event", err)
+	if err := h.operations.CreateEvent(organizationID, event); err != nil {
+		if errors.Is(err, model.ErrOrganizerNotFound) {
+			writeError(w, http.StatusBadRequest, api.CodeOrganizerNotFound, model.ErrOrganizerNotFound.Error())
+		} else {
+			writeInternalError(w, "create_event", err)
+		}
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, dto.Response{Code: 201, Message: "活动创建成功", Data: dto.Event(event)})
+}
+
+func (h *Handler) ListOrganizationEvents(w http.ResponseWriter, r *http.Request) {
+	value, ok := authorization.OrganizationContextFromContext(r.Context())
+	if !ok {
+		writeInternalError(w, "organization_context_missing", errors.New("organization context missing"))
+		return
+	}
+	organizerID, _ := strconv.ParseInt(r.URL.Query().Get("organizer_id"), 10, 64)
+	page, pageSize := parsePagination(r)
+	events, total, err := h.operations.ListEvents(value.OrganizationID, model.ListEventsParams{
+		Status:      r.URL.Query().Get("status"),
+		PriceType:   r.URL.Query().Get("price_type"),
+		Keyword:     r.URL.Query().Get("q"),
+		OrganizerID: organizerID,
+		Offset:      (page - 1) * pageSize,
+		Limit:       pageSize,
+	})
+	if err != nil {
+		writeInternalError(w, "list_organization_events", err)
+		return
+	}
+	paginatedOK(w, dto.Events(events), total, page, pageSize)
+}
+
+func (h *Handler) GetOrganizationEvent(w http.ResponseWriter, r *http.Request) {
+	eventID, err := parseEventID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
+		return
+	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	event, err := h.operations.GetEvent(organizationID, eventID)
+	if err != nil {
+		writeInternalError(w, "get_organization_event", err)
+		return
+	}
+	if event == nil {
+		writeError(w, http.StatusNotFound, api.CodeEventNotFound, model.ErrNotFound.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.Event(event)})
 }
 
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +162,6 @@ func (h *Handler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
-
 	event, ok := h.getEventOr404(w, id)
 	if !ok {
 		return
@@ -122,6 +176,10 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, id)
+	if !ok {
+		return
+	}
 
 	var req dto.UpdateEventRequest
 	if !decodeJSON(w, r, &req) {
@@ -131,15 +189,6 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if req.OrganizerID != nil {
 		if *req.OrganizerID <= 0 {
 			writeError(w, http.StatusBadRequest, api.CodeValidationError, "门店不能为空")
-			return
-		}
-		organizer, err := h.store.GetOrganizer(*req.OrganizerID)
-		if err != nil {
-			writeInternalError(w, "update_event_get_organizer", err)
-			return
-		}
-		if organizer == nil {
-			writeError(w, http.StatusBadRequest, api.CodeOrganizerNotFound, model.ErrOrganizerNotFound.Error())
 			return
 		}
 	}
@@ -182,10 +231,12 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := h.store.UpdateEvent(id, req.Command())
+	event, err := h.operations.UpdateEvent(organizationID, id, req.Command())
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			writeError(w, http.StatusNotFound, api.CodeEventNotFound, err.Error())
+		} else if errors.Is(err, model.ErrOrganizerNotFound) {
+			writeError(w, http.StatusBadRequest, api.CodeOrganizerNotFound, err.Error())
 		} else {
 			writeInternalError(w, "update_event", err)
 		}
@@ -216,8 +267,12 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的活动 ID")
 		return
 	}
+	organizationID, ok := h.organizationIDForManagedEvent(w, r, id)
+	if !ok {
+		return
+	}
 
-	if err := h.store.DeleteEvent(id); err != nil {
+	if err := h.operations.DeleteEvent(organizationID, id); err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			writeError(w, http.StatusNotFound, api.CodeEventNotFound, err.Error())
 		} else if errors.Is(err, model.ErrEventHasAdmissions) {

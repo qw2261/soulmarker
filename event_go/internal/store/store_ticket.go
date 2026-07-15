@@ -9,14 +9,33 @@ import (
 )
 
 func (s *Store) CreateTicket(t *model.Ticket) error {
+	event, err := s.GetEvent(t.EventID)
+	if err != nil {
+		return err
+	}
+	if event == nil {
+		return model.ErrNotFound
+	}
+	return s.CreateTicketForOrganization(event.OrganizationID, t)
+}
+
+func (s *Store) CreateTicketForOrganization(organizationID int64, t *model.Ticket) error {
 	now := time.Now().UTC().Format(model.TimeFormat)
 	result, err := s.db.Exec(
 		`INSERT INTO tickets (event_id, name, price, stock, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		t.EventID, t.Name, t.Price, t.Stock, now, now,
+		 SELECT e.id, ?, ?, ?, ?, ? FROM events e
+		 WHERE e.id = ? AND e.organization_id = ?`,
+		t.Name, t.Price, t.Stock, now, now, t.EventID, organizationID,
 	)
 	if err != nil {
 		return fmt.Errorf("创建门票失败: %w", err)
+	}
+	created, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("读取门票创建结果失败: %w", err)
+	}
+	if created != 1 {
+		return model.ErrNotFound
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
@@ -29,14 +48,29 @@ func (s *Store) CreateTicket(t *model.Ticket) error {
 }
 
 func (s *Store) ListTickets(eventID int64, offset, limit int) ([]*model.Ticket, int, error) {
+	event, err := s.GetEvent(eventID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if event == nil {
+		return []*model.Ticket{}, 0, nil
+	}
+	return s.ListTicketsForOrganization(event.OrganizationID, eventID, offset, limit)
+}
+
+func (s *Store) ListTicketsForOrganization(organizationID, eventID int64, offset, limit int) ([]*model.Ticket, int, error) {
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM tickets WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM tickets t JOIN events e ON e.id = t.event_id
+		 WHERE t.event_id = ? AND e.organization_id = ?`, eventID, organizationID,
+	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("查询门票总数失败: %w", err)
 	}
 
-	query := `SELECT id, event_id, name, price, stock, created_at, updated_at
-		 FROM tickets WHERE event_id = ? ORDER BY created_at ASC`
-	args := []interface{}{eventID}
+	query := `SELECT t.id, t.event_id, t.name, t.price, t.stock, t.created_at, t.updated_at
+			 FROM tickets t JOIN events e ON e.id = t.event_id
+			 WHERE t.event_id = ? AND e.organization_id = ? ORDER BY t.created_at ASC`
+	args := []interface{}{eventID, organizationID}
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)
@@ -75,12 +109,27 @@ func (s *Store) ListTickets(eventID int64, offset, limit int) ([]*model.Ticket, 
 }
 
 func (s *Store) GetTicket(ticketID int64) (*model.Ticket, error) {
+	return s.getTicket(0, 0, ticketID)
+}
+
+func (s *Store) GetTicketForOrganization(organizationID, eventID, ticketID int64) (*model.Ticket, error) {
+	return s.getTicket(organizationID, eventID, ticketID)
+}
+
+func (s *Store) getTicket(organizationID, eventID, ticketID int64) (*model.Ticket, error) {
 	t := &model.Ticket{}
 	var createdAt, updatedAt string
-	err := s.db.QueryRow(
-		`SELECT id, event_id, name, price, stock, created_at, updated_at
-		 FROM tickets WHERE id = ?`, ticketID,
-	).Scan(&t.ID, &t.EventID, &t.Name, &t.Price, &t.Stock, &createdAt, &updatedAt)
+	query := `SELECT t.id, t.event_id, t.name, t.price, t.stock, t.created_at, t.updated_at
+		 FROM tickets t`
+	args := []interface{}{ticketID}
+	if organizationID > 0 {
+		query += ` JOIN events e ON e.id = t.event_id
+			 WHERE t.id = ? AND t.event_id = ? AND e.organization_id = ?`
+		args = []interface{}{ticketID, eventID, organizationID}
+	} else {
+		query += ` WHERE t.id = ?`
+	}
+	err := s.db.QueryRow(query, args...).Scan(&t.ID, &t.EventID, &t.Name, &t.Price, &t.Stock, &createdAt, &updatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -108,6 +157,24 @@ func (s *Store) UpdateTicket(id int64, req model.UpdateTicketReq) (*model.Ticket
 	if ticket == nil {
 		return nil, model.ErrTicketNotFound
 	}
+	event, err := s.GetEvent(ticket.EventID)
+	if err != nil {
+		return nil, err
+	}
+	if event == nil {
+		return nil, model.ErrTicketNotFound
+	}
+	return s.UpdateTicketForOrganization(event.OrganizationID, ticket.EventID, id, req)
+}
+
+func (s *Store) UpdateTicketForOrganization(organizationID, eventID, id int64, req model.UpdateTicketReq) (*model.Ticket, error) {
+	ticket, err := s.GetTicketForOrganization(organizationID, eventID, id)
+	if err != nil {
+		return nil, err
+	}
+	if ticket == nil {
+		return nil, model.ErrTicketNotFound
+	}
 
 	if req.Name != nil {
 		ticket.Name = *req.Name
@@ -120,12 +187,20 @@ func (s *Store) UpdateTicket(id int64, req model.UpdateTicketReq) (*model.Ticket
 	}
 
 	now := time.Now().UTC().Format(model.TimeFormat)
-	_, err = s.db.Exec(
-		`UPDATE tickets SET name=?, price=?, stock=?, updated_at=? WHERE id=?`,
-		ticket.Name, ticket.Price, ticket.Stock, now, id,
+	result, err := s.db.Exec(
+		`UPDATE tickets SET name=?, price=?, stock=?, updated_at=?
+		 WHERE id=? AND event_id IN (SELECT id FROM events WHERE id = ? AND organization_id = ?)`,
+		ticket.Name, ticket.Price, ticket.Stock, now, id, eventID, organizationID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("更新门票失败: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("读取门票更新结果失败: %w", err)
+	}
+	if updated != 1 {
+		return nil, model.ErrTicketNotFound
 	}
 
 	ticket.UpdatedAt, _ = time.Parse(model.TimeFormat, now)
@@ -133,6 +208,24 @@ func (s *Store) UpdateTicket(id int64, req model.UpdateTicketReq) (*model.Ticket
 }
 
 func (s *Store) DeleteTicket(id int64) error {
+	ticket, err := s.GetTicket(id)
+	if err != nil {
+		return err
+	}
+	if ticket == nil {
+		return model.ErrTicketNotFound
+	}
+	event, err := s.GetEvent(ticket.EventID)
+	if err != nil {
+		return err
+	}
+	if event == nil {
+		return model.ErrTicketNotFound
+	}
+	return s.DeleteTicketForOrganization(event.OrganizationID, ticket.EventID, id)
+}
+
+func (s *Store) DeleteTicketForOrganization(organizationID, eventID, id int64) error {
 	s.registrationMu.Lock()
 	defer s.registrationMu.Unlock()
 
@@ -142,10 +235,20 @@ func (s *Store) DeleteTicket(id int64) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`UPDATE registrations SET ticket_id = NULL WHERE ticket_id = ?`, id); err != nil {
+	if _, err := tx.Exec(
+		`UPDATE registrations SET ticket_id = NULL
+		 WHERE ticket_id IN (
+			 SELECT t.id FROM tickets t JOIN events e ON e.id = t.event_id
+			 WHERE t.id = ? AND t.event_id = ? AND e.organization_id = ?
+		 )`, id, eventID, organizationID,
+	); err != nil {
 		return fmt.Errorf("解除报名门票引用失败: %w", err)
 	}
-	result, err := tx.Exec(`DELETE FROM tickets WHERE id = ?`, id)
+	result, err := tx.Exec(
+		`DELETE FROM tickets WHERE id = ? AND event_id IN (
+			 SELECT id FROM events WHERE id = ? AND organization_id = ?
+		 )`, id, eventID, organizationID,
+	)
 	if err != nil {
 		return fmt.Errorf("删除门票失败: %w", err)
 	}

@@ -44,15 +44,24 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "organizers", "organization_id")
 	assertTableExists(t, s.db, "organization_members")
 	assertTableExists(t, s.db, "organization_invitations")
+	assertColumnExists(t, s.db, "events", "organization_id")
 	assertIndexExists(t, s.db, "idx_organizations_slug")
 	assertIndexExists(t, s.db, "idx_organizers_organization")
 	assertIndexExists(t, s.db, "idx_organization_members_user")
 	assertIndexExists(t, s.db, "idx_organization_members_active_owner")
 	assertIndexExists(t, s.db, "idx_organization_invitations_pending")
+	assertIndexExists(t, s.db, "idx_events_organization")
 	assertTriggerExists(t, s.db, "organizers_create_unclaimed_organization")
 	assertTriggerExists(t, s.db, "organizers_suspend_organization_after_delete")
+	assertTriggerExists(t, s.db, "events_assign_tenant_after_insert")
+	assertTriggerExists(t, s.db, "events_sync_tenant_after_organizer_update")
+	assertTriggerExists(t, s.db, "events_reject_tenant_mismatch_insert")
+	assertTriggerExists(t, s.db, "events_reject_tenant_mismatch_update")
 	if has, err := tableHasForeignKeyDB(s.db, "organizers", "organizations", "organization_id"); err != nil || !has {
 		t.Fatalf("organizer organization foreign key missing: exists=%v err=%v", has, err)
+	}
+	if has, err := tableHasForeignKeyDB(s.db, "events", "organizations", "organization_id"); err != nil || !has {
+		t.Fatalf("event organization foreign key missing: exists=%v err=%v", has, err)
 	}
 	if has, err := tableHasForeignKeyDB(s.db, "organization_members", "organizations", "organization_id"); err != nil || !has {
 		t.Fatalf("member organization foreign key missing: exists=%v err=%v", has, err)
@@ -634,6 +643,12 @@ func TestMigrationV11ToV12BackfillsTenantWithoutGuessingOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	statements := []string{
+		`DROP TRIGGER events_sync_tenant_after_organizer_update`,
+		`DROP TRIGGER events_assign_tenant_after_insert`,
+		`DROP TRIGGER events_reject_tenant_mismatch_update`,
+		`DROP TRIGGER events_reject_tenant_mismatch_insert`,
+		`DROP INDEX idx_events_organization`,
+		`DELETE FROM schema_migrations WHERE version = 13`,
 		`DROP INDEX idx_organization_invitations_expiry`,
 		`DROP INDEX idx_organization_invitations_pending`,
 		`DROP TABLE organization_invitations`,
@@ -704,6 +719,98 @@ func TestMigrationV11ToV12BackfillsTenantWithoutGuessingOwner(t *testing.T) {
 	systemOrganization, err := s.GetOrganization(0)
 	if err != nil || systemOrganization == nil || systemOrganization.Status != model.OrganizationStatusSystem {
 		t.Fatalf("system organization missing: organization=%+v err=%v", systemOrganization, err)
+	}
+}
+
+func TestMigrationV12ToV13BackfillsStableEventTenant(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v12-to-v13.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := &model.User{Name: "活动租户所有者", Contact: "event-tenant-owner@example.com", PasswordHash: "hash"}
+	if err := s.CreateUser(owner); err != nil {
+		t.Fatal(err)
+	}
+	organization := &model.Organization{Name: "活动迁移组织", Slug: "event-migration"}
+	profile := &model.OrganizerProfile{Name: "活动迁移门店"}
+	if err := s.CreateOrganizationWithOwner(organization, profile, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	event := &model.Event{
+		OrganizerID: profile.ID, Title: "v12 历史活动", EventTime: "2099-01-01T00:00:00Z",
+		Location: "线上", Capacity: 10,
+	}
+	if err := s.CreateEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`DROP TRIGGER events_sync_tenant_after_organizer_update`,
+		`DROP TRIGGER events_assign_tenant_after_insert`,
+		`DROP TRIGGER events_reject_tenant_mismatch_update`,
+		`DROP TRIGGER events_reject_tenant_mismatch_insert`,
+		`DROP INDEX idx_events_organization`,
+		`CREATE TABLE events_v12 (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organizer_id INTEGER NOT NULL DEFAULT 0,
+			title TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			cover_url TEXT NOT NULL DEFAULT '',
+			event_time TEXT NOT NULL,
+			location TEXT NOT NULL,
+			capacity INTEGER NOT NULL DEFAULT 0,
+			price REAL NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'published',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (organizer_id) REFERENCES organizers(id)
+		)`,
+		`INSERT INTO events_v12
+		 (id, organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at)
+		 SELECT id, organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at
+		 FROM events`,
+		`DROP TABLE events`,
+		`ALTER TABLE events_v12 RENAME TO events`,
+		`DELETE FROM schema_migrations WHERE version = 13`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v12 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v12 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	assertColumnExists(t, s.db, "events", "organization_id")
+	assertIndexExists(t, s.db, "idx_events_organization")
+	assertTriggerExists(t, s.db, "events_assign_tenant_after_insert")
+	if has, err := tableHasForeignKeyDB(s.db, "events", "organizations", "organization_id"); err != nil || !has {
+		t.Fatalf("event organization foreign key missing: exists=%v err=%v", has, err)
+	}
+	migrated, err := s.GetEvent(event.ID)
+	if err != nil || migrated == nil || migrated.OrganizationID != organization.ID ||
+		migrated.OrganizerID != profile.ID || migrated.Title != event.Title {
+		t.Fatalf("event tenant backfill mismatch: event=%+v err=%v", migrated, err)
+	}
+	member, err := s.GetOrganizationMember(organization.ID, owner.ID)
+	if err != nil || member == nil || member.Role != model.OrganizationRoleOwner {
+		t.Fatalf("existing membership changed during event migration: member=%+v err=%v", member, err)
 	}
 }
 

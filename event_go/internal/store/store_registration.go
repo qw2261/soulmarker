@@ -147,14 +147,29 @@ func (s *Store) Register(r *model.Registration) error {
 }
 
 func (s *Store) ListRegistrations(eventID int64, offset, limit int) ([]*model.Registration, int, error) {
+	return s.listRegistrations(0, eventID, offset, limit)
+}
+
+func (s *Store) ListRegistrationsForOrganization(organizationID, eventID int64, offset, limit int) ([]*model.Registration, int, error) {
+	return s.listRegistrations(organizationID, eventID, offset, limit)
+}
+
+func (s *Store) listRegistrations(organizationID, eventID int64, offset, limit int) ([]*model.Registration, int, error) {
+	where := ` WHERE r.event_id = ?`
+	args := []interface{}{eventID}
+	if organizationID > 0 {
+		where += ` AND e.organization_id = ?`
+		args = append(args, organizationID)
+	}
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM registrations WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM registrations r JOIN events e ON e.id = r.event_id`+where, args...,
+	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("查询报名总数失败: %w", err)
 	}
 
-	query := `SELECT id, event_id, user_id, name, contact, ticket_id, ticket_name, identity_status, created_at
-		 FROM registrations WHERE event_id = ? ORDER BY created_at ASC`
-	args := []interface{}{eventID}
+	query := `SELECT r.id, r.event_id, r.user_id, r.name, r.contact, r.ticket_id, r.ticket_name, r.identity_status, r.created_at
+			 FROM registrations r JOIN events e ON e.id = r.event_id` + where + ` ORDER BY r.created_at ASC`
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)

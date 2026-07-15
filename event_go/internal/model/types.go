@@ -145,19 +145,20 @@ type UpdateOrganizerReq struct {
 }
 
 type Event struct {
-	ID            int64     `json:"id"`
-	OrganizerID   int64     `json:"organizer_id"`
-	OrganizerName string    `json:"organizer_name,omitempty"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	CoverURL      string    `json:"cover_url"`
-	EventTime     string    `json:"event_time"`
-	Location      string    `json:"location"`
-	Capacity      int       `json:"capacity"`
-	Price         float64   `json:"price"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"-"`
+	OrganizerID    int64     `json:"organizer_id"`
+	OrganizerName  string    `json:"organizer_name,omitempty"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	CoverURL       string    `json:"cover_url"`
+	EventTime      string    `json:"event_time"`
+	Location       string    `json:"location"`
+	Capacity       int       `json:"capacity"`
+	Price          float64   `json:"price"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type Registration struct {
@@ -294,12 +295,13 @@ type contextKey string
 const UserContextKey contextKey = "user"
 
 type ListEventsParams struct {
-	Status      string
-	PriceType   string
-	Keyword     string
-	OrganizerID int64
-	Offset      int
-	Limit       int
+	Status         string
+	PriceType      string
+	Keyword        string
+	OrganizationID int64
+	OrganizerID    int64
+	Offset         int
+	Limit          int
 }
 
 // APIResp 保留为测试与历史内部调用的兼容别名；HTTP 层使用 internal/api.Response。

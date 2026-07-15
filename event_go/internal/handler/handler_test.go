@@ -121,6 +121,7 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		Moderation:     service.NewContentModerationService(s, businessClock),
 		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 		Organizations:  service.NewOrganizationAuthorizationService(s),
+		Operations:     service.NewOrganizationOperationsService(s, businessClock),
 	})
 }
 
@@ -1465,6 +1466,7 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Moderation:     service.NewContentModerationService(s, businessClock),
 		Notifications:  service.NewNotificationService(s, businessClock, 24*time.Hour),
 		Organizations:  service.NewOrganizationAuthorizationService(s),
+		Operations:     service.NewOrganizationOperationsService(s, businessClock),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 

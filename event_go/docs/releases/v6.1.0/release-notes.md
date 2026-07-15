@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：G5.2 Remote Candidate Pass（Commit 780c496 / Run 29440070376）；G5.1 同样已通过远端门禁
+> 状态：G5.3 Local Candidate Pending Gate；G5.1/G5.2 已通过远端门禁
 
 ## 当前切片
 
@@ -16,14 +16,19 @@
 - 新增 13 项集中 capability Policy，精确约束 owner/admin/editor/checker/finance；租户角色不写入 JWT，每次请求读取实时 Membership 和 Organization 状态。
 - 新增当前用户组织列表与租户 session API；跨租户、revoked、suspended 和能力不足统一返回 403 `ORGANIZATION_ACCESS_DENIED`。
 - `PlatformAdminAuth` 为旧管理路由写入平台 principal，前端管理守卫同时校验 `authenticated` 与 `principal_type=platform_admin`。
-- `ORGANIZATION_AUTH_ENABLED=false` 可关闭两个只读租户入口；非法配置拒绝启动，便于授权切片独立回退。
+- `ORGANIZATION_AUTH_ENABLED=false` 可关闭全部 `/organizations/...` 租户入口；非法配置拒绝启动，platform scoped 兼容路由继续可用。
+- Schema v13 为 Event 增加稳定 `organization_id`，v12→v13 回填历史活动，并在 OrganizerProfile 删除后保留 tenant。
+- [ADR-006](../../adr/006-stable-event-tenant-scope.md) 固化 Event tenant、子资源继承、N/N-1 兼容和双轨回滚策略。
+- 新增 tenant-scoped Event、Ticket、Registration、Checkin 与 CSV Export API；五角色通过 capability 进入各自最小业务路由。
+- `OrganizationOperationsService` 与 scoped Store SQL 同时服务 tenant 和 platform 兼容路由；正确资源 ID 不能绕过 URL organization scope。
+- 租户核销 actor 记录为 `organization_member:<userID>`；服务端 CSV 导出继续使用 UTF-8 BOM 与公式注入防护。
 
 ## 明确未完成
 
 - 没有新增组织自助创建、邀请接受或成员管理 HTTP API/UI。
-- event、ticket、registration、admission、checkin、export 尚未强制 tenant scope。
-- capability 矩阵已建立，但尚未接入 Event/Ticket/Registration/Admission/Checkin/Export 等业务资源。
-- platform admin 仍使用全局 Admin Token；租户角色尚未替换公开业务面的管理认证。
+- G5.3 完整本地/远端门禁、候选 Commit 与 Run 尚待回填，因此 G5-R05 尚未最终关闭。
+- platform admin 兼容路由仍使用全局 Admin Token；虽已复用 scoped Service，但租户自助后台尚未替换公开业务面的管理认证。
+- tenant API 已可按角色操作资源，但尚无 G5.4 自助入驻、邀请/成员管理与租户后台 UI。
 - actor/tenant/request_id 审计与 PII 按角色脱敏尚未实现。
 
 因此本版本是 G5 的可回滚基础迁移，不是完整多租户发布，也不改变 G4 真实 SMTP 与受控活动的待验收状态。

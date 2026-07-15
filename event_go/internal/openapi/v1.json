@@ -250,6 +250,94 @@
         }
       }
     },
+    "/organizations/{organizationId}/events": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }],
+      "post": {
+        "operationId": "createOrganizationEvent", "tags": ["Organizations", "Events"],
+        "summary": "Create an event inside the authorized tenant scope", "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateEventRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "get": {
+        "operationId": "listOrganizationEvents", "tags": ["Organizations", "Events"],
+        "summary": "List only events owned by the authorized tenant", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "getOrganizationEvent", "tags": ["Organizations", "Events"], "summary": "Get a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "operationId": "updateOrganizationEvent", "tags": ["Organizations", "Events"], "summary": "Update a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateEventRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "deleteOrganizationEvent", "tags": ["Organizations", "Events"], "summary": "Delete a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}/tickets": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "createOrganizationTicket", "tags": ["Organizations", "Tickets"], "summary": "Create a ticket for a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateTicketRequest" },
+        "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "get": {
+        "operationId": "listOrganizationTickets", "tags": ["Organizations", "Tickets"], "summary": "List tickets for a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}/tickets/{ticketId}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/TicketID" }],
+      "get": {
+        "operationId": "getOrganizationTicket", "tags": ["Organizations", "Tickets"], "summary": "Get a tenant-scoped ticket", "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "operationId": "updateOrganizationTicket", "tags": ["Organizations", "Tickets"], "summary": "Update a tenant-scoped ticket", "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/UpdateTicketRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "deleteOrganizationTicket", "tags": ["Organizations", "Tickets"], "summary": "Delete a tenant-scoped ticket", "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}/registrations": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "listOrganizationEventRegistrations", "tags": ["Organizations", "Registrations"], "summary": "List registrations for a tenant-scoped event", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}/registrations/export": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "exportOrganizationEventRegistrations", "tags": ["Organizations", "Registrations"], "summary": "Export a tenant-scoped registration CSV", "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "UTF-8 CSV export" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/organizations/{organizationId}/events/{id}/checkins": {
+      "parameters": [{ "$ref": "#/components/parameters/OrganizationID" }, { "$ref": "#/components/parameters/EventID" }],
+      "post": {
+        "operationId": "checkInOrganizationAdmission", "tags": ["Organizations", "Admissions"], "summary": "Check in a credential inside the tenant scope", "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CheckinRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      },
+      "get": {
+        "operationId": "listOrganizationEventCheckins", "tags": ["Organizations", "Admissions"], "summary": "List check-in audit records inside the tenant scope", "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
     "/admin/session": {
       "get": {
         "operationId": "getAdminSession",
@@ -442,6 +530,13 @@
         "security": [{ "AdminToken": [] }],
         "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
         "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/registrations/export": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }],
+      "get": {
+        "operationId": "exportEventRegistrations", "tags": ["Registrations"], "summary": "Export event registrations through the platform compatibility route", "security": [{ "AdminToken": [] }],
+        "responses": { "200": { "description": "UTF-8 CSV export" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/events/{id}/admission": {

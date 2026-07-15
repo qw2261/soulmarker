@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 12
+const CurrentSchemaVersion = 13
 
 type Store struct {
 	db             *sql.DB
@@ -160,7 +160,66 @@ func migrations() []migration {
 		{version: 10, name: "recovery_email", apply: migrateRecoveryEmail},
 		{version: 11, name: "in_app_notifications", apply: migrateInAppNotifications},
 		{version: 12, name: "organization_tenant_foundation", apply: migrateOrganizationTenantFoundation},
+		{version: 13, name: "event_tenant_scope", apply: migrateEventTenantScope},
 	}
+}
+
+func migrateEventTenantScope(tx *sql.Tx) error {
+	if err := addColumnIfMissing(
+		tx, "events", "organization_id",
+		"organization_id INTEGER NOT NULL DEFAULT 0 REFERENCES organizations(id)",
+	); err != nil {
+		return err
+	}
+	return execStatements(tx, []string{
+		`UPDATE events
+		 SET organization_id = COALESCE((
+			SELECT organization_id FROM organizers WHERE organizers.id = events.organizer_id
+		 ), 0)`,
+		`CREATE INDEX idx_events_organization
+		 ON events(organization_id, id DESC)`,
+		`CREATE TRIGGER events_reject_tenant_mismatch_insert
+		 BEFORE INSERT ON events
+		 WHEN NEW.organizer_id <> 0 AND NEW.organization_id <> 0
+		  AND NOT EXISTS (
+			SELECT 1 FROM organizers
+			WHERE id = NEW.organizer_id AND organization_id = NEW.organization_id
+		  )
+		 BEGIN
+			SELECT RAISE(ABORT, 'event organization mismatch');
+		 END`,
+		`CREATE TRIGGER events_reject_tenant_mismatch_update
+		 BEFORE UPDATE OF organizer_id, organization_id ON events
+		 WHEN NEW.organization_id <> OLD.organization_id
+		  AND NEW.organizer_id <> 0 AND NEW.organization_id <> 0
+		  AND NOT EXISTS (
+			SELECT 1 FROM organizers
+			WHERE id = NEW.organizer_id AND organization_id = NEW.organization_id
+		  )
+		 BEGIN
+			SELECT RAISE(ABORT, 'event organization mismatch');
+		 END`,
+		`CREATE TRIGGER events_assign_tenant_after_insert
+		 AFTER INSERT ON events
+		 WHEN NEW.organizer_id <> 0 AND NEW.organization_id = 0
+		 BEGIN
+			UPDATE events
+			SET organization_id = (
+				SELECT organization_id FROM organizers WHERE id = NEW.organizer_id
+			)
+			WHERE id = NEW.id;
+		 END`,
+		`CREATE TRIGGER events_sync_tenant_after_organizer_update
+		 AFTER UPDATE OF organizer_id ON events
+		 WHEN NEW.organizer_id <> 0 AND NEW.organizer_id <> OLD.organizer_id
+		 BEGIN
+			UPDATE events
+			SET organization_id = (
+				SELECT organization_id FROM organizers WHERE id = NEW.organizer_id
+			)
+			WHERE id = NEW.id;
+		 END`,
+	})
 }
 
 func migrateOrganizationTenantFoundation(tx *sql.Tx) error {
@@ -729,6 +788,7 @@ func validateForeignKeys(db *sql.DB) error {
 		table, parent, column string
 	}{
 		{"events", "organizers", "organizer_id"},
+		{"events", "organizations", "organization_id"},
 		{"registrations", "events", "event_id"},
 		{"registrations", "tickets", "ticket_id"},
 		{"registrations", "users", "user_id"},

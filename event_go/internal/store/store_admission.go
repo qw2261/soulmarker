@@ -214,6 +214,21 @@ func (s *Store) ListMyActivities(userID int64, offset, limit int) ([]*model.MyAc
 }
 
 func (s *Store) CheckIn(eventID int64, credentialCode, actor string, checkedInAt time.Time) (*model.Checkin, bool, error) {
+	event, err := s.GetEvent(eventID)
+	if err != nil {
+		return nil, false, err
+	}
+	if event == nil {
+		return nil, false, model.ErrAdmissionNotFound
+	}
+	return s.CheckInForOrganization(event.OrganizationID, eventID, credentialCode, actor, checkedInAt)
+}
+
+func (s *Store) CheckInForOrganization(
+	organizationID, eventID int64,
+	credentialCode, actor string,
+	checkedInAt time.Time,
+) (*model.Checkin, bool, error) {
 	s.checkinMu.Lock()
 	defer s.checkinMu.Unlock()
 
@@ -226,8 +241,9 @@ func (s *Store) CheckIn(eventID int64, credentialCode, actor string, checkedInAt
 	var admissionID int64
 	var status string
 	err = tx.QueryRow(
-		`SELECT id, status FROM admissions WHERE event_id = ? AND credential_code = ?`,
-		eventID, credentialCode,
+		`SELECT a.id, a.status FROM admissions a JOIN events e ON e.id = a.event_id
+		 WHERE a.event_id = ? AND a.credential_code = ? AND e.organization_id = ?`,
+		eventID, credentialCode, organizationID,
 	).Scan(&admissionID, &status)
 	if err == sql.ErrNoRows {
 		return nil, false, model.ErrAdmissionNotFound
@@ -292,15 +308,30 @@ func getCheckinTx(tx *sql.Tx, admissionID int64) (*model.Checkin, error) {
 }
 
 func (s *Store) ListCheckins(eventID int64, offset, limit int) ([]*model.Checkin, int, error) {
+	return s.listCheckins(0, eventID, offset, limit)
+}
+
+func (s *Store) ListCheckinsForOrganization(organizationID, eventID int64, offset, limit int) ([]*model.Checkin, int, error) {
+	return s.listCheckins(organizationID, eventID, offset, limit)
+}
+
+func (s *Store) listCheckins(organizationID, eventID int64, offset, limit int) ([]*model.Checkin, int, error) {
+	where := ` WHERE c.event_id = ?`
+	args := []interface{}{eventID}
+	if organizationID > 0 {
+		where += ` AND e.organization_id = ?`
+		args = append(args, organizationID)
+	}
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM checkins WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM checkins c JOIN events e ON e.id = c.event_id`+where, args...,
+	).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("查询核销总数失败: %w", err)
 	}
 	query := `SELECT c.id, c.admission_id, c.event_id, a.credential_code, u.name, u.contact,
 		c.checked_in_at, c.checked_in_by
 		FROM checkins c JOIN admissions a ON a.id = c.admission_id
-		JOIN users u ON u.id = a.user_id WHERE c.event_id = ? ORDER BY c.checked_in_at DESC`
-	args := []interface{}{eventID}
+		JOIN users u ON u.id = a.user_id JOIN events e ON e.id = c.event_id` + where + ` ORDER BY c.checked_in_at DESC`
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, limit, offset)
