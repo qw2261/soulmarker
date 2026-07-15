@@ -1,13 +1,13 @@
 # v5.5.0 测试报告
 
-> 状态：In Progress，G3-R01–R03、R05–R06 的当前实现均已通过本地和远端门禁
+> 状态：In Progress，G3-R01–R03、R05–R06 已远端验证；R04 DTO 切片本地完整门禁已通过，等待候选提交与远端 CI
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
-| 已验证基线 Commit | d40d24f61cd91208b31dbff120b1c95baaeffefd |
-| 当前候选 Commit | 08fa3011397169de37b0d351ac7475e85ebc48e0 |
+| 已验证基线 Commit | b91b8dbeb84f600950ccd09cba855a581b4e5ae6 |
+| 当前候选 Commit | 待提交 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v5，无数据库迁移 |
 
@@ -20,12 +20,13 @@
 | G3-R03 | ARCH-SERVICE-001 | RegistrationService 与 DiscussionService 正常、拒绝、边界、故障测试；既有 Handler 契约回归 |
 | G3-R05 | ARCH-REPO-001 | fakeRegistrationRepository 编译期契约与 service 正常/拒绝/故障测试 |
 | G3-R06 | ARCH-DEPS-001 | TestJWTManagerSignAndVerifyUser、TestGenerateTokenUsesInjectedClockAndSigner、取消截止确定时间测试 |
+| G3-R04 | CT-DTO-001 | TestResponseEnvelopeContract、TestUserAndLoginResponseDoNotExposePassword、TestEntityMappersFixPublicFieldSets、TestPostDetailUsesStableEmptyArray、既有 Handler 契约回归 |
 
 ## 本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 220 |
+| 顶层 Go Test 数量 | 224 |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
@@ -47,4 +48,4 @@
 
 ## Go/No-Go
 
-No-Go：DiscussionService 切片已完成验证；G3 仍有 DTO、OpenAPI 和业务错误码工作。
+No-Go：R04 DTO 切片仍需候选提交与远端 CI；G3 仍有 OpenAPI 和业务错误码工作。

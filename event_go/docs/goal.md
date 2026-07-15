@@ -241,7 +241,7 @@
 - [x] **G3-R01** Config 在启动时一次性加载、校验并注入，不在请求中重复读取环境变量。
 - [x] **G3-R02** NewStore 返回 error，库层不再 panic 或退出进程。
 - [x] **G3-R03** 只为报名、取消、讨论资格、核销、订单等跨实体事务引入 service；当前已覆盖现有报名、取消和讨论写入用例。
-- [ ] **G3-R04** HTTP DTO 与数据库实体逐步分离，固定 API 响应契约。
+- [x] **G3-R04** HTTP DTO 与数据库实体分离，认证、活动、门店、门票、报名、讨论和管理报告均使用显式请求/响应类型与字段映射。
 - [x] **G3-R05** repository 接口由调用方和具体业务需求定义，不提前抽象全部 CRUD。
 - [x] **G3-R06** 注入 clock、token signer、ID generator 等难以测试的依赖；当前无独立领域 ID 生成需求，后续 Admission/Order 引入时沿用相同模式。
 - [ ] **G3-R07** 建立 OpenAPI 契约和契约测试；新 API 进入 /api/v1。
@@ -691,7 +691,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 的远端 CI 已通过，等待 Tag 与最终发布证据 |
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
-| G3 | In Progress | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R03、R05–R06 已实现并远端验证；DiscussionService 候选 08fa301 已通过，R04、R07–R08 待推进 |
+| G3 | In Progress | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R03、R05–R06 已远端验证；R04 已实现并通过本地回归，等待候选提交与远端 CI；R07–R08 待推进 |
 | G4 | Planned | v6.0 | — | M1 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |

@@ -12,6 +12,7 @@ import (
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
+	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
@@ -105,7 +106,7 @@ func parsePagination(r *http.Request) (page, pageSize int) {
 
 // paginatedOK 写入带分页信息的成功响应
 func paginatedOK(w http.ResponseWriter, data interface{}, total, page, pageSize int) {
-	writeJSON(w, http.StatusOK, model.APIResp{
+	writeJSON(w, http.StatusOK, dto.Response{
 		Code:     200,
 		Message:  "ok",
 		Data:     data,
@@ -123,7 +124,7 @@ func (h *Handler) getEventOr404(w http.ResponseWriter, eventID int64) (*model.Ev
 		return nil, false
 	}
 	if event == nil {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrNotFound.Error()})
+		writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrNotFound.Error()})
 		return nil, false
 	}
 	return event, true
@@ -137,7 +138,7 @@ func (h *Handler) getTicketForEventOr404(w http.ResponseWriter, eventID, ticketI
 		return nil, false
 	}
 	if ticket == nil || ticket.EventID != eventID {
-		writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: model.ErrTicketNotFound.Error()})
+		writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: model.ErrTicketNotFound.Error()})
 		return nil, false
 	}
 	return ticket, true
@@ -155,13 +156,13 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		status = "degraded"
 	}
 
-	data := map[string]interface{}{
-		"status":         status,
-		"version":        h.version,
-		"uptime_seconds": int64(h.clock.Now().Sub(h.startTime).Seconds()),
-		"db":             dbStatus,
+	data := dto.HealthResponse{
+		Status:        status,
+		Version:       h.version,
+		UptimeSeconds: int64(h.clock.Now().Sub(h.startTime).Seconds()),
+		DB:            dbStatus,
 	}
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: data})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: data})
 }
 
 // CORS 中间件使用启动时注入的允许来源处理跨域请求。
@@ -182,7 +183,7 @@ func CORS(next http.Handler, allowedOrigin string) http.Handler {
 }
 
 // writeJSON 统一JSON响应格式，设置Content-Type和响应状态码
-func writeJSON(w http.ResponseWriter, status int, resp model.APIResp) {
+func writeJSON(w http.ResponseWriter, status int, resp dto.Response) {
 	if status >= http.StatusBadRequest && resp.ErrorCode == "" {
 		resp.ErrorCode = defaultErrorCode(status)
 	}
@@ -214,7 +215,7 @@ func defaultErrorCode(status int) string {
 
 func writeInternalError(w http.ResponseWriter, operation string, err error) {
 	slog.Error("request failed", "operation", operation, "error", err)
-	writeJSON(w, http.StatusInternalServerError, model.APIResp{
+	writeJSON(w, http.StatusInternalServerError, dto.Response{
 		Code:      http.StatusInternalServerError,
 		ErrorCode: "INTERNAL_ERROR",
 		Message:   "服务器内部错误",
@@ -229,14 +230,14 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	if err := decoder.Decode(dst); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeJSON(w, http.StatusRequestEntityTooLarge, model.APIResp{
+			writeJSON(w, http.StatusRequestEntityTooLarge, dto.Response{
 				Code:      http.StatusRequestEntityTooLarge,
 				ErrorCode: "REQUEST_TOO_LARGE",
 				Message:   "请求体过大",
 			})
 			return false
 		}
-		writeJSON(w, http.StatusBadRequest, model.APIResp{
+		writeJSON(w, http.StatusBadRequest, dto.Response{
 			Code:      http.StatusBadRequest,
 			ErrorCode: "INVALID_JSON",
 			Message:   "请求体格式错误",
@@ -245,7 +246,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	}
 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{
+		writeJSON(w, http.StatusBadRequest, dto.Response{
 			Code:      http.StatusBadRequest,
 			ErrorCode: "INVALID_JSON",
 			Message:   "请求体只能包含一个 JSON 对象",
@@ -263,7 +264,7 @@ func AdminAuth(next http.Handler, token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("X-Admin-Token")
 		if auth != token {
-			writeJSON(w, http.StatusUnauthorized, model.APIResp{Code: 401, Message: model.ErrUnauthorized.Error()})
+			writeJSON(w, http.StatusUnauthorized, dto.Response{Code: 401, Message: model.ErrUnauthorized.Error()})
 			return
 		}
 		next.ServeHTTP(w, r)

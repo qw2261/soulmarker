@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
 func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
 		return
 	}
 
@@ -20,21 +21,21 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req model.CreateTicketReq
+	var req dto.CreateTicketRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
 
 	if strings.TrimSpace(req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门票名称不能为空"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门票名称不能为空"})
 		return
 	}
 	if req.Price < 0 {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "价格不能为负数"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "价格不能为负数"})
 		return
 	}
 	if req.Stock <= 0 {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "库存必须大于 0"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "库存必须大于 0"})
 		return
 	}
 
@@ -49,13 +50,13 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, model.APIResp{Code: 201, Message: "门票创建成功", Data: ticket})
+	writeJSON(w, http.StatusCreated, dto.Response{Code: 201, Message: "门票创建成功", Data: dto.Ticket(ticket)})
 }
 
 func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
 		return
 	}
 
@@ -73,19 +74,19 @@ func (h *Handler) ListTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	paginatedOK(w, tickets, total, page, pageSize)
+	paginatedOK(w, dto.Tickets(tickets), total, page, pageSize)
 }
 
 func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
 		return
 	}
 
@@ -94,19 +95,19 @@ func (h *Handler) GetTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: ticket})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.Ticket(ticket)})
 }
 
 func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
 		return
 	}
 
@@ -114,47 +115,47 @@ func (h *Handler) UpdateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req model.UpdateTicketReq
+	var req dto.UpdateTicketRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
 
 	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "门票名称不能为空"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "门票名称不能为空"})
 		return
 	}
 	if req.Price != nil && *req.Price < 0 {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "价格不能为负数"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "价格不能为负数"})
 		return
 	}
 	if req.Stock != nil && *req.Stock < 0 {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "库存不能为负数"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "库存不能为负数"})
 		return
 	}
 
-	ticket, err := h.store.UpdateTicket(ticketID, req)
+	ticket, err := h.store.UpdateTicket(ticketID, req.Command())
 	if err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
-			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
 		} else {
 			writeInternalError(w, "update_ticket", err)
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "门票更新成功", Data: ticket})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "门票更新成功", Data: dto.Ticket(ticket)})
 }
 
 func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 	eventID, err := parseEventID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的活动 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的活动 ID"})
 		return
 	}
 
 	ticketID, err := parseTicketID(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "无效的门票 ID"})
+		writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "无效的门票 ID"})
 		return
 	}
 
@@ -164,12 +165,12 @@ func (h *Handler) DeleteTicket(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.DeleteTicket(ticketID); err != nil {
 		if errors.Is(err, model.ErrTicketNotFound) {
-			writeJSON(w, http.StatusNotFound, model.APIResp{Code: 404, Message: err.Error()})
+			writeJSON(w, http.StatusNotFound, dto.Response{Code: 404, Message: err.Error()})
 		} else {
 			writeInternalError(w, "delete_ticket", err)
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "门票已删除"})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "门票已删除"})
 }

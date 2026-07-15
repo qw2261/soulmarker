@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/qw2261/soulmarker/event_go/internal/api"
 )
 
 const TimeFormat = time.RFC3339
@@ -45,16 +46,6 @@ type Organizer struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type CreateOrganizerReq struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Contact     string `json:"contact"`
-	LogoURL     string `json:"logo_url"`
-	Address     string `json:"address"`
-	Website     string `json:"website"`
-	Tags        string `json:"tags"`
-}
-
 type UpdateOrganizerReq struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
@@ -92,16 +83,6 @@ type Registration struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-type CreateEventReq struct {
-	OrganizerID int64   `json:"organizer_id"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	EventTime   string  `json:"event_time"`
-	Location    string  `json:"location"`
-	Capacity    int     `json:"capacity"`
-	Price       float64 `json:"price"`
-}
-
 type UpdateEventReq struct {
 	OrganizerID *int64   `json:"organizer_id"`
 	Title       *string  `json:"title"`
@@ -113,32 +94,12 @@ type UpdateEventReq struct {
 	Status      *string  `json:"status"`
 }
 
-type RegisterReq struct {
-	TicketID *int64 `json:"ticket_id,omitempty"`
-}
-
 type User struct {
 	ID           int64     `json:"id"`
 	Name         string    `json:"name"`
 	Contact      string    `json:"contact"`
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
-}
-
-type RegisterUserReq struct {
-	Name     string `json:"name"`
-	Contact  string `json:"contact"`
-	Password string `json:"password"`
-}
-
-type LoginReq struct {
-	Contact  string `json:"contact"`
-	Password string `json:"password"`
-}
-
-type LoginResp struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
 }
 
 type UserClaims struct {
@@ -161,19 +122,8 @@ type ListEventsParams struct {
 	Limit       int
 }
 
-type APIResp struct {
-	Code      int         `json:"code"`
-	ErrorCode string      `json:"error_code,omitempty"`
-	Message   string      `json:"message"`
-	Data      interface{} `json:"data,omitempty"`
-	Total     *int        `json:"total,omitempty"`
-	Page      *int        `json:"page,omitempty"`
-	PageSize  *int        `json:"page_size,omitempty"`
-}
-
-type RegistrationStatusResp struct {
-	Registered bool `json:"registered"`
-}
+// APIResp 保留为测试与历史内部调用的兼容别名；HTTP 层使用 internal/api.Response。
+type APIResp = api.Response
 
 type MyRegistration struct {
 	ID          int64     `json:"id"`
@@ -211,20 +161,6 @@ type Reply struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-type PostDetailResp struct {
-	Post    *Post    `json:"post"`
-	Replies []*Reply `json:"replies"`
-}
-
-type CreatePostReq struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
-}
-
-type CreateReplyReq struct {
-	Content string `json:"content"`
-}
-
 type IdentityEntityStats struct {
 	Total      int `json:"total"`
 	Verified   int `json:"verified"`
@@ -260,12 +196,6 @@ type Ticket struct {
 	Stock     int       `json:"stock"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type CreateTicketReq struct {
-	Name  string  `json:"name"`
-	Price float64 `json:"price"`
-	Stock int     `json:"stock"`
 }
 
 type UpdateTicketReq struct {

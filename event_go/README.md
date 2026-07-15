@@ -269,6 +269,7 @@ event_go/
 │   ├── config/
 │   │   └── config.go            # 配置管理：环境变量统一加载
 │   ├── handler/
+│   │   ├── dto/                 # HTTP 请求/响应 DTO、实体映射与 JSON 契约测试
 │   │   ├── handler.go           # 基础设施：Handler 结构体, parseID, paginatedOK, getEventOr404 等
 │   │   ├── handler_event.go     # 活动 API（Create/List/Get/Update/Delete）
 │   │   ├── handler_ticket.go    # 门票 API（Create/List/Get/Update/Delete）
@@ -314,7 +315,7 @@ event_go/
 cmd/event-go/main.go         入口层：组装依赖、启动服务、SPA fallback
          │
          v
-internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证
+internal/handler/*.go        HTTP 层：路由、参数校验、权限检查、JWT 认证与公开 DTO
          │
          v
 internal/service/*.go        应用层：跨实体用例、业务边界、调用方定义的 Repository 接口
@@ -355,6 +356,7 @@ main.go
 - `NewStore` / `OpenStore` 返回初始化错误，调用方显式决定启动失败策略
 - 跨实体规则通过最小 service 协调；简单查询和单实体 CRUD 仍可直接调用 Store
 - Repository 接口由 service 按实际用例定义，不为所有 CRUD 预建抽象
+- HTTP DTO 显式列出公开字段，数据库实体新增字段不会自动进入 API 响应
 - 加新功能时先判断是否存在跨实体不变量，再决定是否需要 service，避免机械分层
 
 ### 技术选型
@@ -386,7 +388,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **220** 个顶层 Go 测试 |
+| 测试用例 | **224** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |

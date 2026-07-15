@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 )
 
 func (h *Handler) GetIdentityMigrationReport(w http.ResponseWriter, r *http.Request) {
@@ -12,7 +12,7 @@ func (h *Handler) GetIdentityMigrationReport(w http.ResponseWriter, r *http.Requ
 	if value := r.URL.Query().Get("legacy_limit"); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil || parsed <= 0 || parsed > 100 {
-			writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: "legacy_limit 必须在 1 到 100 之间"})
+			writeJSON(w, http.StatusBadRequest, dto.Response{Code: 400, Message: "legacy_limit 必须在 1 到 100 之间"})
 			return
 		}
 		limit = parsed
@@ -23,5 +23,5 @@ func (h *Handler) GetIdentityMigrationReport(w http.ResponseWriter, r *http.Requ
 		writeInternalError(w, "get_identity_migration_report", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: report})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.IdentityMigrationReport(report)})
 }

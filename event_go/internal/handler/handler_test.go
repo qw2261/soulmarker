@@ -19,6 +19,7 @@ import (
 	appauth "github.com/qw2261/soulmarker/event_go/internal/auth"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
+	"github.com/qw2261/soulmarker/event_go/internal/handler/dto"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/service"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
@@ -2171,7 +2172,7 @@ func TestRegisterUserHandler(t *testing.T) {
 	var apiResp model.APIResp
 	json.NewDecoder(resp.Body).Decode(&apiResp)
 	data, _ := json.Marshal(apiResp.Data)
-	var loginResp model.LoginResp
+	var loginResp dto.LoginResponse
 	json.Unmarshal(data, &loginResp)
 	if loginResp.Token == "" {
 		t.Fatal("expected token in response")
@@ -2229,7 +2230,7 @@ func TestLoginHandler(t *testing.T) {
 	var apiResp model.APIResp
 	json.NewDecoder(resp.Body).Decode(&apiResp)
 	data, _ := json.Marshal(apiResp.Data)
-	var loginResp model.LoginResp
+	var loginResp dto.LoginResponse
 	json.Unmarshal(data, &loginResp)
 	if loginResp.Token == "" {
 		t.Fatal("expected token in response")
