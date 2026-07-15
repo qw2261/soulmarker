@@ -238,8 +238,8 @@
 
 ### 范围
 
-- [ ] **G3-R01** Config 在启动时一次性加载、校验并注入，不在请求中重复读取环境变量。
-- [ ] **G3-R02** NewStore 返回 error，库层不再 log.Fatal。
+- [x] **G3-R01** Config 在启动时一次性加载、校验并注入，不在请求中重复读取环境变量。
+- [x] **G3-R02** NewStore 返回 error，库层不再 panic 或退出进程。
 - [ ] **G3-R03** 只为报名、取消、核销、订单等跨实体事务引入 service。
 - [ ] **G3-R04** HTTP DTO 与数据库实体逐步分离，固定 API 响应契约。
 - [ ] **G3-R05** repository 接口由调用方和具体业务需求定义，不提前抽象全部 CRUD。
@@ -686,10 +686,10 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 
 | 阶段 | 状态 | 目标版本 | 证据 | 备注 |
 |---|---|---|---|---|
-| G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 已推送，等待远端 CI、Tag 与最终发布证据 |
-| G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现，等待完整门禁与远端 CI；身份兼容路径归 G2 收口 |
+| G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 的远端 CI 已通过，等待 Tag 与最终发布证据 |
+| G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
-| G3 | Planned | v5.5 | — | 与 G2 后半段可小范围并行 |
+| G3 | In Progress | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R02 已实现并通过本地门禁；R03–R08 待按独立切片推进 |
 | G4 | Planned | v6.0 | — | M1 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |

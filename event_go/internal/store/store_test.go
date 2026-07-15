@@ -9,7 +9,10 @@ import (
 
 func setupTestStore(t *testing.T) *Store {
 	t.Helper()
-	store := NewStore(":memory:")
+	store, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
 	t.Cleanup(func() {
 		store.Close()
 	})
@@ -1170,8 +1173,17 @@ func TestPingNilDB(t *testing.T) {
 	}
 }
 
+func TestNewStoreReturnsInitializationError(t *testing.T) {
+	if _, err := NewStore(t.TempDir()); err == nil {
+		t.Fatal("expected NewStore to return an error for a directory path")
+	}
+}
+
 func TestClose(t *testing.T) {
-	store := NewStore(":memory:")
+	store, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
 	defer store.Close()
 	if err := store.Ping(); err != nil {
 		t.Fatalf("should work before close: %v", err)
@@ -1303,13 +1315,16 @@ func TestListPostsStoreEmpty(t *testing.T) {
 }
 
 func TestCreateEventMissingOrganizer(t *testing.T) {
-	store := NewStore(":memory:")
+	store, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
 	defer store.Close()
 	_ = store.CreateOrganizer(&model.Organizer{Name: "测试"})
 
 	e := newTestEvent("无门店活动")
 	e.OrganizerID = 0
-	err := store.CreateEvent(e)
+	err = store.CreateEvent(e)
 	if err != nil {
 		t.Fatalf("CreateEvent with organizer_id=0 should work: %v", err)
 	}

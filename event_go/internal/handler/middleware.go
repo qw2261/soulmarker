@@ -19,8 +19,8 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-func init() {
-	cfg := config.Load()
+// ConfigureLogging 使用已校验的启动配置初始化全局结构化日志。
+func ConfigureLogging(cfg *config.Config) {
 	levelStr := cfg.LogLevel
 
 	var level slog.Level

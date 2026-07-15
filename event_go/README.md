@@ -323,8 +323,9 @@ web/                         Vue 3 前端：Vite + Element Plus + Pinia（横向
 
 ```
 main.go
-  │  创建 Store（数据层）
-  │  创建 Handler（HTTP 层），注入 Store
+  │  加载并校验 Config（一次）
+  │  创建 Store（数据层，显式处理 error）
+  │  创建 Handler（HTTP 层），注入 Store 与 Config
   │  注册路由，启动服务（监听 SIGINT/SIGTERM 优雅关闭）
   │
   ├──→ Store          ← 封装所有数据库操作
@@ -336,7 +337,8 @@ main.go
 
 核心思路：**不依赖全局变量，显式传递依赖**。
 
-- `main.go` 创建 `Store`，再创建 `Handler` 把 `Store` 注入进去
+- `main.go` 一次性加载并校验 `Config`，再创建 `Store` 与 `Handler`；请求处理不重复读取环境变量
+- `NewStore` / `OpenStore` 返回初始化错误，调用方显式决定启动失败策略
 - `Handler` 的方法直接调用 `h.store.Xxx()`，不走全局变量
 - 加新功能时：`model/` 加结构体 → `store/` 在对应文件加方法 → `handler/` 在对应文件加处理器 → `cmd/` 加路由
 
@@ -369,7 +371,7 @@ main.go
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration 测试 |
-| 测试用例 | **202** 个顶层 Go 测试 |
+| 测试用例 | **204** 个顶层 Go 测试 |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 覆盖率策略 | 当前不使用 covdata，不以覆盖率作为发布门禁 |

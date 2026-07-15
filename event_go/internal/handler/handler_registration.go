@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 )
 
@@ -95,8 +94,7 @@ func (h *Handler) CancelRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := config.Load()
-	deadline := eventTime.Add(-time.Duration(cfg.CancelDeadlineHours) * time.Hour)
+	deadline := eventTime.Add(-time.Duration(h.config.CancelDeadlineHours) * time.Hour)
 	if time.Now().After(deadline) {
 		writeJSON(w, http.StatusBadRequest, model.APIResp{Code: 400, Message: model.ErrCancelDeadlineExceeded.Error()})
 		return

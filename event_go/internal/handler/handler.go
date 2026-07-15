@@ -18,26 +18,17 @@ const timeParseMsg = "格式错误，请使用 RFC3339 格式，例如：2026-12
 
 const maxRequestBodyBytes int64 = 1 << 20
 
-// getAdminToken 从环境变量获取管理员令牌，用于保护需要管理员权限的API
-func getAdminToken() string {
-	return config.Load().AdminToken
-}
-
 // Handler 负责处理HTTP请求，协调store层进行数据操作
 type Handler struct {
 	store     *store.Store
+	config    *config.Config
 	startTime time.Time
 	version   string
 }
 
-// NewHandler 创建Handler实例，接收store层指针用于数据访问
-func NewHandler(s *store.Store) *Handler {
-	return &Handler{store: s, startTime: time.Now(), version: getVersion()}
-}
-
-// getVersion 获取服务版本，默认"dev"，可通过VERSION环境变量配置
-func getVersion() string {
-	return config.Load().Version
+// NewHandler 创建 Handler，并注入启动时已加载和校验的配置。
+func NewHandler(s *store.Store, cfg *config.Config) *Handler {
+	return &Handler{store: s, config: cfg, startTime: time.Now(), version: cfg.Version}
 }
 
 // parseEventID 从URL路径中解析活动ID
@@ -165,10 +156,8 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.APIResp{Code: 200, Message: "ok", Data: data})
 }
 
-// CORS 中间件，处理跨域请求，支持通过CORS_ORIGIN环境变量配置允许的来源
-func CORS(next http.Handler) http.Handler {
-	cfg := config.Load()
-	allowedOrigin := cfg.CORSOrigin
+// CORS 中间件使用启动时注入的允许来源处理跨域请求。
+func CORS(next http.Handler, allowedOrigin string) http.Handler {
 	if allowedOrigin == "" {
 		allowedOrigin = "*"
 	}
@@ -259,8 +248,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 }
 
 // AdminAuth 中间件，验证管理员令牌，保护需要管理员权限的API
-func AdminAuth(next http.Handler) http.Handler {
-	token := getAdminToken()
+func AdminAuth(next http.Handler, token string) http.Handler {
 	if token == "" {
 		return next
 	}

@@ -9,18 +9,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
 	"github.com/qw2261/soulmarker/event_go/internal/store"
 )
 
 var testServerStores sync.Map
+
+func mustNewStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	return s
+}
 
 func makeTestJWT(t *testing.T, userID int64, name, contact string) string {
 	t.Helper()
@@ -80,8 +89,8 @@ func doUserJSON(t *testing.T, method, requestURL, body string, _ int64, name, co
 
 func setupTestServer(t *testing.T) (*store.Store, *Handler, *httptest.Server) {
 	t.Helper()
-	s := store.NewStore(":memory:")
-	h := NewHandler(s)
+	s := mustNewStore(t)
+	h := NewHandler(s, config.Load())
 
 	server := httptest.NewServer(NewRouter(h, nil))
 	testServerStores.Store(server.URL, s)
@@ -1084,9 +1093,9 @@ func TestHealthHandler(t *testing.T) {
 }
 
 func TestHealthHandlerResponseStructure(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -1112,6 +1121,34 @@ func TestHealthHandlerResponseStructure(t *testing.T) {
 		if _, exists := data[field]; !exists {
 			t.Errorf("expected field %q in response", field)
 		}
+	}
+}
+
+func TestHandlerUsesStartupConfigSnapshot(t *testing.T) {
+	s := mustNewStore(t)
+	defer s.Close()
+	cfg := config.Load()
+	cfg.Version = "injected-version"
+	cfg.CORSOrigin = "https://startup.example.com"
+	h := NewHandler(s, cfg)
+	router := NewRouter(h, nil)
+
+	t.Setenv("VERSION", "changed-after-startup")
+	t.Setenv("CORS_ORIGIN", "https://changed.example.com")
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthResp := httptest.NewRecorder()
+	router.ServeHTTP(healthResp, healthReq)
+	var apiResp model.APIResp
+	if err := json.NewDecoder(healthResp.Body).Decode(&apiResp); err != nil {
+		t.Fatal(err)
+	}
+	data := apiResp.Data.(map[string]interface{})
+	if data["version"] != "injected-version" {
+		t.Fatalf("expected injected version, got %v", data["version"])
+	}
+	if origin := healthResp.Header().Get("Access-Control-Allow-Origin"); origin != "https://startup.example.com" {
+		t.Fatalf("expected injected CORS origin, got %q", origin)
 	}
 }
 
@@ -1163,8 +1200,8 @@ func TestLoggingMiddlewarePassesThrough(t *testing.T) {
 }
 
 func TestHealthHandlerDBDisconnected(t *testing.T) {
-	s := store.NewStore(":memory:")
-	h := NewHandler(s)
+	s := mustNewStore(t)
+	h := NewHandler(s, config.Load())
 	s.Close()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -1194,9 +1231,9 @@ func TestHealthHandlerDBDisconnected(t *testing.T) {
 }
 
 func TestStrictJSONRequestBoundary(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 
 	tests := []struct {
 		name       string
@@ -1271,8 +1308,8 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestInternalErrorsDoNotLeak(t *testing.T) {
-	s := store.NewStore(":memory:")
-	h := NewHandler(s)
+	s := mustNewStore(t)
+	h := NewHandler(s, config.Load())
 	_ = s.Close()
 
 	w := httptest.NewRecorder()
@@ -1297,19 +1334,16 @@ func TestInternalErrorsDoNotLeak(t *testing.T) {
 }
 
 func TestMiddlewareChainOrder(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	handler := NewHandler(s)
+	handler := NewHandler(s, config.Load())
 
 	_ = s.CreateOrganizer(&model.Organizer{Name: "测试门店"})
 
-	t.Setenv("ADMIN_TOKEN", "test-token")
-	defer func() { t.Setenv("ADMIN_TOKEN", "") }()
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/events", AdminAuth(http.HandlerFunc(handler.CreateEvent)).ServeHTTP)
+	mux.HandleFunc("POST /api/events", AdminAuth(http.HandlerFunc(handler.CreateEvent), "test-token").ServeHTTP)
 
-	server := httptest.NewServer(LoggingMiddleware(CORS(mux)))
+	server := httptest.NewServer(LoggingMiddleware(CORS(mux, "*")))
 	defer server.Close()
 
 	req, _ := http.NewRequest("POST", server.URL+"/api/events",
@@ -1358,22 +1392,12 @@ func TestErrorResponseFormat(t *testing.T) {
 }
 
 func TestCORSOriginEnvConfig(t *testing.T) {
-	originalOrigin := os.Getenv("CORS_ORIGIN")
-	t.Setenv("CORS_ORIGIN", "https://example.com")
-	defer func() {
-		if originalOrigin != "" {
-			t.Setenv("CORS_ORIGIN", originalOrigin)
-		} else {
-			os.Unsetenv("CORS_ORIGIN")
-		}
-	}()
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	server := httptest.NewServer(CORS(mux))
+	server := httptest.NewServer(CORS(mux, "https://example.com"))
 	defer server.Close()
 
 	resp, err := http.Get(server.URL + "/test")
@@ -1696,7 +1720,7 @@ func TestUserAuthNoToken(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
-	UserAuth(next).ServeHTTP(w, req)
+	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
 
 	if !captured {
 		t.Error("next handler not called")
@@ -1725,7 +1749,7 @@ func TestUserAuthWithValidToken(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	UserAuth(next).ServeHTTP(w, req)
+	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
 
 	if !captured {
 		t.Error("next handler not called with valid token")
@@ -1742,7 +1766,7 @@ func TestUserAuthWithInvalidToken(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer invalid.token.here")
 	w := httptest.NewRecorder()
-	UserAuth(next).ServeHTTP(w, req)
+	UserAuth(next, config.DefaultJWTSecret).ServeHTTP(w, req)
 
 	if captured {
 		t.Error("next handler must not be called with invalid token")
@@ -2181,9 +2205,9 @@ func TestLoginHandlerNotFound(t *testing.T) {
 }
 
 func TestGetTicketInvalidID(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 
 	req := httptest.NewRequest("GET", "/api/events/abc/tickets/1", nil)
 	w := httptest.NewRecorder()
@@ -2215,9 +2239,9 @@ func TestUpdateTicketNotFound(t *testing.T) {
 }
 
 func TestUpdateTicketInvalidBody(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 	ticket := &model.Ticket{EventID: 1, Name: "原始", Price: 10, Stock: 5}
 	s.CreateTicket(ticket)
 
@@ -2251,9 +2275,9 @@ func TestDeleteTicketNotFound(t *testing.T) {
 }
 
 func TestDeleteTicketInvalidID(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 
 	req := httptest.NewRequest("DELETE", "/api/events/abc/tickets/1", nil)
 	w := httptest.NewRecorder()
@@ -2307,9 +2331,9 @@ func TestCreateReplyNotFound(t *testing.T) {
 }
 
 func TestCreateReplyInvalidBody(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 	user := &model.User{Name: "testuser", Contact: "test@test.com", PasswordHash: "hash"}
 	if err := s.CreateUser(user); err != nil {
 		t.Fatal(err)
@@ -2324,7 +2348,7 @@ func TestCreateReplyInvalidBody(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+makeTestJWT(t, user.ID, "testuser", "test@test.com"))
 	w := httptest.NewRecorder()
-	UserAuth(http.HandlerFunc(h.CreateReply)).ServeHTTP(w, req)
+	UserAuth(http.HandlerFunc(h.CreateReply), config.DefaultJWTSecret).ServeHTTP(w, req)
 
 	resp := w.Result()
 	defer resp.Body.Close()
@@ -2406,9 +2430,9 @@ func TestListRegistrationsEmpty(t *testing.T) {
 }
 
 func TestUpdateEventInvalidBody(t *testing.T) {
-	s := store.NewStore(":memory:")
+	s := mustNewStore(t)
 	defer s.Close()
-	h := NewHandler(s)
+	h := NewHandler(s, config.Load())
 	e := &model.Event{Title: "test", EventTime: "2026-12-31T18:00:00+08:00", Location: "线上", Capacity: 10, Status: "draft"}
 	s.CreateEvent(e)
 

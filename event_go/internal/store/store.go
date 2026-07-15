@@ -82,13 +82,9 @@ func OpenStore(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// NewStore 保留给现有调用方；生产入口使用 OpenStore 显式处理错误。
-func NewStore(dbPath string) *Store {
-	store, err := OpenStore(dbPath)
-	if err != nil {
-		panic(err)
-	}
-	return store
+// NewStore 打开数据库并显式返回初始化错误。
+func NewStore(dbPath string) (*Store, error) {
+	return OpenStore(dbPath)
 }
 
 func migrate(db *sql.DB) error {

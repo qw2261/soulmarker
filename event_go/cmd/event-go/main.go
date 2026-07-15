@@ -21,6 +21,7 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("配置校验失败: %v", err)
 	}
+	handler.ConfigureLogging(cfg)
 
 	s, err := store.OpenStore(cfg.DatabasePath)
 	if err != nil {
@@ -29,7 +30,7 @@ func main() {
 	defer s.Close()
 	log.Printf("📦 数据库已初始化: %s", cfg.DatabasePath)
 
-	h := handler.NewHandler(s)
+	h := handler.NewHandler(s, cfg)
 
 	port := cfg.Port
 	addr := ":" + port

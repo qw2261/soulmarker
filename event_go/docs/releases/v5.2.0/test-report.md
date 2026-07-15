@@ -1,6 +1,6 @@
 # v5.2.0 测试报告
 
-> 状态：Verification，本地门禁通过且候选分支已推送，等待远端 CI
+> 状态：Verification，本地门禁与候选实现远端 CI 已通过，等待 Tag 与最终发布证据
 
 ## 版本身份
 
@@ -10,7 +10,7 @@
 | 基线 Commit | b196b3c754139fe20346252ae1cbc38a47dcf389 |
 | 候选实现 Commit | bc9db6b（feat: 推进 v5.2 安全基线与版本化迁移） |
 | 候选分支 | origin/codex/update_project |
-| CI Run | 待运行 |
+| CI Run | [29375086101](https://github.com/qw2261/soulmarker/actions/runs/29375086101)，backend/frontend success |
 | Schema | v3，事务化版本迁移；user_id Expand |
 
 ## 环境
@@ -69,11 +69,10 @@
 
 ## 未完成证据
 
-- 远端 GitHub Actions 尚未执行。
 - 最终发布 Commit 与 Tag 尚未生成；当前候选实现 Commit 为 bc9db6b。
 - Docker daemon 当前不可用，Docker smoke 未执行。
 - 真实备份恢复演练尚未执行。
 
 ## Go/No-Go
 
-No-Go：候选提交已推送且本地验证通过，但必须取得远端 CI 与 Tag 证据后才能结束 G0。
+No-Go：候选提交的本地与远端门禁已通过，但必须取得 Tag 与最终发布证据后才能结束 G0。
