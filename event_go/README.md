@@ -498,6 +498,7 @@ main.go
 cd event_go && go test -v -count=1 ./...   # 运行所有测试
 cd event_go && go test -race -count=1 ./... # 数据竞争检测
 cd event_go && go vet ./...                 # 静态检查
+cd event_go && go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./... # Go 可达漏洞扫描
 cd event_go/web && npm test                 # Vue 组件测试
 cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 ```

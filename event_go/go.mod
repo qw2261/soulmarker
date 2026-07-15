@@ -3,7 +3,7 @@ module github.com/qw2261/soulmarker/event_go
 go 1.25.0
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	golang.org/x/crypto v0.50.0
 	modernc.org/sqlite v1.49.1
 )

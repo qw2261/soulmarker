@@ -75,6 +75,7 @@
 - staging/production 缺 HTTPS 公开地址、SMTP 配置或合法重置有效期时拒绝启动。
 - 报名 CSV 对 `= + - @` 开头字段增加公式注入防护；无效管理 Token 不得仅凭本地存储进入后台。
 - 通知查询和已读操作只使用 JWT 用户 ID 作用域，跨用户通知统一隐藏为 `NOTIFICATION_NOT_FOUND`；通知正文不保存联系方式、恢复令牌或入场凭证。
+- 升级 `github.com/golang-jwt/jwt/v5` 到 v5.2.2，修复可达的 `GO-2025-3553` 分隔符洪泛过量内存分配问题，并在 CI 增加 pinned `govulncheck` 门禁。
 
 ### Migration
 

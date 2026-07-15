@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R03 恢复邮箱与 G4-R05 基础通知代码侧均已通过远端候选门禁
+> 状态：In Progress，JWT `GO-2025-3553` 修复与 P0/P1 清零审计为本地候选
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 04908db31f6ff7b3db99f681701d6b5c83f99746 |
+| 当前候选 Commit | 待 JWT 依赖安全修复提交后回填 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v11，新增持久化站内通知、未读/活动索引和幂等键；保留 v10 恢复邮箱、v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
 
@@ -30,17 +30,19 @@
 | G4-R09 browser | E2E-CONTENT-MODERATION-001 | desktop-chromium 与 Pixel 7：举报帖子/回复、移除回复、驳回举报、直接移除/恢复帖子、公开隐藏 removed 内容、核对 4 条本轮动作记录 |
 | G4-R05 | DOM-NOTIFICATION-001、MIG-NOTIFICATION-001、IT-NOTIFICATION-001、SEC-NOTIFICATION-001、SCHED-NOTIFICATION-001、CT-API-NOTIFICATION-001、FE-NOTIFICATION-001 | 报名/取消/活动变更事务通知；v10→v11 和空库/重复迁移；用户隔离、未读状态、活动删除保留；提醒幂等和时间变更；DTO/错误码/OpenAPI/路由契约；通知中心与未读徽标 |
 | G4-R05 browser | E2E-NOTIFICATION-001 | desktop-chromium 与 Pixel 7：报名和取消后通知中心显示对应标题、活动正文、无横向溢出并可全部标为已读 |
+| BUG-G4-004 | REG-BUG-G4-001、SEC-GOVULN-001 | delimiter-flood JWT 必须拒绝；`jwt/v5.2.2` 修复 `GO-2025-3553`；CI pinned `govulncheck@v1.6.0` 阻断可达 Go 漏洞 |
 
 ## 当前本地结果
 
 | 门禁 | 结果 |
 |---|---|
-| 顶层 Go Test 数量 | 285 |
+| 顶层 Go Test 数量 | 286 |
 | Vue unit/component tests | 17 passed（10 files） |
 | Playwright E2E | 4 passed（2 个场景 × desktop-chromium / Pixel 7） |
 | go test -count=1 ./... | 通过 |
 | go test -race -count=1 ./... | 通过 |
 | go vet ./... | 通过 |
+| govulncheck@v1.6.0 | 修复前发现 1 个可达漏洞 `GO-2025-3553`；升级 `jwt/v5.2.2` 后 0 个可达漏洞 |
 | OpenAPI JSON / 路由 / DTO / error_code 契约 | 通过 |
 | npm run build | 通过；主 JS 544.28 KB / 190.74 KB gzip；存在大于 500 KB 的 chunk 提示，通知页本身保持路由懒加载 |
 | npm audit --omit=dev | 0 vulnerabilities |
@@ -80,4 +82,4 @@
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R05、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 恢复邮箱代码侧已通过远端候选，仍缺真实 staging SMTP 收件、链接跳转和撤销验收。两场受控测试活动和 P0/P1 正式清零审计尚未完成。
+No-Go：R01、R02、R04、R05、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 仍缺真实 staging SMTP 验收，两场受控活动尚未执行。P0/P1 台账已建立，`GO-2025-3553` 已本地修复但仍需候选远端 CI 后正式清零。

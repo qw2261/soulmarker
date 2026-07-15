@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,17 @@ func TestJWTManagerSignAndVerifyUser(t *testing.T) {
 	}
 	if claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(issuedAt.Add(time.Hour)) {
 		t.Fatalf("unexpected expires_at: %+v", claims.ExpiresAt)
+	}
+}
+
+// REG-BUG-G4-001 locks the delimiter-flood rejection path involved in GO-2025-3553.
+// The bounded parser implementation is supplied by jwt/v5.2.2 or newer and is
+// continuously verified by the pinned govulncheck CI gate.
+func TestJWTManagerRejectsDelimiterFlood(t *testing.T) {
+	manager := NewJWTManager("test-secret-with-enough-entropy")
+	malicious := strings.Repeat(".", 100_000)
+	if _, err := manager.VerifyUser(malicious); err == nil {
+		t.Fatal("delimiter-flood token accepted")
 	}
 }
 
