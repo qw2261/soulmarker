@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R03 认证安全闭环已通过本地候选门禁，等待提交与远端 CI
+> 状态：In Progress，G4-R03 认证安全闭环已通过本地与远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 工作树候选，基于 3c38acf；首次提交后回填完整 SHA |
+| 当前候选 Commit | c6fc2cf52750b93b84dc047cfac51cb65e7cae51 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v7，新增认证版本、密码重置 Token 表与触发器；保留 v6 admissions/checkins |
 
@@ -50,7 +50,10 @@
 | [GitHub Actions Run 29387047591](https://github.com/qw2261/soulmarker/actions/runs/29387047591) | Commit df969f2，统一时间线/首包加固候选 success |
 | [backend job 87262384999](https://github.com/qw2261/soulmarker/actions/runs/29387047591/job/87262384999) | format、vet、250 tests、race success |
 | [frontend job 87262384985](https://github.com/qw2261/soulmarker/actions/runs/29387047591/job/87262384985) | Node 22 build、3 component tests、desktop/mobile Playwright success；浏览器证据已上传 |
+| [GitHub Actions Run 29389509516](https://github.com/qw2261/soulmarker/actions/runs/29389509516) | Commit c6fc2cf，认证闭环候选 success |
+| [backend job 87269619413](https://github.com/qw2261/soulmarker/actions/runs/29389509516/job/87269619413) | format、vet、262 tests、race success |
+| [frontend job 87269619409](https://github.com/qw2261/soulmarker/actions/runs/29389509516/job/87269619409) | Node 22 build、5 unit/component tests、desktop/mobile Playwright success；浏览器证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R02、R07、R08 已通过本地和远端候选门禁；R03 代码与本地门禁通过，但 legacy phone-only 恢复、真实 staging SMTP、提交绑定和远端 CI 尚未完成。G4 其余 Requirements、完整 E2E 和两场受控测试活动也尚未完成。
+No-Go：R02、R07、R08 已通过本地和远端候选门禁；R03 代码、提交绑定与远端 CI 已通过，但 legacy phone-only 恢复和真实 staging SMTP 尚未完成。G4 其余 Requirements、完整 E2E 和两场受控测试活动也尚未完成。
