@@ -41,6 +41,7 @@ func main() {
 	registrations := service.NewRegistrationService(s, businessClock, time.Duration(cfg.CancelDeadlineHours)*time.Hour, credentials)
 	admissions := service.NewAdmissionService(s, businessClock)
 	discussions := service.NewDiscussionService(s)
+	moderation := service.NewContentModerationService(s, businessClock)
 	var resetSender notification.PasswordResetSender = notification.LogPasswordResetSender{}
 	if cfg.SMTPHost != "" {
 		resetSender = notification.NewSMTPPasswordResetSender(
@@ -58,6 +59,7 @@ func main() {
 		Admissions:     admissions,
 		Discussions:    discussions,
 		Authentication: authentication,
+		Moderation:     moderation,
 	})
 
 	port := cfg.Port

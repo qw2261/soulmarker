@@ -162,6 +162,42 @@
         }
       }
     },
+    "/admin/content-reports": {
+      "get": {
+        "operationId": "listContentReports",
+        "tags": ["Moderation"],
+        "summary": "List content reports for platform moderation",
+        "security": [{ "AdminToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/Page" },
+          { "$ref": "#/components/parameters/PageSize" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["open", "resolved", "dismissed"], "default": "open" } },
+          { "name": "target_type", "in": "query", "schema": { "type": "string", "enum": ["post", "reply"] } }
+        ],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/admin/content-reports/{reportId}": {
+      "parameters": [{ "$ref": "#/components/parameters/ReportID" }],
+      "put": {
+        "operationId": "resolveContentReport",
+        "tags": ["Moderation"],
+        "summary": "Remove reported content or dismiss a report",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/ResolveContentReportRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/admin/content-actions": {
+      "get": {
+        "operationId": "listContentModerationActions",
+        "tags": ["Moderation"],
+        "summary": "List immutable content moderation actions",
+        "security": [{ "AdminToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/Page" }, { "$ref": "#/components/parameters/PageSize" }],
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
     "/organizers": {
       "post": {
         "operationId": "createOrganizer",
@@ -366,6 +402,36 @@
         "tags": ["Discussions"],
         "summary": "Get a post and replies",
         "responses": { "200": { "$ref": "#/components/responses/OK" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "operationId": "removePost",
+        "tags": ["Moderation"],
+        "summary": "Soft-delete a post while retaining moderation evidence",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/ModerateContentRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/reports": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }],
+      "post": {
+        "operationId": "reportPost",
+        "tags": ["Moderation"],
+        "summary": "Report a visible post as a registered participant",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateContentReportRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/restore": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }],
+      "put": {
+        "operationId": "restorePost",
+        "tags": ["Moderation"],
+        "summary": "Restore a soft-deleted post",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/ModerateContentRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/events/{id}/posts/{postId}/replies": {
@@ -377,6 +443,39 @@
         "security": [{ "BearerAuth": [] }],
         "requestBody": { "$ref": "#/components/requestBodies/CreateReplyRequest" },
         "responses": { "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/replies/{replyId}/reports": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }, { "$ref": "#/components/parameters/ReplyID" }],
+      "post": {
+        "operationId": "reportReply",
+        "tags": ["Moderation"],
+        "summary": "Report a visible reply as a registered participant",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/CreateContentReportRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "201": { "$ref": "#/components/responses/Created" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/replies/{replyId}": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }, { "$ref": "#/components/parameters/ReplyID" }],
+      "delete": {
+        "operationId": "removeReply",
+        "tags": ["Moderation"],
+        "summary": "Soft-delete a reply while retaining moderation evidence",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/ModerateContentRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
+      }
+    },
+    "/events/{id}/posts/{postId}/replies/{replyId}/restore": {
+      "parameters": [{ "$ref": "#/components/parameters/EventID" }, { "$ref": "#/components/parameters/PostID" }, { "$ref": "#/components/parameters/ReplyID" }],
+      "put": {
+        "operationId": "restoreReply",
+        "tags": ["Moderation"],
+        "summary": "Restore a soft-deleted reply",
+        "security": [{ "AdminToken": [] }],
+        "requestBody": { "$ref": "#/components/requestBodies/ModerateContentRequest" },
+        "responses": { "200": { "$ref": "#/components/responses/OK" }, "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "$ref": "#/components/responses/Conflict" } }
       }
     },
     "/events/{id}/tickets": {
@@ -433,6 +532,8 @@
       "OrganizerID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "EventID": { "name": "id", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "PostID": { "name": "postId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "ReplyID": { "name": "replyId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
+      "ReportID": { "name": "reportId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } },
       "TicketID": { "name": "ticketId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64", "minimum": 1 } }
     },
     "requestBodies": {
@@ -447,6 +548,9 @@
       "RegisterEventRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegisterEventRequest" } } } },
       "CreatePostRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePostRequest" } } } },
       "CreateReplyRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateReplyRequest" } } } },
+      "CreateContentReportRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateContentReportRequest" } } } },
+      "ResolveContentReportRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResolveContentReportRequest" } } } },
+      "ModerateContentRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ModerateContentRequest" } } } },
       "CreateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTicketRequest" } } } },
       "UpdateTicketRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTicketRequest" } } } },
       "CheckinRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CheckinRequest" } } } }
@@ -466,7 +570,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -479,7 +583,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -494,6 +598,9 @@
       "RegisterEventRequest": { "type": "object", "additionalProperties": false, "properties": { "ticket_id": { "type": "integer", "format": "int64", "minimum": 1 } } },
       "CreatePostRequest": { "type": "object", "additionalProperties": false, "required": ["title", "content"], "properties": { "title": { "type": "string" }, "content": { "type": "string" } } },
       "CreateReplyRequest": { "type": "object", "additionalProperties": false, "required": ["content"], "properties": { "content": { "type": "string" } } },
+      "CreateContentReportRequest": { "type": "object", "additionalProperties": false, "required": ["category"], "properties": { "category": { "type": "string", "enum": ["spam", "abuse", "illegal", "privacy", "other"] }, "detail": { "type": "string", "maxLength": 1000 } } },
+      "ResolveContentReportRequest": { "type": "object", "additionalProperties": false, "required": ["resolution", "note"], "properties": { "resolution": { "type": "string", "enum": ["remove", "dismiss"] }, "note": { "type": "string", "minLength": 1, "maxLength": 1000 } } },
+      "ModerateContentRequest": { "type": "object", "additionalProperties": false, "required": ["reason"], "properties": { "reason": { "type": "string", "minLength": 1, "maxLength": 1000 } } },
       "CreateTicketRequest": { "type": "object", "additionalProperties": false, "required": ["name", "price", "stock"], "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 1 } } },
       "UpdateTicketRequest": { "type": "object", "additionalProperties": false, "properties": { "name": { "type": "string" }, "price": { "type": "number", "minimum": 0 }, "stock": { "type": "integer", "minimum": 0 } } },
       "CheckinRequest": { "type": "object", "additionalProperties": false, "required": ["credential"], "properties": { "credential": { "type": "string", "minLength": 1 } } },
@@ -514,6 +621,9 @@
       "PostResponse": { "type": "object", "required": ["id", "event_id", "author_name", "title", "content", "reply_count", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "title": { "type": "string" }, "content": { "type": "string" }, "reply_count": { "type": "integer", "minimum": 0 }, "created_at": { "type": "string", "format": "date-time" } } },
       "ReplyResponse": { "type": "object", "required": ["id", "post_id", "author_name", "content", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "author_name": { "type": "string" }, "content": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
       "PostDetailResponse": { "type": "object", "required": ["post", "replies"], "properties": { "post": { "$ref": "#/components/schemas/PostResponse" }, "replies": { "type": "array", "items": { "$ref": "#/components/schemas/ReplyResponse" } } } },
+      "ContentReportReceiptResponse": { "type": "object", "required": ["id", "target_type", "target_id", "category", "status", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "target_type": { "type": "string", "enum": ["post", "reply"] }, "target_id": { "type": "integer", "format": "int64" }, "category": { "type": "string" }, "status": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
+      "ContentReportResponse": { "type": "object", "required": ["id", "event_id", "post_id", "target_type", "target_id", "reporter_user_id", "reporter_name", "category", "detail", "status", "created_at", "resolved_by", "resolution_note", "target_author_name", "target_title", "target_content", "target_moderation_status"], "properties": { "id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "target_type": { "type": "string", "enum": ["post", "reply"] }, "target_id": { "type": "integer", "format": "int64" }, "reporter_user_id": { "type": "integer", "format": "int64" }, "reporter_name": { "type": "string" }, "category": { "type": "string" }, "detail": { "type": "string" }, "status": { "type": "string", "enum": ["open", "resolved", "dismissed"] }, "created_at": { "type": "string", "format": "date-time" }, "resolved_at": { "type": "string", "format": "date-time" }, "resolved_by": { "type": "string" }, "resolution_note": { "type": "string" }, "target_author_name": { "type": "string" }, "target_title": { "type": "string" }, "target_content": { "type": "string" }, "target_moderation_status": { "type": "string", "enum": ["visible", "removed"] } } },
+      "ContentModerationActionResponse": { "type": "object", "required": ["id", "event_id", "post_id", "target_type", "target_id", "action", "actor", "reason", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "report_id": { "type": "integer", "format": "int64" }, "event_id": { "type": "integer", "format": "int64" }, "post_id": { "type": "integer", "format": "int64" }, "target_type": { "type": "string", "enum": ["post", "reply"] }, "target_id": { "type": "integer", "format": "int64" }, "action": { "type": "string", "enum": ["remove", "restore", "dismiss"] }, "actor": { "type": "string" }, "reason": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } },
       "IdentityEntityStatsResponse": { "type": "object", "required": ["total", "verified", "backfilled", "legacy"], "properties": { "total": { "type": "integer" }, "verified": { "type": "integer" }, "backfilled": { "type": "integer" }, "legacy": { "type": "integer" } } },
       "LegacyIdentityRecordResponse": { "type": "object", "required": ["entity_type", "id", "parent_id", "name", "contact"], "properties": { "entity_type": { "type": "string" }, "id": { "type": "integer", "format": "int64" }, "parent_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" } } },
       "IdentityMigrationReportResponse": { "type": "object", "required": ["registrations", "posts", "replies", "legacy_records"], "properties": { "registrations": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "posts": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "replies": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "legacy_records": { "type": "array", "items": { "$ref": "#/components/schemas/LegacyIdentityRecordResponse" } } } },

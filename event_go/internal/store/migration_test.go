@@ -29,6 +29,10 @@ func TestMigrationEmptyDatabase(t *testing.T) {
 	assertColumnExists(t, s.db, "user_auth_versions", "version")
 	assertColumnExists(t, s.db, "password_reset_tokens", "token_hash")
 	assertColumnExists(t, s.db, "events", "cover_url")
+	assertColumnExists(t, s.db, "posts", "moderation_status")
+	assertColumnExists(t, s.db, "replies", "moderation_status")
+	assertTableExists(t, s.db, "content_reports")
+	assertTableExists(t, s.db, "content_moderation_actions")
 }
 
 func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
@@ -52,6 +56,8 @@ func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
 		`CREATE TABLE password_reset_tokens (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, token_hash TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id))`,
 		`INSERT INTO organizers VALUES (1, '封面迁移门店', '', '', '', '', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
 		`INSERT INTO events VALUES (1, 1, '迁移前活动', '', '2099-12-31T18:00:00+08:00', '线上', 10, 0, 'published', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO posts VALUES (1, 1, NULL, '历史作者', 'legacy@example.com', '历史帖子', '历史内容', 'legacy', '2026-01-01T00:00:00Z')`,
+		`INSERT INTO replies VALUES (1, 1, NULL, '历史回复者', 'legacy-reply@example.com', '历史回复', 'legacy', '2026-01-01T00:00:00Z')`,
 	}
 	for version := 1; version <= 7; version++ {
 		statements = append(statements, `INSERT INTO schema_migrations VALUES (`+fmt.Sprint(version)+`, 'applied', '2026-01-01T00:00:00Z')`)
@@ -71,12 +77,26 @@ func TestMigrationAddsEventCoverURLWithoutChangingExistingRows(t *testing.T) {
 	defer s.Close()
 	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
 	assertColumnExists(t, s.db, "events", "cover_url")
+	assertColumnExists(t, s.db, "posts", "moderation_status")
+	assertColumnExists(t, s.db, "replies", "moderation_status")
+	assertTableExists(t, s.db, "content_reports")
+	assertTableExists(t, s.db, "content_moderation_actions")
 	var title, coverURL string
 	if err := s.db.QueryRow(`SELECT title, cover_url FROM events WHERE id = 1`).Scan(&title, &coverURL); err != nil {
 		t.Fatal(err)
 	}
 	if title != "迁移前活动" || coverURL != "" {
 		t.Fatalf("existing event changed: title=%q cover_url=%q", title, coverURL)
+	}
+	var postStatus, replyStatus string
+	if err := s.db.QueryRow(`SELECT moderation_status FROM posts WHERE id = 1`).Scan(&postStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT moderation_status FROM replies WHERE id = 1`).Scan(&replyStatus); err != nil {
+		t.Fatal(err)
+	}
+	if postStatus != model.ModerationStatusVisible || replyStatus != model.ModerationStatusVisible {
+		t.Fatalf("historical content not visible after migration: post=%q reply=%q", postStatus, replyStatus)
 	}
 }
 
@@ -515,6 +535,17 @@ func assertColumnExists(t *testing.T, db *sql.DB, table, column string) {
 	_, found := columnNotNull(t, db, table, column)
 	if !found {
 		t.Fatalf("expected %s.%s column", table, column)
+	}
+}
+
+func assertTableExists(t *testing.T, db *sql.DB, table string) {
+	t.Helper()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
+		t.Fatalf("query table %s: %v", table, err)
+	}
+	if count != 1 {
+		t.Fatalf("expected table %s", table)
 	}
 }
 

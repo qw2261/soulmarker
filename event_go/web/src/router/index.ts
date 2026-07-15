@@ -78,6 +78,12 @@ const router = createRouter({
       meta: { requiresAdmin: true },
     },
     {
+      path: '/admin/content',
+      name: 'admin-content',
+      component: () => import('@/views/admin/ContentModeration.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/admin/organizers/new',
       name: 'admin-organizer-new',
       component: () => import('@/views/admin/OrganizerForm.vue'),

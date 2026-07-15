@@ -5,6 +5,11 @@ async function expectNoHorizontalOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
 
+async function selectOption(page: Page, comboboxName: string | RegExp, optionName: string) {
+  await page.getByRole('combobox', { name: comboboxName }).press('ArrowDown')
+  await page.locator('.el-select-dropdown:visible').getByRole('option', { name: optionName, exact: true }).click()
+}
+
 async function logoutUser(page: Page, mobile: boolean) {
   if (mobile) {
     const mobileMenu = page.getByRole('button', { name: '打开导航菜单' })
@@ -70,8 +75,7 @@ test('operator and attendee can complete the free event workflow', async ({ page
 
   await adminNavigation.getByRole('link', { name: '活动' }).click()
   await page.getByRole('button', { name: '创建活动' }).click()
-  await page.getByRole('combobox', { name: /门店/ }).press('ArrowDown')
-  await page.getByRole('option', { name: organizerName }).click()
+  await selectOption(page, /门店/, organizerName)
   await page.getByPlaceholder('活动标题').fill(eventTitle)
   await page.getByPlaceholder('活动描述').fill('Admission、导出与核销旅程')
   await page.getByPlaceholder('https://example.com/event-cover.jpg').fill(coverURL)
@@ -162,6 +166,77 @@ test('operator and attendee can complete the free event workflow', async ({ page
   await expect(credentialCode).toHaveText(/^[0-9a-f]{32}$/)
   const code = await credentialCode.textContent()
   expect(code).toBeTruthy()
+
+  await page.getByRole('button', { name: '去讨论区' }).click()
+  await Promise.all([
+    page.waitForURL(/\/events\/\d+\/posts\/\d+$/),
+    page.locator('.post-card').filter({ hasText: postTitle }).click(),
+  ])
+  const discussionPostURL = page.url()
+  await page.getByRole('button', { name: '举报帖子' }).click()
+  await selectOption(page, '举报分类', '辱骂或骚扰')
+  await page.getByPlaceholder('请说明举报原因；选择“其他”时必填').fill('帖子需要管理员复核')
+  await page.getByRole('button', { name: '提交举报' }).click()
+  await expect(page.getByText('举报已提交')).toBeVisible()
+
+  const reportedReply = page.locator('.reply-item').filter({ hasText: replyContent })
+  await reportedReply.getByRole('button', { name: '举报回复' }).click()
+  await selectOption(page, '举报分类', '垃圾广告')
+  await page.getByPlaceholder('请说明举报原因；选择“其他”时必填').fill('回复需要管理员移除')
+  await page.getByRole('button', { name: '提交举报' }).click()
+  await expect(page.getByText('举报已提交')).toBeVisible()
+
+  await page.goto('/admin/content')
+  await expect(page.getByRole('heading', { name: '内容治理' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+
+  let replyReportCard = page.locator('.report-card').filter({ hasText: replyContent })
+  await replyReportCard.getByRole('button', { name: '移除并处理' }).click()
+  await page.getByPlaceholder('填写处理说明').fill(`确认回复违规并移除 ${suffix}`)
+  await page.getByRole('button', { name: '确认处理' }).click()
+  await expect(replyReportCard).toHaveCount(0)
+
+  let postReportCard = page.locator('.report-card').filter({ hasText: postTitle })
+  await postReportCard.getByRole('button', { name: '驳回举报' }).click()
+  await page.getByPlaceholder('填写处理说明').fill(`帖子本身不违规 ${suffix}`)
+  await page.getByRole('button', { name: '确认处理' }).click()
+  await expect(postReportCard).toHaveCount(0)
+
+  await selectOption(page, '举报状态', '已驳回')
+  postReportCard = page.locator('.report-card').filter({ hasText: postTitle })
+  await postReportCard.getByRole('button', { name: '直接移除内容' }).click()
+  await page.getByPlaceholder('填写处理说明').fill(`运营复核后直接移除帖子 ${suffix}`)
+  await page.getByRole('button', { name: '确认处理' }).click()
+  await expect(postReportCard.getByText('内容已移除')).toBeVisible()
+
+  await page.goto(discussionPostURL)
+  await expect(page.locator('#app').getByText('帖子不存在', { exact: true })).toBeVisible()
+
+  await page.goto('/admin/content')
+  await selectOption(page, '举报状态', '已驳回')
+  postReportCard = page.locator('.report-card').filter({ hasText: postTitle })
+  await postReportCard.getByRole('button', { name: '恢复内容' }).click()
+  await page.getByPlaceholder('填写处理说明').fill(`复核后恢复帖子 ${suffix}`)
+  await page.getByRole('button', { name: '确认处理' }).click()
+  await expect(postReportCard.getByRole('button', { name: '直接移除内容' })).toBeVisible()
+
+  await page.goto(discussionPostURL)
+  await expect(page.getByRole('heading', { name: postTitle })).toBeVisible()
+  await expect(page.getByText(replyContent, { exact: true })).toHaveCount(0)
+
+  await page.goto('/admin/content')
+  await selectOption(page, '举报状态', '已驳回')
+  await page.getByRole('tab', { name: '处理记录' }).click()
+  const currentModerationActions = page.locator('.action-card').filter({ hasText: suffix })
+  await expect(currentModerationActions).toHaveCount(4)
+  await expect(currentModerationActions.filter({ hasText: '移除回复' })).toHaveCount(1)
+  await expect(currentModerationActions.filter({ hasText: '驳回帖子' })).toHaveCount(1)
+  await expect(currentModerationActions.filter({ hasText: '移除帖子' })).toHaveCount(1)
+  await expect(currentModerationActions.filter({ hasText: '恢复帖子' })).toHaveCount(1)
+  await testInfo.attach('content-moderation-audit', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  })
 
   await page.goto('/admin/events')
   const managedEventRow = page.getByRole('row').filter({ hasText: eventTitle })

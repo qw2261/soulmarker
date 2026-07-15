@@ -36,6 +36,11 @@ var (
 	ErrEventHasAdmissions     = errors.New("活动已有入场凭证，不能删除")
 	ErrPasswordResetInvalid   = errors.New("密码重置链接无效或已过期")
 	ErrPasswordResetRateLimit = errors.New("密码重置请求过于频繁")
+	ErrContentReportNotFound  = errors.New("举报记录不存在")
+	ErrContentReportResolved  = errors.New("举报记录已处理")
+	ErrContentTargetNotFound  = errors.New("被举报内容不存在")
+	ErrContentAlreadyRemoved  = errors.New("内容已被移除")
+	ErrContentAlreadyVisible  = errors.New("内容已处于可见状态")
 )
 
 type Organizer struct {
@@ -207,27 +212,101 @@ type MyRegistration struct {
 }
 
 type Post struct {
-	ID             int64     `json:"id"`
-	EventID        int64     `json:"event_id"`
-	UserID         *int64    `json:"-"`
-	AuthorName     string    `json:"author_name"`
-	AuthorContact  string    `json:"-"`
-	IdentityStatus string    `json:"-"`
-	Title          string    `json:"title"`
-	Content        string    `json:"content"`
-	ReplyCount     int       `json:"reply_count"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID               int64      `json:"id"`
+	EventID          int64      `json:"event_id"`
+	UserID           *int64     `json:"-"`
+	AuthorName       string     `json:"author_name"`
+	AuthorContact    string     `json:"-"`
+	IdentityStatus   string     `json:"-"`
+	Title            string     `json:"title"`
+	Content          string     `json:"content"`
+	ReplyCount       int        `json:"reply_count"`
+	ModerationStatus string     `json:"-"`
+	ModeratedAt      *time.Time `json:"-"`
+	ModeratedBy      string     `json:"-"`
+	ModerationReason string     `json:"-"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 type Reply struct {
-	ID             int64     `json:"id"`
-	PostID         int64     `json:"post_id"`
-	UserID         *int64    `json:"-"`
-	AuthorName     string    `json:"author_name"`
-	AuthorContact  string    `json:"-"`
-	IdentityStatus string    `json:"-"`
-	Content        string    `json:"content"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID               int64      `json:"id"`
+	PostID           int64      `json:"post_id"`
+	UserID           *int64     `json:"-"`
+	AuthorName       string     `json:"author_name"`
+	AuthorContact    string     `json:"-"`
+	IdentityStatus   string     `json:"-"`
+	Content          string     `json:"content"`
+	ModerationStatus string     `json:"-"`
+	ModeratedAt      *time.Time `json:"-"`
+	ModeratedBy      string     `json:"-"`
+	ModerationReason string     `json:"-"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+const (
+	ContentTargetPost  = "post"
+	ContentTargetReply = "reply"
+
+	ModerationStatusVisible = "visible"
+	ModerationStatusRemoved = "removed"
+
+	ContentReportStatusOpen      = "open"
+	ContentReportStatusResolved  = "resolved"
+	ContentReportStatusDismissed = "dismissed"
+
+	ContentReportCategorySpam    = "spam"
+	ContentReportCategoryAbuse   = "abuse"
+	ContentReportCategoryIllegal = "illegal"
+	ContentReportCategoryPrivacy = "privacy"
+	ContentReportCategoryOther   = "other"
+
+	ContentResolutionRemove  = "remove"
+	ContentResolutionDismiss = "dismiss"
+
+	ContentModerationActionRemove  = "remove"
+	ContentModerationActionRestore = "restore"
+	ContentModerationActionDismiss = "dismiss"
+)
+
+type ContentReport struct {
+	ID                     int64
+	EventID                int64
+	PostID                 int64
+	TargetType             string
+	TargetID               int64
+	ReporterUserID         int64
+	ReporterName           string
+	Category               string
+	Detail                 string
+	Status                 string
+	CreatedAt              time.Time
+	ResolvedAt             *time.Time
+	ResolvedBy             string
+	ResolutionNote         string
+	TargetAuthorName       string
+	TargetTitle            string
+	TargetContent          string
+	TargetModerationStatus string
+}
+
+type ContentModerationAction struct {
+	ID         int64
+	ReportID   *int64
+	EventID    int64
+	PostID     int64
+	TargetType string
+	TargetID   int64
+	Action     string
+	Actor      string
+	Reason     string
+	CreatedAt  time.Time
+}
+
+type ListContentReportsParams struct {
+	Status     string
+	TargetType string
+	Offset     int
+	Limit      int
 }
 
 type IdentityEntityStats struct {

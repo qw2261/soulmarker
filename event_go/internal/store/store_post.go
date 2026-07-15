@@ -29,6 +29,7 @@ func (s *Store) CreatePost(p *model.Post) error {
 	p.ID = id
 	p.ReplyCount = 0
 	p.IdentityStatus = identityStatus
+	p.ModerationStatus = model.ModerationStatusVisible
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	p.CreatedAt = createdAt
 	return nil
@@ -36,13 +37,13 @@ func (s *Store) CreatePost(p *model.Post) error {
 
 func (s *Store) ListPosts(eventID int64, offset, limit int) ([]*model.Post, int, error) {
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE event_id = ?`, eventID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM posts WHERE event_id = ? AND moderation_status = 'visible'`, eventID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("查询帖子总数失败: %w", err)
 	}
 
 	query := `SELECT p.id, p.event_id, p.user_id, p.author_name, p.title, p.content, p.identity_status, p.created_at,
-		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
-		 FROM posts p WHERE p.event_id = ? ORDER BY p.created_at DESC`
+		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id AND moderation_status = 'visible') AS reply_count
+		 FROM posts p WHERE p.event_id = ? AND p.moderation_status = 'visible' ORDER BY p.created_at DESC`
 	args := []interface{}{eventID}
 	if limit > 0 {
 		query += " LIMIT ? OFFSET ?"
@@ -82,8 +83,8 @@ func (s *Store) GetPost(postID int64) (*model.Post, error) {
 	var createdAt string
 	err := s.db.QueryRow(
 		`SELECT p.id, p.event_id, p.user_id, p.author_name, p.title, p.content, p.identity_status, p.created_at,
-		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id) AS reply_count
-		 FROM posts p WHERE p.id = ?`, postID,
+		        (SELECT COUNT(*) FROM replies WHERE post_id = p.id AND moderation_status = 'visible') AS reply_count
+		 FROM posts p WHERE p.id = ? AND p.moderation_status = 'visible'`, postID,
 	).Scan(&p.ID, &p.EventID, &p.UserID, &p.AuthorName, &p.Title, &p.Content, &p.IdentityStatus, &createdAt, &p.ReplyCount)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -119,6 +120,7 @@ func (s *Store) CreateReply(r *model.Reply) error {
 	}
 	r.ID = id
 	r.IdentityStatus = identityStatus
+	r.ModerationStatus = model.ModerationStatusVisible
 	createdAt, _ := time.Parse(model.TimeFormat, now)
 	r.CreatedAt = createdAt
 	return nil
@@ -127,7 +129,7 @@ func (s *Store) CreateReply(r *model.Reply) error {
 func (s *Store) ListReplies(postID int64) ([]*model.Reply, error) {
 	rows, err := s.db.Query(
 		`SELECT id, post_id, user_id, author_name, content, identity_status, created_at
-		 FROM replies WHERE post_id = ? ORDER BY created_at ASC`, postID,
+		 FROM replies WHERE post_id = ? AND moderation_status = 'visible' ORDER BY created_at ASC`, postID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("查询回复列表失败: %w", err)

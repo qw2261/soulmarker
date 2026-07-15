@@ -63,10 +63,10 @@
 
 ### 3.1 已有优势
 
-- 已完成门店、活动、报名、门票、讨论、用户认证和管理接口，共 36 个 API 操作。
+- 已完成门店、活动、报名、门票、讨论、内容治理、用户认证和管理接口，共 46 个 API 操作。
 - 后端采用清晰的 handler、model、store 分层，适合继续演进为模块化单体。
 - SQLite 已覆盖基础事务、库存扣减、取消报名退库存和活动级联清理。
-- Go 侧已有 265 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
+- Go 侧已有 271 个顶层测试，当前验证中 go test、race、vet、gofmt 均通过。
 - Vue 3、TypeScript、Element Plus 前端能够完成生产构建。
 - README、完整任务记录和历史测试报告提供了较完整的演进背景。
 
@@ -318,6 +318,16 @@ G4-R06 当前拆分验收：
 - [x] 报名名单支持跨页 CSV 导出、表格公式注入防护，并与幂等核销工作台统一。
 - [x] desktop-chromium 与 Pixel 7 通过建店、配活动、配票、报名、导出、核销和退出管理的完整本地 E2E。
 - [x] 候选提交 4b753ee 与远端 CI Run 29391643931 证据绑定。
+
+G4-R09 当前拆分验收：
+
+- [x] Schema v9 为帖子和回复增加 `visible/removed` 软删除状态、处理时间、处理人和处理原因；公开列表与详情不返回已移除内容，原始内容仍保留用于审计。
+- [x] 已报名参与者可按垃圾广告、辱骂骚扰、违法违规、隐私泄露或其他分类举报帖子/回复；禁止举报自己的内容，重复待处理举报幂等。
+- [x] 管理员可筛选举报队列，执行移除并处理、驳回、直接移除和恢复；移除目标会自动关闭同目标的待处理举报。
+- [x] 独立 `content_moderation_actions` 记录移除、恢复和驳回的管理员、原因与时间，不依赖公开内容可见性。
+- [x] Store/Service/Handler、DTO、错误码、OpenAPI 和双向路由契约均有自动化回归；桌面与 Pixel 7 E2E 覆盖帖子/回复举报、治理、公开隐藏、恢复和 4 条动作审计。
+- [x] 本地候选通过 271 个 Go 顶层测试、race、vet、10 个 Vue 测试、4 个 Playwright 用例、生产构建和生产依赖审计；不使用 covdata。
+- [ ] 候选提交与远端 CI Run 证据绑定后，正式勾选 G4-R09。
 
 ### 测试重点
 
@@ -722,7 +732,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08 已通过远端门禁；R03 保留 legacy phone-only 与真实 SMTP；R05、R09、受控活动和 P0/P1 正式清零审计继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R06、R07、R08 已通过远端门禁；R09 本地候选通过、待远端证据；R03 保留 legacy phone-only 与真实 SMTP；R05、受控活动和 P0/P1 正式清零审计继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |

@@ -2,6 +2,7 @@
   <nav class="admin-toolbar" aria-label="运营后台导航">
     <router-link to="/admin/events">活动</router-link>
     <router-link to="/admin/organizers">门店</router-link>
+    <router-link to="/admin/content">内容治理</router-link>
   </nav>
 </template>
 

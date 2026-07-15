@@ -197,6 +197,13 @@ func (s *Store) DeleteEvent(id int64) error {
 		return model.ErrEventHasAdmissions
 	}
 
+	if _, err = tx.Exec(`DELETE FROM content_moderation_actions WHERE event_id = ?`, id); err != nil {
+		return fmt.Errorf("删除内容治理审计失败: %w", err)
+	}
+	if _, err = tx.Exec(`DELETE FROM content_reports WHERE event_id = ?`, id); err != nil {
+		return fmt.Errorf("删除内容举报失败: %w", err)
+	}
+
 	_, err = tx.Exec(`DELETE FROM replies WHERE post_id IN (SELECT id FROM posts WHERE event_id = ?)`, id)
 	if err != nil {
 		return fmt.Errorf("删除回复失败: %w", err)

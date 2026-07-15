@@ -139,14 +139,16 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 | 实体    | 说明                       |
 | ----- | ------------------------ |
-| Post  | 帖子，关联 event\_id；user\_id 是新增讨论的唯一作者身份 |
-| Reply | 回复，关联 post\_id；user\_id 是新增回复的唯一作者身份 |
+| Post  | 帖子，关联 event\_id；user\_id 是新增讨论的唯一作者身份；`moderation_status` 支持保留原文的软删除 |
+| Reply | 回复，关联 post\_id；user\_id 是新增回复的唯一作者身份；公开查询隐藏 removed 回复 |
+| ContentReport | 参与者对帖子/回复的分类举报；同一举报人与目标仅允许一条待处理记录 |
+| ContentModerationAction | 管理员移除、恢复或驳回的独立审计记录，不随公开内容隐藏而丢失 |
 
 ***
 
 ## 当前进度
 
-**v6.0 免费活动可用版迭代中** — 36 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选、运营闭环以及响应式用户旅程均已完成远端门禁。Schema v8 活动封面、空/错/弱网反馈和讨论/取消闭环已通过桌面与 Pixel 7。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05、R09 和受控活动继续推进。
+**v6.0 免费活动可用版迭代中** — 46 个业务操作进入 `/api/v1`；Admission/Checkin、统一“我的活动”时间线、认证安全候选、运营闭环以及响应式用户旅程均已完成远端门禁。Schema v9 内容治理候选已在本地通过桌面与 Pixel 7 的举报、移除、驳回、恢复和动作审计旅程，等待远端 CI 证据后关闭 G4-R09。G4-R03 仍需 legacy phone-only 恢复与真实 SMTP，G4-R05 和受控活动继续推进。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -160,6 +162,9 @@ GET    /api/v1/me/registrations[?page=&page_size=]      当前用户报名列表
 GET    /api/v1/me/admissions[?page=&page_size=]         当前用户入场凭证与历史状态
 GET    /api/v1/me/activities[?page=&page_size=]          当前用户统一活动时间线（前端主入口）
 GET    /api/v1/admin/session                            校验平台管理员 Token 🔐
+GET    /api/v1/admin/content-reports                    举报队列（状态/内容类型筛选）🔐
+PUT    /api/v1/admin/content-reports/{reportId}         移除内容并处理或驳回举报 🔐
+GET    /api/v1/admin/content-actions                    内容治理动作审计 🔐
 GET    /api/v1/admin/identity-migration                 身份迁移统计与 legacy 清单 🔐
 POST   /api/v1/organizers                               创建门店 🔐
 GET    /api/v1/organizers[?page=&page_size=]            门店列表（分页，含活动数）
@@ -181,7 +186,13 @@ GET    /api/v1/events/{id}/checkins                     核销审计列表 🔐
 POST   /api/v1/events/{id}/posts                        发帖（需已报名，支持 JWT 自动识别）
 GET    /api/v1/events/{id}/posts[?page=&page_size=]     帖子列表（分页）
 GET    /api/v1/events/{id}/posts/{postId}               帖子详情（含回复）
+DELETE /api/v1/events/{id}/posts/{postId}               软删除帖子并保留治理证据 🔐
+PUT    /api/v1/events/{id}/posts/{postId}/restore       恢复已移除帖子 🔐
+POST   /api/v1/events/{id}/posts/{postId}/reports       举报帖子（需已报名且非作者）
 POST   /api/v1/events/{id}/posts/{postId}/replies       回复帖子（需已报名，支持 JWT 自动识别）
+DELETE /api/v1/events/{id}/posts/{postId}/replies/{replyId} 软删除回复并保留治理证据 🔐
+PUT    /api/v1/events/{id}/posts/{postId}/replies/{replyId}/restore 恢复已移除回复 🔐
+POST   /api/v1/events/{id}/posts/{postId}/replies/{replyId}/reports 举报回复（需已报名且非作者）
 POST   /api/v1/events/{id}/tickets                      创建门票 🔐
 GET    /api/v1/events/{id}/tickets[?page=&page_size=]   门票列表（分页）
 GET    /api/v1/events/{id}/tickets/{ticketId}           门票详情
@@ -317,6 +328,7 @@ event_go/
 │   │   ├── handler_registration.go # 报名 API（Register, CancelRegistration, ListRegistrations）
 │   │   ├── handler_admission.go # 用户凭证、运营核销与审计 API
 │   │   ├── handler_post.go      # 帖子/回复 API（CreatePost/Reply, ListPosts, GetPost）
+│   │   ├── handler_content_moderation.go # 举报、软删除、恢复与治理审计 API
 │   │   ├── handler_auth.go      # 用户认证、JWT 解析与持久化用户校验
 │   │   ├── handler_organizer.go # 门店 API（Create/Get/List/Update/Delete）
 │   │   ├── handler_test.go      # Handler 集成测试
@@ -328,7 +340,8 @@ event_go/
 │   ├── service/
 │   │   ├── registration.go      # 报名/取消用例、业务规则与窄 Repository 接口
 │   │   ├── admission.go         # 凭证查询、规范化、核销与审计用例
-│   │   └── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
+│   │   ├── discussion.go        # 讨论资格、可信作者与帖子/回复写入用例
+│   │   └── content_moderation.go # 举报权限、幂等处理与治理用例编排
 │   ├── identifier/
 │   │   └── credential.go        # 加密随机 Admission 凭证生成器
 │   ├── store/
@@ -338,6 +351,7 @@ event_go/
 │   │   ├── store_registration.go # 报名 CRUD
 │   │   ├── store_admission.go  # Admission 查询、幂等 Checkin 与审计
 │   │   ├── store_post.go        # 帖子/回复 CRUD
+│   │   ├── store_content_moderation.go # 举报队列、软删除、恢复与动作审计事务
 │   │   ├── store_user.go        # 用户 CRUD
 │   │   ├── store_organizer.go   # 门店 CRUD
 │   │   ├── store_identity.go    # 身份迁移统计与 legacy 清单
@@ -436,13 +450,14 @@ main.go
 | 用户活动分页 | 单一 SQL 投影合并 Admission 与无凭证 Registration，统一排序、去重和精确计数 |
 | 会话撤销 | JWT 携带 auth_version；退出和密码重置递增数据库版本，旧 JWT 随即失效 |
 | 密码重置 | 256 位一次性 Token、SHA-256 摘要存储、30 分钟默认过期、替代和消费均不可复用 |
+| 内容治理 | Post/Reply 使用 `visible/removed` 软删除；举报处理与动作审计在事务内写入，公开查询只返回 visible 内容 |
 
 ### 自动化测试
 
 | 指标 | 结果 |
 |------|------|
 | 测试文件 | Config、Handler、Store、Migration、Vue Component、Playwright E2E 测试 |
-| 测试用例 | **265** 个顶层 Go 测试、10 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
+| 测试用例 | **271** 个顶层 Go 测试、10 个 Vue unit/component 测试、4 个 E2E 用例（2 个浏览器项目） |
 | 数据竞争 | `go test -race` 零竞争 |
 | 静态检查 | `go vet ./...` 无警告 |
 | 前端构建 | Element Plus 按实际组件注册；主 JS 约 490 KB / 170 KB gzip，无 chunk size 告警 |
@@ -460,7 +475,7 @@ cd event_go/web && npm run e2e              # 桌面与移动端浏览器 E2E
 
 ### 数据库迁移
 
-应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=8`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器；Schema v8 为活动增加可空语义的 `cover_url` 默认空字符串列。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
+应用启动时会自动执行版本化迁移，当前 `CurrentSchemaVersion=9`。Schema v7 新增 `user_auth_versions`、`password_reset_tokens` 和新用户认证版本触发器；Schema v8 为活动增加可空语义的 `cover_url` 默认空字符串列；Schema v9 为帖子/回复增加治理元数据，并新增 `content_reports`、`content_moderation_actions`、幂等唯一索引和队列查询索引。迁移逐版本写入 `schema_migrations`，每个版本在独立事务中执行；随后强制启用 SQLite 外键并执行一致性检查，失败时服务拒绝启动。
 
 升级生产数据前先停止旧进程并备份数据库：
 

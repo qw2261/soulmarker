@@ -201,6 +201,48 @@ func PostDetail(post *model.Post, replies []*model.Reply) PostDetailResponse {
 	return PostDetailResponse{Post: Post(post), Replies: Replies(replies)}
 }
 
+func ContentReportReceipt(report *model.ContentReport) ContentReportReceiptResponse {
+	return ContentReportReceiptResponse{
+		ID: report.ID, TargetType: report.TargetType, TargetID: report.TargetID,
+		Category: report.Category, Status: report.Status, CreatedAt: report.CreatedAt,
+	}
+}
+
+func ContentReport(report *model.ContentReport) ContentReportResponse {
+	return ContentReportResponse{
+		ID: report.ID, EventID: report.EventID, PostID: report.PostID, TargetType: report.TargetType,
+		TargetID: report.TargetID, ReporterUserID: report.ReporterUserID, ReporterName: report.ReporterName,
+		Category: report.Category, Detail: report.Detail, Status: report.Status, CreatedAt: report.CreatedAt,
+		ResolvedAt: report.ResolvedAt, ResolvedBy: report.ResolvedBy, ResolutionNote: report.ResolutionNote,
+		TargetAuthorName: report.TargetAuthorName, TargetTitle: report.TargetTitle,
+		TargetContent: report.TargetContent, TargetModerationStatus: report.TargetModerationStatus,
+	}
+}
+
+func ContentReports(reports []*model.ContentReport) []ContentReportResponse {
+	result := make([]ContentReportResponse, 0, len(reports))
+	for _, report := range reports {
+		result = append(result, ContentReport(report))
+	}
+	return result
+}
+
+func ContentModerationAction(action *model.ContentModerationAction) ContentModerationActionResponse {
+	return ContentModerationActionResponse{
+		ID: action.ID, ReportID: action.ReportID, EventID: action.EventID, PostID: action.PostID,
+		TargetType: action.TargetType, TargetID: action.TargetID, Action: action.Action,
+		Actor: action.Actor, Reason: action.Reason, CreatedAt: action.CreatedAt,
+	}
+}
+
+func ContentModerationActions(actions []*model.ContentModerationAction) []ContentModerationActionResponse {
+	result := make([]ContentModerationActionResponse, 0, len(actions))
+	for _, action := range actions {
+		result = append(result, ContentModerationAction(action))
+	}
+	return result
+}
+
 func IdentityMigrationReport(report *model.IdentityMigrationReport) IdentityMigrationReportResponse {
 	stats := func(value model.IdentityEntityStats) IdentityEntityStatsResponse {
 		return IdentityEntityStatsResponse(value)

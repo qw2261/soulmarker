@@ -93,3 +93,26 @@ func TestPostDetailUsesStableEmptyArray(t *testing.T) {
 		t.Fatalf("expected empty replies array, got %#v", decoded["replies"])
 	}
 }
+
+func TestContentModerationDTOsExposeAuditFieldsWithoutReporterContact(t *testing.T) {
+	now := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	report := ContentReport(&model.ContentReport{
+		ID: 1, EventID: 2, PostID: 3, TargetType: model.ContentTargetReply, TargetID: 4,
+		ReporterUserID: 5, ReporterName: "举报者", Category: model.ContentReportCategoryAbuse,
+		Detail: "说明", Status: model.ContentReportStatusOpen, CreatedAt: now,
+		TargetAuthorName: "作者", TargetTitle: "帖子", TargetContent: "回复内容",
+		TargetModerationStatus: model.ModerationStatusVisible,
+	})
+	decoded := assertJSONKeys(t, report,
+		"id", "event_id", "post_id", "target_type", "target_id", "reporter_user_id", "reporter_name",
+		"category", "detail", "status", "created_at", "resolved_by", "resolution_note",
+		"target_author_name", "target_title", "target_content", "target_moderation_status",
+	)
+	if _, exists := decoded["reporter_contact"]; exists {
+		t.Fatal("reporter contact must not be exposed")
+	}
+	assertJSONKeys(t, ContentModerationAction(&model.ContentModerationAction{
+		ID: 1, EventID: 2, PostID: 3, TargetType: model.ContentTargetReply, TargetID: 4,
+		Action: model.ContentModerationActionRemove, Actor: "platform_admin", Reason: "违规", CreatedAt: now,
+	}), "id", "event_id", "post_id", "target_type", "target_id", "action", "actor", "reason", "created_at")
+}

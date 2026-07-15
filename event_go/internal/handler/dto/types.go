@@ -96,6 +96,20 @@ type CreateReplyRequest struct {
 	Content string `json:"content"`
 }
 
+type CreateContentReportRequest struct {
+	Category string `json:"category"`
+	Detail   string `json:"detail"`
+}
+
+type ResolveContentReportRequest struct {
+	Resolution string `json:"resolution"`
+	Note       string `json:"note"`
+}
+
+type ModerateContentRequest struct {
+	Reason string `json:"reason"`
+}
+
 type UserResponse struct {
 	ID        int64     `json:"id"`
 	Name      string    `json:"name"`
@@ -257,6 +271,49 @@ type ReplyResponse struct {
 type PostDetailResponse struct {
 	Post    PostResponse    `json:"post"`
 	Replies []ReplyResponse `json:"replies"`
+}
+
+type ContentReportReceiptResponse struct {
+	ID         int64     `json:"id"`
+	TargetType string    `json:"target_type"`
+	TargetID   int64     `json:"target_id"`
+	Category   string    `json:"category"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type ContentReportResponse struct {
+	ID                     int64      `json:"id"`
+	EventID                int64      `json:"event_id"`
+	PostID                 int64      `json:"post_id"`
+	TargetType             string     `json:"target_type"`
+	TargetID               int64      `json:"target_id"`
+	ReporterUserID         int64      `json:"reporter_user_id"`
+	ReporterName           string     `json:"reporter_name"`
+	Category               string     `json:"category"`
+	Detail                 string     `json:"detail"`
+	Status                 string     `json:"status"`
+	CreatedAt              time.Time  `json:"created_at"`
+	ResolvedAt             *time.Time `json:"resolved_at,omitempty"`
+	ResolvedBy             string     `json:"resolved_by"`
+	ResolutionNote         string     `json:"resolution_note"`
+	TargetAuthorName       string     `json:"target_author_name"`
+	TargetTitle            string     `json:"target_title"`
+	TargetContent          string     `json:"target_content"`
+	TargetModerationStatus string     `json:"target_moderation_status"`
+}
+
+type ContentModerationActionResponse struct {
+	ID         int64     `json:"id"`
+	ReportID   *int64    `json:"report_id,omitempty"`
+	EventID    int64     `json:"event_id"`
+	PostID     int64     `json:"post_id"`
+	TargetType string    `json:"target_type"`
+	TargetID   int64     `json:"target_id"`
+	Action     string    `json:"action"`
+	Actor      string    `json:"actor"`
+	Reason     string    `json:"reason"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type IdentityEntityStatsResponse struct {

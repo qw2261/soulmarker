@@ -33,6 +33,7 @@ type Handler struct {
 	discussions    DiscussionService
 	admissions     AdmissionService
 	authentication AuthenticationService
+	moderation     ContentModerationService
 	startTime      time.Time
 	version        string
 }
@@ -65,6 +66,18 @@ type AuthenticationService interface {
 	Logout(userID int64) error
 }
 
+type ContentModerationService interface {
+	ReportPost(eventID, postID int64, user *model.User, category, detail string) (*model.ContentReport, bool, error)
+	ReportReply(eventID, postID, replyID int64, user *model.User, category, detail string) (*model.ContentReport, bool, error)
+	ListReports(params model.ListContentReportsParams) ([]*model.ContentReport, int, error)
+	ResolveReport(id int64, resolution, note, actor string) (*model.ContentReport, error)
+	RemovePost(eventID, postID int64, actor, reason string) error
+	RestorePost(eventID, postID int64, actor, reason string) error
+	RemoveReply(eventID, postID, replyID int64, actor, reason string) error
+	RestoreReply(eventID, postID, replyID int64, actor, reason string) error
+	ListActions(offset, limit int) ([]*model.ContentModerationAction, int, error)
+}
+
 type Dependencies struct {
 	Clock          clock.Clock
 	Tokens         auth.TokenManager
@@ -72,6 +85,7 @@ type Dependencies struct {
 	Discussions    DiscussionService
 	Admissions     AdmissionService
 	Authentication AuthenticationService
+	Moderation     ContentModerationService
 }
 
 // NewHandler 创建 Handler，并显式注入启动配置与难以测试的运行时依赖。
@@ -85,6 +99,7 @@ func NewHandler(s *store.Store, cfg *config.Config, dependencies Dependencies) *
 		discussions:    dependencies.Discussions,
 		admissions:     dependencies.Admissions,
 		authentication: dependencies.Authentication,
+		moderation:     dependencies.Moderation,
 		startTime:      dependencies.Clock.Now(),
 		version:        cfg.Version,
 	}
@@ -98,6 +113,14 @@ func parseEventID(r *http.Request) (int64, error) {
 // parsePostID 从URL路径中解析帖子ID
 func parsePostID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("postId"), 10, 64)
+}
+
+func parseReplyID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("replyId"), 10, 64)
+}
+
+func parseReportID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("reportId"), 10, 64)
 }
 
 // parseTicketID 从URL路径中解析门票ID

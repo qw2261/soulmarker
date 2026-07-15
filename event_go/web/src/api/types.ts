@@ -187,6 +187,52 @@ export interface CreateReplyReq {
   content: string
 }
 
+export type ContentTargetType = 'post' | 'reply'
+export type ContentReportStatus = 'open' | 'resolved' | 'dismissed'
+export type ContentReportCategory = 'spam' | 'abuse' | 'illegal' | 'privacy' | 'other'
+
+export interface CreateContentReportReq {
+  category: ContentReportCategory
+  detail: string
+}
+
+export interface ContentReportReceipt {
+  id: number
+  target_type: ContentTargetType
+  target_id: number
+  category: ContentReportCategory
+  status: ContentReportStatus
+  created_at: string
+}
+
+export interface ContentReport extends ContentReportReceipt {
+  event_id: number
+  post_id: number
+  reporter_user_id: number
+  reporter_name: string
+  detail: string
+  resolved_at?: string
+  resolved_by: string
+  resolution_note: string
+  target_author_name: string
+  target_title: string
+  target_content: string
+  target_moderation_status: 'visible' | 'removed'
+}
+
+export interface ContentModerationAction {
+  id: number
+  report_id?: number
+  event_id: number
+  post_id: number
+  target_type: ContentTargetType
+  target_id: number
+  action: 'remove' | 'restore' | 'dismiss'
+  actor: string
+  reason: string
+  created_at: string
+}
+
 export interface CreateTicketReq {
   name: string
   price: number

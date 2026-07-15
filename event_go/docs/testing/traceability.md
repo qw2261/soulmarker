@@ -39,5 +39,6 @@
 | G4-R06 | v6.0 | Critical | 管理 Token 服务端校验；门店/活动/票种可自助 CRUD；报名可跨页安全导出；核销与审计可操作；移动端无开发者兜底 | GET /admin/session、后台路由守卫、Organizer/Event/Ticket 管理页、Registration CSV | SEC-ADMIN-SESSION-001、FE-ADMIN-SESSION-001、FE-CSV-001、CT-API-ADMIN-001 | E2E-OPERATOR-001 desktop/mobile | v6.0 test-report / Run 29391643931 | Remote Pass |
 | G4-R01 | v6.0 | High | 活动列表、详情、报名、凭证、讨论、回复、个人活动在桌面和 Pixel 7 可操作且无页面级横向溢出 | NavBar、EventList/Card/Detail、RegisterForm、AdmissionCredential、Discussion、PostDetail、MyRegistrations、Pagination | FE-RESPONSIVE-001 | E2E-ATTENDEE-001 desktop/mobile；成功截图附件 | v6.0 test-report / Run 29394150565 | Remote Pass |
 | G4-R04 | v6.0 | High | 活动封面和状态可见；空数据、404、请求失败、离线和恢复均有明确反馈及重试入口 | Schema v8、Event cover DTO/OpenAPI/Form/Card/Detail、PageLoadError、NetworkStatus、request-error | MIG-EVENT-COVER-001、CT-EVENT-COVER-001、FE-REQUEST-STATE-001 | E2E-UX-STATE-001 desktop/mobile | v6.0 test-report / Run 29394150565 | Remote Pass |
+| G4-R09 | v6.0 | Critical | 参与者只能举报他人可见内容且重复举报幂等；帖子/回复软删除保留证据；管理员可移除、恢复、驳回并留下独立动作审计；公开查询隐藏 removed 内容 | Schema v9、ContentModerationService/Store/Handler、PostDetail、ContentModeration 管理页 | MIG-CONTENT-MODERATION-001、SEC-CONTENT-REPORT-001、DOM-CONTENT-MODERATION-001、CT-API-CONTENT-MODERATION-001 | E2E-CONTENT-MODERATION-001 desktop/mobile；治理动作截图附件 | v6.0 test-report / 待远端 Run | Local Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

@@ -13,12 +13,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 8
+const CurrentSchemaVersion = 9
 
 type Store struct {
 	db             *sql.DB
 	registrationMu sync.Mutex
 	checkinMu      sync.Mutex
+	moderationMu   sync.Mutex
 }
 
 type migration struct {
@@ -153,7 +154,69 @@ func migrations() []migration {
 		{version: 6, name: "admission_and_checkin", apply: migrateAdmissionAndCheckin},
 		{version: 7, name: "authentication_session_and_password_reset", apply: migrateAuthenticationSessionAndPasswordReset},
 		{version: 8, name: "event_cover_url", apply: migrateEventCoverURL},
+		{version: 9, name: "content_moderation", apply: migrateContentModeration},
 	}
+}
+
+func migrateContentModeration(tx *sql.Tx) error {
+	columns := []struct {
+		table, column, definition string
+	}{
+		{"posts", "moderation_status", "moderation_status TEXT NOT NULL DEFAULT 'visible' CHECK (moderation_status IN ('visible', 'removed'))"},
+		{"posts", "moderated_at", "moderated_at TEXT"},
+		{"posts", "moderated_by", "moderated_by TEXT NOT NULL DEFAULT ''"},
+		{"posts", "moderation_reason", "moderation_reason TEXT NOT NULL DEFAULT ''"},
+		{"replies", "moderation_status", "moderation_status TEXT NOT NULL DEFAULT 'visible' CHECK (moderation_status IN ('visible', 'removed'))"},
+		{"replies", "moderated_at", "moderated_at TEXT"},
+		{"replies", "moderated_by", "moderated_by TEXT NOT NULL DEFAULT ''"},
+		{"replies", "moderation_reason", "moderation_reason TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		if err := addColumnIfMissing(tx, column.table, column.column, column.definition); err != nil {
+			return err
+		}
+	}
+	return execStatements(tx, []string{
+		`CREATE TABLE content_reports (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_id INTEGER NOT NULL,
+			post_id INTEGER NOT NULL,
+			target_type TEXT NOT NULL CHECK (target_type IN ('post', 'reply')),
+			target_id INTEGER NOT NULL,
+			reporter_user_id INTEGER NOT NULL,
+			category TEXT NOT NULL CHECK (category IN ('spam', 'abuse', 'illegal', 'privacy', 'other')),
+			detail TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
+			created_at TEXT NOT NULL,
+			resolved_at TEXT,
+			resolved_by TEXT NOT NULL DEFAULT '',
+			resolution_note TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (event_id) REFERENCES events(id),
+			FOREIGN KEY (post_id) REFERENCES posts(id),
+			FOREIGN KEY (reporter_user_id) REFERENCES users(id)
+		)`,
+		`CREATE UNIQUE INDEX idx_content_reports_open_reporter_target
+		 ON content_reports(reporter_user_id, target_type, target_id) WHERE status = 'open'`,
+		`CREATE INDEX idx_content_reports_queue ON content_reports(status, created_at DESC)`,
+		`CREATE INDEX idx_content_reports_target ON content_reports(target_type, target_id)`,
+		`CREATE TABLE content_moderation_actions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			report_id INTEGER,
+			event_id INTEGER NOT NULL,
+			post_id INTEGER NOT NULL,
+			target_type TEXT NOT NULL CHECK (target_type IN ('post', 'reply')),
+			target_id INTEGER NOT NULL,
+			action TEXT NOT NULL CHECK (action IN ('remove', 'restore', 'dismiss')),
+			actor TEXT NOT NULL,
+			reason TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (report_id) REFERENCES content_reports(id) ON DELETE SET NULL,
+			FOREIGN KEY (event_id) REFERENCES events(id),
+			FOREIGN KEY (post_id) REFERENCES posts(id)
+		)`,
+		`CREATE INDEX idx_content_moderation_actions_target
+		 ON content_moderation_actions(target_type, target_id, created_at DESC)`,
+	})
 }
 
 func migrateEventCoverURL(tx *sql.Tx) error {
@@ -485,6 +548,12 @@ func validateForeignKeys(db *sql.DB) error {
 		{"checkins", "events", "event_id"},
 		{"user_auth_versions", "users", "user_id"},
 		{"password_reset_tokens", "users", "user_id"},
+		{"content_reports", "events", "event_id"},
+		{"content_reports", "posts", "post_id"},
+		{"content_reports", "users", "reporter_user_id"},
+		{"content_moderation_actions", "content_reports", "report_id"},
+		{"content_moderation_actions", "events", "event_id"},
+		{"content_moderation_actions", "posts", "post_id"},
 	}
 	for _, foreignKey := range required {
 		exists, err := tableHasForeignKeyDB(db, foreignKey.table, foreignKey.parent, foreignKey.column)

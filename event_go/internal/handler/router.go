@@ -36,6 +36,9 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodGet, "/me/activities", "listMyActivities", "", plain(h.ListMyActivities)},
 		{http.MethodGet, "/admin/session", "getAdminSession", "", admin(h.GetAdminSession)},
 		{http.MethodGet, "/admin/identity-migration", "getIdentityMigrationReport", "", admin(h.GetIdentityMigrationReport)},
+		{http.MethodGet, "/admin/content-reports", "listContentReports", "", admin(h.ListContentReports)},
+		{http.MethodPut, "/admin/content-reports/{reportId}", "resolveContentReport", "ResolveContentReportRequest", admin(h.ResolveContentReport)},
+		{http.MethodGet, "/admin/content-actions", "listContentModerationActions", "", admin(h.ListContentModerationActions)},
 
 		{http.MethodPost, "/organizers", "createOrganizer", "CreateOrganizerRequest", admin(h.CreateOrganizer)},
 		{http.MethodGet, "/organizers", "listOrganizers", "", plain(h.ListOrganizers)},
@@ -60,7 +63,13 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodPost, "/events/{id}/posts", "createPost", "CreatePostRequest", plain(h.CreatePost)},
 		{http.MethodGet, "/events/{id}/posts", "listPosts", "", plain(h.ListPosts)},
 		{http.MethodGet, "/events/{id}/posts/{postId}", "getPost", "", plain(h.GetPost)},
+		{http.MethodPost, "/events/{id}/posts/{postId}/reports", "reportPost", "CreateContentReportRequest", plain(h.ReportPost)},
+		{http.MethodDelete, "/events/{id}/posts/{postId}", "removePost", "ModerateContentRequest", admin(h.RemovePost)},
+		{http.MethodPut, "/events/{id}/posts/{postId}/restore", "restorePost", "ModerateContentRequest", admin(h.RestorePost)},
 		{http.MethodPost, "/events/{id}/posts/{postId}/replies", "createReply", "CreateReplyRequest", plain(h.CreateReply)},
+		{http.MethodPost, "/events/{id}/posts/{postId}/replies/{replyId}/reports", "reportReply", "CreateContentReportRequest", plain(h.ReportReply)},
+		{http.MethodDelete, "/events/{id}/posts/{postId}/replies/{replyId}", "removeReply", "ModerateContentRequest", admin(h.RemoveReply)},
+		{http.MethodPut, "/events/{id}/posts/{postId}/replies/{replyId}/restore", "restoreReply", "ModerateContentRequest", admin(h.RestoreReply)},
 
 		{http.MethodPost, "/events/{id}/tickets", "createTicket", "CreateTicketRequest", admin(h.CreateTicket)},
 		{http.MethodGet, "/events/{id}/tickets", "listTickets", "", plain(h.ListTickets)},

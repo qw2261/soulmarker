@@ -20,6 +20,7 @@ const (
 	CodeOrganizerNotFound            ErrorCode = "ORGANIZER_NOT_FOUND"
 	CodeTicketNotFound               ErrorCode = "TICKET_NOT_FOUND"
 	CodePostNotFound                 ErrorCode = "POST_NOT_FOUND"
+	CodeReplyNotFound                ErrorCode = "REPLY_NOT_FOUND"
 	CodeEventNotPublished            ErrorCode = "EVENT_NOT_PUBLISHED"
 	CodeRegistrationDuplicate        ErrorCode = "REGISTRATION_DUPLICATE"
 	CodeEventCapacityFull            ErrorCode = "EVENT_CAPACITY_FULL"
@@ -33,6 +34,11 @@ const (
 	CodeAdmissionAlreadyCheckedIn    ErrorCode = "ADMISSION_ALREADY_CHECKED_IN"
 	CodeEventHasAdmissions           ErrorCode = "EVENT_HAS_ADMISSIONS"
 	CodePasswordResetInvalid         ErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
+	CodeContentReportNotFound        ErrorCode = "CONTENT_REPORT_NOT_FOUND"
+	CodeContentReportNotAllowed      ErrorCode = "CONTENT_REPORT_NOT_ALLOWED"
+	CodeContentReportAlreadyResolved ErrorCode = "CONTENT_REPORT_ALREADY_RESOLVED"
+	CodeContentAlreadyRemoved        ErrorCode = "CONTENT_ALREADY_REMOVED"
+	CodeContentAlreadyVisible        ErrorCode = "CONTENT_ALREADY_VISIBLE"
 )
 
 var errorMessages = map[ErrorCode]string{
@@ -50,6 +56,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeOrganizerNotFound:            "门店不存在",
 	CodeTicketNotFound:               "门票不存在",
 	CodePostNotFound:                 "帖子不存在",
+	CodeReplyNotFound:                "回复不存在",
 	CodeEventNotPublished:            "活动未发布，暂无法报名",
 	CodeRegistrationDuplicate:        "该联系方式已报名本活动",
 	CodeEventCapacityFull:            "活动报名已满",
@@ -63,6 +70,11 @@ var errorMessages = map[ErrorCode]string{
 	CodeAdmissionAlreadyCheckedIn:    "入场凭证已核销",
 	CodeEventHasAdmissions:           "活动已有入场凭证，不能删除",
 	CodePasswordResetInvalid:         "密码重置链接无效或已过期",
+	CodeContentReportNotFound:        "举报记录不存在",
+	CodeContentReportNotAllowed:      "当前用户不能举报该内容",
+	CodeContentReportAlreadyResolved: "举报记录已处理",
+	CodeContentAlreadyRemoved:        "内容已被移除",
+	CodeContentAlreadyVisible:        "内容已处于可见状态",
 }
 
 // ErrorCodes 返回错误码目录的副本，供契约生成和测试使用。

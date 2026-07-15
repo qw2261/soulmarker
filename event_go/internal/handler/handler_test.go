@@ -107,6 +107,7 @@ func newTestHandler(s *store.Store, cfg *config.Config) *Handler {
 		Discussions:    service.NewDiscussionService(s),
 		Admissions:     service.NewAdmissionService(s, businessClock),
 		Authentication: authentication,
+		Moderation:     service.NewContentModerationService(s, businessClock),
 	})
 }
 
@@ -775,6 +776,161 @@ func TestCreateReplyHandler(t *testing.T) {
 	}
 }
 
+func TestContentModerationHTTPJourney(t *testing.T) {
+	t.Setenv("ADMIN_TOKEN", "moderation-admin-token")
+	s, _, srv := setupTestServer(t)
+	event := createStoreEvent(t, s, "内容治理活动")
+	author := &model.User{Name: "违规作者", Contact: "moderation-author@example.com", PasswordHash: "hash"}
+	reporter := &model.User{Name: "举报用户", Contact: "moderation-reporter@example.com", PasswordHash: "hash"}
+	for _, user := range []*model.User{author, reporter} {
+		if err := s.CreateUser(user); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Register(&model.Registration{
+			EventID: event.ID, UserID: &user.ID, Name: user.Name, Contact: user.Contact,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	post := &model.Post{
+		EventID: event.ID, UserID: &author.ID, AuthorName: author.Name, AuthorContact: author.Contact,
+		Title: "治理帖子", Content: "帖子内容",
+	}
+	if err := s.CreatePost(post); err != nil {
+		t.Fatal(err)
+	}
+	reply := &model.Reply{
+		PostID: post.ID, UserID: &author.ID, AuthorName: author.Name,
+		AuthorContact: author.Contact, Content: "需要移除的回复",
+	}
+	if err := s.CreateReply(reply); err != nil {
+		t.Fatal(err)
+	}
+
+	reportURL := srv.URL + "/api/v1/events/" + itoa64(event.ID) + "/posts/" + itoa64(post.ID) + "/replies/" + itoa64(reply.ID) + "/reports"
+	resp := doUserJSON(t, http.MethodPost, reportURL,
+		`{"category":"abuse","detail":"包含攻击性内容"}`, reporter.ID, reporter.Name, reporter.Contact)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create report: expected 201, got %d", resp.StatusCode)
+	}
+	var reportResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&reportResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	reportID := int64(reportResp.Data.(map[string]interface{})["id"].(float64))
+
+	resp = doUserJSON(t, http.MethodPost, reportURL,
+		`{"category":"abuse","detail":"重复举报"}`, reporter.ID, reporter.Name, reporter.Contact)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("duplicate report: expected 200, got %d", resp.StatusCode)
+	}
+
+	listURL := srv.URL + "/api/v1/admin/content-reports?status=open"
+	resp, err := http.Get(listURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous moderation queue: expected 401, got %d", resp.StatusCode)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, listURL, nil)
+	req.Header.Set("X-Admin-Token", "moderation-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	reports := listResp.Data.([]interface{})
+	if len(reports) != 1 || reports[0].(map[string]interface{})["target_content"] != reply.Content {
+		t.Fatalf("unexpected moderation queue: %#v", reports)
+	}
+
+	resolveURL := srv.URL + "/api/v1/admin/content-reports/" + itoa64(reportID)
+	req, _ = http.NewRequest(http.MethodPut, resolveURL, strings.NewReader(`{"resolution":"remove","note":"确认违规"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Admin-Token", "moderation-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("resolve report: expected 200, got %d", resp.StatusCode)
+	}
+
+	postURL := srv.URL + "/api/v1/events/" + itoa64(event.ID) + "/posts/" + itoa64(post.ID)
+	resp, err = http.Get(postURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var postResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&postResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	replies := postResp.Data.(map[string]interface{})["replies"].([]interface{})
+	if len(replies) != 0 {
+		t.Fatalf("removed reply still public: %#v", replies)
+	}
+
+	actionsURL := srv.URL + "/api/v1/admin/content-actions"
+	req, _ = http.NewRequest(http.MethodGet, actionsURL, nil)
+	req.Header.Set("X-Admin-Token", "moderation-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actionsResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&actionsResp); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if actions := actionsResp.Data.([]interface{}); len(actions) != 1 || actions[0].(map[string]interface{})["action"] != "remove" {
+		t.Fatalf("unexpected actions: %#v", actions)
+	}
+
+	restoreURL := postURL + "/replies/" + itoa64(reply.ID) + "/restore"
+	req, _ = http.NewRequest(http.MethodPut, restoreURL, strings.NewReader(`{"reason":"复核后恢复"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Admin-Token", "moderation-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("restore reply: expected 200, got %d", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, postURL, strings.NewReader(`{"reason":"管理员直接移除"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Admin-Token", "moderation-admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove post: expected 200, got %d", resp.StatusCode)
+	}
+	resp, err = http.Get(postURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("removed post should be hidden: got %d", resp.StatusCode)
+	}
+}
+
 func TestCreateTicketHandler(t *testing.T) {
 	_, _, srv := setupTestServer(t)
 
@@ -1293,6 +1449,7 @@ func TestGenerateTokenUsesInjectedClockAndSigner(t *testing.T) {
 		Discussions:    service.NewDiscussionService(s),
 		Admissions:     service.NewAdmissionService(s, businessClock),
 		Authentication: service.NewAuthenticationService(s, businessClock, identifier.CryptoResetTokenGenerator{}, notification.DiscardPasswordResetSender{}, cfg.PublicBaseURL, 30*time.Minute),
+		Moderation:     service.NewContentModerationService(s, businessClock),
 	})
 	user := &model.User{ID: 7, Name: "注入用户", Contact: "injected@example.com"}
 

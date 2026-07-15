@@ -14,7 +14,10 @@
         <PageLoadError v-else-if="error" :message="error" @retry="fetchPost" />
 
         <template v-else-if="post">
-          <h2>{{ post.title }}</h2>
+          <div class="post-heading">
+            <h2>{{ post.title }}</h2>
+            <el-button v-if="userStore.isLoggedIn" text type="danger" @click="openReport('post', post.id)">举报帖子</el-button>
+          </div>
           <p class="post-meta">
             <span>{{ post.author_name }}</span>
             <span>{{ formatDateTime(post.created_at) }}</span>
@@ -31,6 +34,13 @@
             <div class="reply-meta">
               <strong>{{ reply.author_name }}</strong>
               <span>{{ formatDateTime(reply.created_at) }}</span>
+              <el-button
+                v-if="userStore.isLoggedIn"
+                text
+                type="danger"
+                class="report-reply"
+                @click="openReport('reply', reply.id)"
+              >举报回复</el-button>
             </div>
             <p class="reply-content">{{ reply.content }}</p>
           </div>
@@ -69,15 +79,43 @@
         <el-empty v-else description="帖子不存在或已被删除" />
       </div>
     </el-main>
+
+    <el-dialog v-model="reportDialogVisible" title="举报内容" width="min(92vw, 520px)" destroy-on-close>
+      <el-form :model="reportForm" label-position="top" @submit.prevent="submitReport">
+        <el-form-item label="举报分类">
+          <el-select v-model="reportForm.category" aria-label="举报分类" class="full-width">
+            <el-option label="垃圾广告" value="spam" />
+            <el-option label="辱骂或骚扰" value="abuse" />
+            <el-option label="违法违规" value="illegal" />
+            <el-option label="隐私泄露" value="privacy" />
+            <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="补充说明">
+          <el-input
+            v-model="reportForm.detail"
+            type="textarea"
+            :rows="4"
+            maxlength="1000"
+            show-word-limit
+            placeholder="请说明举报原因；选择“其他”时必填"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="reportDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reporting" @click="submitReport">提交举报</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { getPost, createReply } from '@/api/posts'
-import type { Post, Reply } from '@/api/types'
+import { ElDialog, ElMessage } from 'element-plus'
+import { getPost, createReply, reportPost, reportReply } from '@/api/posts'
+import type { ContentReportCategory, Post, Reply } from '@/api/types'
 import { useUserStore } from '@/stores/user'
 import { formatDateTime } from '@/utils/format'
 import NavBar from '@/components/NavBar.vue'
@@ -95,13 +133,51 @@ const replies = ref<Reply[]>([])
 const loading = ref(true)
 const replying = ref(false)
 const error = ref('')
+const reportDialogVisible = ref(false)
+const reporting = ref(false)
+const reportTarget = ref<{ type: 'post' | 'reply'; id: number } | null>(null)
 
 const form = reactive({
   content: '',
 })
 
+const reportForm = reactive({
+  category: 'spam' as ContentReportCategory,
+  detail: '',
+})
+
 function goToLogin() {
   router.push({ path: '/login', query: { redirect: route.fullPath } })
+}
+
+function openReport(type: 'post' | 'reply', id: number) {
+  if (!userStore.isLoggedIn) {
+    goToLogin()
+    return
+  }
+  reportTarget.value = { type, id }
+  reportForm.category = 'spam'
+  reportForm.detail = ''
+  reportDialogVisible.value = true
+}
+
+async function submitReport() {
+  if (!reportTarget.value) return
+  if (reportForm.category === 'other' && !reportForm.detail.trim()) {
+    ElMessage.warning('选择其他分类时请填写举报说明')
+    return
+  }
+  reporting.value = true
+  try {
+    const payload = { category: reportForm.category, detail: reportForm.detail }
+    const response = reportTarget.value.type === 'post'
+      ? await reportPost(eventId, postId, payload)
+      : await reportReply(eventId, postId, reportTarget.value.id, payload)
+    ElMessage.success(response.message || '举报已提交')
+    reportDialogVisible.value = false
+  } finally {
+    reporting.value = false
+  }
 }
 
 async function fetchPost() {
@@ -160,6 +236,17 @@ onMounted(fetchPost)
   margin-bottom: 16px;
 }
 
+.post-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.post-heading h2 {
+  margin-bottom: 8px;
+}
+
 .post-content {
   background: #fff;
   padding: 20px;
@@ -183,6 +270,12 @@ onMounted(fetchPost)
   color: #909399;
 }
 
+.report-reply {
+  margin-left: auto;
+  padding: 0;
+  min-height: auto;
+}
+
 .reply-content {
   margin: 0;
   line-height: 1.6;
@@ -196,12 +289,14 @@ onMounted(fetchPost)
 
 .reply-form { margin-top: 16px; }
 .reply-login-hint { margin-bottom: 16px; }
+.full-width { width: 100%; }
 
 .loading { padding: 24px; background: #fff; border-radius: 8px; }
 
 @media (max-width: 640px) {
   .main { padding: 16px 8px; }
   h2 { overflow-wrap: anywhere; font-size: 20px; }
+  .post-heading { align-items: flex-start; }
   .post-meta, .reply-meta { flex-wrap: wrap; gap: 6px 12px; }
   .post-content, .reply-item { padding: 16px; }
 }
