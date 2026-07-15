@@ -1,6 +1,6 @@
 # v6.1.0 测试报告
 
-> 状态：G5.4 Local Candidate；G5.1–G5.3 远端通过，G5.4 Commit/Run 待回填
+> 状态：G5.4 Remote Candidate Pass；自助运营完整远端门禁通过
 
 ## 版本身份
 
@@ -10,7 +10,7 @@
 | G5.1 已验证 Commit | f548a298ca7bc7c8695b15e3d986c33e767b295d |
 | G5.2 已验证 Commit | 780c4966cb20ce6384a4756db4443c4181d9161d |
 | G5.3 已验证 Commit | 00ebef05634467f5a5befb8c1de0303c82cb2a4d |
-| G5.4 候选 Commit | 待功能提交后回填 |
+| G5.4 已验证 Commit | 8bc0c501f7567d389cee2c2703cd02383682b80a |
 | 候选分支 | origin/codex/update_project |
 | Schema | v13；v12 租户基础 + Event 稳定 tenant、索引/FK 与 `/events` N/N-1 写兼容 |
 
@@ -75,9 +75,11 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | [GitHub Actions Run 29443464930](https://github.com/qw2261/soulmarker/actions/runs/29443464930) | success，与 00ebef05634467f5a5befb8c1de0303c82cb2a4d 绑定 |
 | [backend job 87447966246](https://github.com/qw2261/soulmarker/actions/runs/29443464930/job/87447966246) | format、vet、govulncheck 0、309 tests、race success |
 | [frontend job 87447966182](https://github.com/qw2261/soulmarker/actions/runs/29443464930/job/87447966182) | build、18 unit/component tests、4 desktop/mobile E2E 与浏览器证据上传 success |
-| G5.4 功能候选 Commit | 待提交后回填 |
-| G5.4 GitHub Actions Run / backend / frontend jobs | 待远端 CI success 后回填；回填前 G5-R04/G5-R06 保持未关闭 |
+| [G5.4 Commit 8bc0c50](https://github.com/qw2261/soulmarker/commit/8bc0c501f7567d389cee2c2703cd02383682b80a) | 自助组织 Service/API、成员/邀请安全、租户工作台、SMTP capture、desktop/mobile 角色旅程、ADR-007 与候选文档 |
+| [GitHub Actions Run 29447383045](https://github.com/qw2261/soulmarker/actions/runs/29447383045) | success，与 8bc0c501f7567d389cee2c2703cd02383682b80a 精确绑定 |
+| [backend job 87461129648](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129648) | format、vet、govulncheck、Go test 与 race 全部 success |
+| [frontend job 87461129666](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129666) | install、build、19 unit/component tests、6 desktop/mobile E2E 与浏览器证据上传 success |
 
 ## Go/No-Go
 
-Local Go（仅 G5.4 候选）：自助组织 API/UI、安全邀请和 desktop/mobile 四角色旅程已通过本地门禁，可以提交远端候选。G5-R04/G5-R06 在远端 CI success 并回填 Commit/Run 前仍保持未关闭。完整 G5、M2 与商业化仍为 No-Go；后续还必须完成 G5.5 审计/PII/真实试点，以及 G6–G8 生产、支付和商业化基线。
+Go（仅 G5.4）：自助组织 API/UI、安全邀请和 desktop/mobile 四角色旅程已通过完整远端门禁，G5-R04/G5-R06 可以关闭。完整 G5、M2 与商业化仍为 No-Go；后续还必须完成 G5.5 审计/PII/所有权转移/真实试点，以及 G6–G8 生产、支付和商业化基线。

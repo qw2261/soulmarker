@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：G5.4 Local Candidate；G5.1–G5.3 已通过远端门禁，G5.4 Commit/Run 待回填
+> 状态：G5.4 Remote Candidate Pass（Commit 8bc0c50 / Run 29447383045）；G5.1–G5.3 同样已通过远端门禁
 
 ## 当前切片
 
@@ -33,7 +33,7 @@
 
 ## 明确未完成
 
-- G5.4 当前只完成本地候选，必须等待功能提交远端 CI success 并回填 Commit/Run，才能关闭 G5-R04/G5-R06。
+- G5-R04/G5-R06 已由 Commit `8bc0c50` / Run `29447383045` 关闭；G5.5 审计、PII 和试点不提前关闭。
 - platform admin 兼容路由仍使用全局 Token，但仅保留应急和治理；移除兼容面需要单独的使用量审计与弃用计划。
 - actor/tenant/request_id 审计、成员操作审计和 PII 脱敏仍属于 G5.5。
 - 所有权转移、邀请限流/异步重试/退信处理和三个真实组织试点尚未完成。

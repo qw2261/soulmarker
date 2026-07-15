@@ -42,7 +42,7 @@
 |---|---|---|---|---|
 | GATE-G4-SMTP | 外部验收 | 真实 staging SMTP 的收件、链接跳转、重置/绑定和旧会话撤销尚未执行；本地适配器与 HTTP 旅程不能替代真实投递 | qw2261 | G4 Done 前 |
 | GATE-G4-UAT | 外部验收 | 仍需两场独立内部或受控活动，无人工改库并保留签字证据 | qw2261 | G4 Done 前 |
-| RISK-G5-ADMIN | P2 | G5.4 已用用户 JWT、成员角色和 tenant scope 替换组织者日常 Admin Token 入口；当前为 Local Candidate，远端门禁前保持开放，platform Token 兼容面只限应急/治理 | qw2261 | G5-R04/R06 远端证据回填 |
+| RISK-G5-ADMIN | P2 | Closed：G5.4 已用用户 JWT、成员角色和 tenant scope 替换组织者日常 Admin Token 入口；Commit `8bc0c50` / Run `29447383045` 通过，platform Token 兼容面只限应急/治理 | qw2261 | Closed |
 | RISK-G6-RATE | P2 | 密码重置只有用户级一分钟限流，尚无边缘/IP 限流与异步重试；受控试点限制公开流量 | qw2261 | G6-R04 |
 | RISK-G6-NOTIFY | P2 | 临近提醒仅支持单实例；多实例前升级为租约单执行者或外部任务系统 | qw2261 | G6 部署扩容前 |
 | RISK-G6-BROWSER | P2 | 自动矩阵只有 desktop Chromium 与 Pixel 7 Chromium；生产前补 Safari/iPhone WebKit 和目标 Android 真机 | qw2261 | G6 Go-Live 前 |

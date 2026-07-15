@@ -1,6 +1,6 @@
 # v6.1.0 Known Issues
 
-- G5.4 自助入驻、邀请/成员管理和租户工作台已达到 Local Candidate，但尚未绑定远端 Commit/Run，不能提前宣称 G5-R04/G5-R06 完成。
+- G5.4 自助入驻、邀请/成员管理和租户工作台已由 Commit `8bc0c50` / Run `29447383045` 通过远端门禁；剩余多租户风险转入 G5.5 审计、PII 和试点。
 - platform admin 业务路由仍在兼容期保留全局 Token，只作为应急和治理入口；下线前需要使用量审计和明确弃用窗口。
 - 后续风险集中在 G5.5 的 actor/tenant/request_id 审计、PII 脱敏、所有权转移与真实三组织试点。
 - 新管理前端要求 `/admin/session` 返回 `principal_type=platform_admin`；前后端整体回滚安全，若未来拆分部署必须为混合 N/N-1 增加单独兼容策略。
