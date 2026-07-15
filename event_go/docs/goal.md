@@ -374,7 +374,7 @@ G4-R09 当前拆分验收：
 ### 范围
 
 - [x] **G5-R01** 区分租户 Organization 与公开品牌/门店资料 OrganizerProfile。
-- [ ] **G5-R02** 建立 organization_members、invitation 和角色权限。
+- [x] **G5-R02** 建立 organization_members、invitation 和集中角色权限；Schema v12/ADR-004 固化成员与邀请，ADR-005 固化实时 capability Policy。
 - [x] **G5-R03** 固化最小角色集合：owner、admin、editor、checker、finance；角色能力按后续授权切片逐项开放。
 - [ ] **G5-R04** platform_admin 与租户角色分离，移除公开业务面的全局 Admin Token。
 - [ ] **G5-R05** event、ticket、registration、admission、checkin、export 全部强制 tenant scope。
@@ -412,7 +412,7 @@ G5.1 不包含组织自助 API、租户上下文、业务资源 scope、租户�
 - [x] **G5-A04** 新增 `GET /me/organizations` 与 `GET /organizations/{organizationId}/session`，DTO、稳定 `ORGANIZATION_ACCESS_DENIED` 错误码、OpenAPI 和 `/api` 兼容路由一致。
 - [x] **G5-A05** `PlatformAdminAuth` 写入独立 principal；平台 Token 不能替代用户 JWT，租户 JWT 不能替代平台 Token，前端管理守卫同时验证 `authenticated` 与 `principal_type=platform_admin`。
 - [x] **G5-A06** `ORGANIZATION_AUTH_ENABLED=false` 可关闭只读租户入口，非法配置拒绝启动，不影响现有 platform admin 双轨运营。
-- [ ] **G5-A07** G5.2 候选通过完整本地与远端门禁，并回填 Commit、Run、授权矩阵与回退证据。
+- [x] **G5-A07** G5.2 候选通过完整本地与远端门禁；Commit `780c496` / Run `29440070376`，授权矩阵与回退证据见 [v6.1 测试报告](releases/v6.1.0/test-report.md)。
 
 G5.2 只证明授权内核和只读租户 session。现有 Event、Ticket、Registration、Admission、Checkin、Export 与治理路由尚未接入 tenant capability，G5-R04/R05 继续保持未完成；跨租户业务数据隔离必须由 G5.3 的资源级 Store/Service 测试证明。
 
@@ -786,7 +786,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1 已通过远端门禁；G5.2 授权内核与 302 个 Go / 18 个 Vue 测试进入候选验证，资源 tenant scope 仍待 G5.3 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1/G5.2 已通过远端门禁；下一切片 G5.3 必须把业务资源接入 tenant scope，R04/R05 仍未完成 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

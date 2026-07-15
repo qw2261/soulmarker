@@ -66,4 +66,6 @@ G5.2 不增加 Schema 版本。它新增只读 `/me/organizations`、`/organizat
 
 授权异常时优先设置 `ORGANIZATION_AUTH_ENABLED=false` 并重启应用：两个新入口统一返回 404，既有 platform admin 业务路由与 Schema v12 数据继续工作。若需要整体回滚，部署 G5.1 前后端同一制品；不要删除 Membership 或回退数据库。新前端配旧后端会因缺少 `principal_type` 拒绝管理登录，这是预期的 fail-closed 行为，因此当前必须整体发布/回滚前后端。
 
-G5.2 放行前需验证：五角色精确矩阵、跨租户/暂停/撤销 403、platform/tenant 凭证互斥、开关关闭 404、非法开关启动失败、OpenAPI/DTO/错误码契约和完整 CI。
+G5.2 放行检查已验证：五角色精确矩阵、跨租户/暂停/撤销 403、platform/tenant 凭证互斥、开关关闭 404、非法开关启动失败、OpenAPI/DTO/错误码契约和完整 CI。
+
+G5.2 代码候选证据：Commit `780c496`，GitHub Actions Run `29440070376` success；backend job `87436433655` 与 frontend job `87436433616` 均通过。

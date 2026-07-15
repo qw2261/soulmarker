@@ -1,6 +1,6 @@
 # v6.1.0 测试报告
 
-> 状态：G5.2 Candidate Local Pass；完整本地门禁通过，等待首次候选 Commit 与远端 CI
+> 状态：G5.2 Remote Candidate Pass；授权内核本地与远端门禁通过
 
 ## 版本身份
 
@@ -8,7 +8,7 @@
 |---|---|
 | 上一远端安全基线 Commit | a5722da |
 | G5.1 已验证 Commit | f548a298ca7bc7c8695b15e3d986c33e767b295d |
-| G5.2 当前候选 Commit | Pending（首次候选提交后回填） |
+| G5.2 已验证 Commit | 780c4966cb20ce6384a4756db4443c4181d9161d |
 | 候选分支 | origin/codex/update_project |
 | Schema | v12，新增租户、成员、邀请、角色约束和 `/organizers` N/N-1 写兼容 |
 
@@ -53,8 +53,11 @@ G5.1 交付租户数据基础。G5.2 在不修改 Schema 的前提下交付集�
 | [GitHub Actions Run 29437366319](https://github.com/qw2261/soulmarker/actions/runs/29437366319) | success，与 f548a298ca7bc7c8695b15e3d986c33e767b295d 绑定 |
 | [backend job 87427278795](https://github.com/qw2261/soulmarker/actions/runs/29437366319/job/87427278795) | format、vet、govulncheck、293 tests、race success |
 | [frontend job 87427278794](https://github.com/qw2261/soulmarker/actions/runs/29437366319/job/87427278794) | build、17 unit/component tests、4 desktop/mobile E2E、浏览器证据上传 success |
-| G5.2 首次候选 Commit / Run | Pending |
+| [G5.2 Commit 780c496](https://github.com/qw2261/soulmarker/commit/780c4966cb20ce6384a4756db4443c4181d9161d) | 集中 Policy、实时 tenant context、platform principal、只读 API、OpenAPI/前端契约与回退开关 |
+| [GitHub Actions Run 29440070376](https://github.com/qw2261/soulmarker/actions/runs/29440070376) | success，与 780c4966cb20ce6384a4756db4443c4181d9161d 绑定 |
+| [backend job 87436433655](https://github.com/qw2261/soulmarker/actions/runs/29440070376/job/87436433655) | format、vet、govulncheck 0、302 tests、race success |
+| [frontend job 87436433616](https://github.com/qw2261/soulmarker/actions/runs/29440070376/job/87436433616) | build、18 unit/component tests、4 desktop/mobile E2E、浏览器证据上传 success |
 
 ## Go/No-Go
 
-No-Go（G5.2）：完整本地门禁已通过，仍需首次候选 Commit 与远端 CI 绑定。远端通过后也只允许进入 G5.3 资源租户化；完整 G5、M2 与商业化继续为 No-Go。
+Go（仅 G5.2）：授权内核已通过完整本地与远端候选门禁，可以进入 G5.3 资源租户化。完整 G5、M2 与商业化继续为 No-Go；必须继续完成业务资源 tenant scope、移除公开业务面的全局 Token、自助运营、审计和生产基线。

@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关正在候选验证。现有业务资源仍未 tenant scoped，G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
+**v6.0 验收与 v6.1 多租户迭代并行推进** — G5.1 Schema v12 基础已由 Commit `f548a29` / Run `29437366319` 通过远端门禁；G5.2 集中 capability、实时租户 session、platform principal 分离和回退开关已由 Commit `780c496` / Run `29440070376` 通过远端门禁。现有业务资源仍未 tenant scoped，G4 也仍待真实 staging SMTP 和两场受控活动，因此 M1/M2 均未提前标记完成。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 

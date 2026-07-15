@@ -1,6 +1,6 @@
 # v6.1.0 Release Notes
 
-> 状态：G5.2 Candidate Verification；G5.1 租户基础已由 Commit f548a29 / Run 29437366319 通过
+> 状态：G5.2 Remote Candidate Pass（Commit 780c496 / Run 29440070376）；G5.1 同样已通过远端门禁
 
 ## 当前切片
 
