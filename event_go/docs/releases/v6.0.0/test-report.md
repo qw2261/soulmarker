@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，JWT 与 Go 标准库漏洞修复、P0/P1 清零审计为本地候选
+> 状态：In Progress，JWT 与 Go 标准库漏洞修复、P0/P1 清零审计已通过远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 待 JWT 依赖安全修复提交后回填 |
+| 当前候选 Commit | 0790db9df2320c284d5e9ed521fe9c3bf6119204 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v11，新增持久化站内通知、未读/活动索引和幂等键；保留 v10 恢复邮箱、v9 内容治理、v8 活动封面、v7 认证与 v6 admissions/checkins |
 
@@ -80,7 +80,13 @@
 | [GitHub Actions Run 29432032120](https://github.com/qw2261/soulmarker/actions/runs/29432032120) | Commit 04908db，基础通知闭环候选 success |
 | [backend job 87409182693](https://github.com/qw2261/soulmarker/actions/runs/29432032120/job/87409182693) | format、vet、285 tests、race、Schema v11、通知事务/调度/隔离与 OpenAPI 契约 success |
 | [frontend job 87409182702](https://github.com/qw2261/soulmarker/actions/runs/29432032120/job/87409182702) | Node 22 build、17 unit/component tests、4 desktop/mobile Playwright cases success；通知中心浏览器证据已上传 |
+| [GitHub Actions Run 29433701071](https://github.com/qw2261/soulmarker/actions/runs/29433701071) | Commit df4e66c；新增 govulncheck 正确发现 Go 1.25.0 标准库可达漏洞并阻断 backend |
+| [backend job 87414866461](https://github.com/qw2261/soulmarker/actions/runs/29433701071/job/87414866461) | Go vulnerability scan failure；test/race 未执行，候选未放行 |
+| [frontend job 87414866391](https://github.com/qw2261/soulmarker/actions/runs/29433701071/job/87414866391) | build、17 unit/component tests、4 desktop/mobile Playwright cases success |
+| [GitHub Actions Run 29434256135](https://github.com/qw2261/soulmarker/actions/runs/29434256135) | Commit 0790db9，Go 1.25.12 安全工具链修复候选 success |
+| [backend job 87416760718](https://github.com/qw2261/soulmarker/actions/runs/29434256135/job/87416760718) | format、vet、govulncheck 0、286 tests、race success |
+| [frontend job 87416760683](https://github.com/qw2261/soulmarker/actions/runs/29434256135/job/87416760683) | Node 22 build、17 unit/component tests、4 desktop/mobile Playwright cases success；浏览器证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R01、R02、R04、R05、R06、R07、R08、R09 已通过本地和远端候选门禁；R03 仍缺真实 staging SMTP 验收，两场受控活动尚未执行。P0/P1 台账已建立，JWT 与 Go 标准库漏洞已本地修复但仍需候选远端 CI 后正式清零。
+No-Go：R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过本地和远端候选门禁。R03 仍缺真实 staging SMTP 验收，两场受控活动尚未执行。

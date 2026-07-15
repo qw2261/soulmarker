@@ -16,8 +16,7 @@
 
 | ID | 等级 | 描述 | Owner | 状态 | 解除条件 |
 |---|---|---|---|---|---|
-| BUG-G4-004 | P1 | `jwt/v5.2.1` 命中可达 `GO-2025-3553`，分隔符洪泛可造成过量内存分配 | qw2261 | Local Candidate | `jwt/v5.2.2`、REG-BUG 与远端 govulncheck/test/race 全绿 |
-| BUG-G4-005 | P1 | CI 按 `go.mod` 使用 Go `1.25.0`，pinned govulncheck 命中多个可达标准库漏洞 | qw2261 | Local Candidate | 工具链提升到 Go `1.25.12`，远端 govulncheck/test/race 全绿 |
+| — | — | 当前没有已知开放 P0/P1/P2 代码缺陷 | — | Empty | 新发现问题立即登记 |
 
 ## 3. 已关闭 P0/P1 审计项
 
@@ -32,6 +31,8 @@
 | BUG-G4-001 | P1 | 退出、密码重置和恢复邮箱确认必须撤销旧会话；一次性 Token 不得复用或泄露账户存在性 | `SEC-AUTH-SESSION-001`、`SEC-PASSWORD-RESET-001`、`SEC-RECOVERY-EMAIL-001`、Runs `29389509516` / `29428887570` | Closed |
 | BUG-G4-002 | P1 | 同一 Admission 重复或并发核销不得产生重复履约记录，已核销报名不得取消 | `CONC-CHECKIN-001`、`SEC-CHECKIN-001`、Run `29386146688` | Closed |
 | BUG-G4-003 | P1 | 已移除帖子/回复不得重新出现在公开查询，治理原始证据必须保留 | `SEC-CONTENT-REPORT-001`、`DOM-CONTENT-MODERATION-001`、Run `29424593002` | Closed |
+| BUG-G4-004 | P1 | `jwt/v5.2.1` 的 `GO-2025-3553` 可达路径允许分隔符洪泛造成过量内存分配 | `jwt/v5.2.2`、`REG-BUG-G4-001`、pinned `govulncheck@v1.6.0`；Commits `df4e66c` / `0790db9`；Run `29434256135` | Closed |
+| BUG-G4-005 | P1 | Go `1.25.0` 标准库存在多个可达漏洞，首次安全候选被门禁阻断 | Run `29433701071` 正确失败；固定 Go `1.25.12`；Commit `0790db9`、Run `29434256135` | Closed |
 
 ## 4. 外部门槛与延期风险
 
@@ -62,5 +63,5 @@
 ## 6. 清零结论
 
 - P0：0 个开放。
-- P1：2 个 Local Candidate（`BUG-G4-004`、`BUG-G4-005`）；候选远端 CI 成功后正式清零。
+- P1：0 个开放；`BUG-G4-004`、`BUG-G4-005` 已由 Run `29434256135` 关闭。
 - G4 仍为 No-Go：`GATE-G4-SMTP` 与 `GATE-G4-UAT` 尚未完成。

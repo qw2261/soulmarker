@@ -179,7 +179,7 @@
 
 - [x] 公开查询 API 不返回报名联系方式。
 - [x] staging/production 未认证请求不能访问任何管理写接口。
-- [ ] 已知 P0/P1 全部关闭并拥有 REG-BUG 回归测试。
+- [x] 已知 P0/P1 全部关闭并拥有 REG-BUG 回归测试；[缺陷台账](testing/defect-register.md) 记录 2026-07-16 清零审计和远端门禁证据。
 - [x] 所有已实现的嵌套路由归属测试通过。
 - [x] staging/production 默认 fail-closed。
 
@@ -361,7 +361,7 @@ G4-R09 当前拆分验收：
 - [ ] 按 [受控活动验收规程](testing/controlled-activity-acceptance.md) 完成两场内部或受控测试活动，无人工改库，并回填 [活动一](releases/v6.0.0/acceptance/controlled-activity-01.md) / [活动二](releases/v6.0.0/acceptance/controlled-activity-02.md) 记录。
 - [x] 重复核销不会重复记录或改变库存。
 - [x] 移动端主流程通过约定设备和浏览器矩阵。
-- [ ] [缺陷台账](testing/defect-register.md) 中无未关闭 P0/P1；当前 JWT `GO-2025-3553` 与 Go `1.25.0` 标准库漏洞均已形成修复候选，等待远端门禁后正式清零。
+- [x] [缺陷台账](testing/defect-register.md) 中无未关闭 P0/P1；JWT `GO-2025-3553` 与 Go `1.25.0` 标准库漏洞由 Commits `df4e66c` / `0790db9` 修复，Run `29434256135` 通过后正式清零。
 
 **达到：M1 可用。**
 
@@ -748,10 +748,10 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | 阶段 | 状态 | 目标版本 | 证据 | 备注 |
 |---|---|---|---|---|
 | G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 的远端 CI 已通过，等待 Tag 与最终发布证据 |
-| G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
+| G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；2026-07-16 P0/P1 台账清零，仍等待版本 Tag 与正式发布证据 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
-| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 已通过远端门禁；R03 仅待真实 SMTP；JWT 与 Go 标准库 P1 修复等待远端门禁；两场受控活动继续推进 |
+| G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
