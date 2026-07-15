@@ -32,7 +32,7 @@
 | G3-R06 | v5.5 | High | 业务时间和 JWT 签发/验证可注入并可使用确定时间测试 | Clock、TokenManager、Handler Dependencies | ARCH-DEPS-001 | — | v5.5 test-report | Remote Pass |
 | G3-R07 | v5.5 | Critical | 所有业务操作同时注册 v1/兼容路由，OpenAPI operationId、request schema 与 DTO 字段双向一致 | Router catalog、OpenAPI 3.1、ADR-002 | CT-OPENAPI-001 | 前端使用 /api/v1 | v5.5 test-report | Remote Pass |
 | G3-R08 | v5.5 | Critical | HTTP 状态与业务错误码独立选择；同状态可区分业务原因；数字 code 兼容；未知与内部错误安全降级 | internal/api error catalog、Handler writeError、OpenAPI enum | CT-ERROR-CODE-001、SEC-ERROR-002 | — | v5.5 test-report | Remote Pass |
-| G4-R02 | v6.0 | High | “我的活动”以单一精确分页时间线展示免费/付费、待参加、已结束、已取消、已入场和真实凭证 | MyActivity、GET /me/activities、MyRegistrations、AdmissionCredential | DOM-ACTIVITY-001、CT-WEB-ACTIVITY-001、CT-WEB-ADMISSION-001 | E2E-ADMISSION-001 desktop/mobile | v6.0 test-report；新候选待远端 | Local Pass |
+| G4-R02 | v6.0 | High | “我的活动”以单一精确分页时间线展示免费/付费、待参加、已结束、已取消、已入场和真实凭证 | MyActivity、GET /me/activities、MyRegistrations、AdmissionCredential | DOM-ACTIVITY-001、CT-WEB-ACTIVITY-001、CT-WEB-ADMISSION-001 | E2E-ADMISSION-001 desktop/mobile | v6.0 test-report / Run 29387047591 | Remote Pass |
 | G4-R07 | v6.0 | Critical | 免费报名与 Admission 同事务创建；付费票不生成；凭证由加密随机生成器产生并仅向本人/管理员返回 | migration v6、RegistrationService、Store、Admission API | DOM-ADMISSION-001、MIG-ADMISSION-001、SEC-CREDENTIAL-001 | E2E-ADMISSION-001 | v6.0 test-report / Run 29386146688 | Remote Pass |
 | G4-R08 | v6.0 | Critical | 首次核销生成一条不可变 Checkin；重复与并发调用返回同一记录；吊销/跨活动凭证拒绝；已核销不可取消 | AdmissionService、Store CheckIn、immutable triggers、运营核销页 | CONC-CHECKIN-001、SEC-CHECKIN-001、IT-CHECKIN-001 | E2E-ADMISSION-001 desktop/mobile | v6.0 test-report / Run 29386146688 | Remote Pass |
 

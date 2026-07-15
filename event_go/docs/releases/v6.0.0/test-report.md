@@ -1,13 +1,13 @@
 # v6.0.0 测试报告
 
-> 状态：In Progress，G4-R02 统一时间线加固已通过本地门禁，待新候选远端回填
+> 状态：In Progress，G4-R02 统一时间线加固已通过本地和远端候选门禁
 
 ## 版本身份
 
 | 字段 | 值 |
 |---|---|
 | 已验证基线 Commit | a80c45c274edcb1c2d4e5dc890a20585e46bfdaa |
-| 当前候选 Commit | 待提交与远端验证；上一候选 674fd623513f1504c6325ed985192630d3a57c16 |
+| 当前候选 Commit | df969f2820b6ff2976fe5d1658b211c531ac22d1 |
 | 候选分支 | origin/codex/update_project |
 | Schema | v6，新增 admissions/checkins 与不可变触发器 |
 
@@ -45,7 +45,10 @@
 | [GitHub Actions Run 29386146688](https://github.com/qw2261/soulmarker/actions/runs/29386146688) | Commit 674fd623，success |
 | [backend job 87259740454](https://github.com/qw2261/soulmarker/actions/runs/29386146688/job/87259740454) | format、vet、test、race success |
 | [frontend job 87259740437](https://github.com/qw2261/soulmarker/actions/runs/29386146688/job/87259740437) | Node 22 build、component、desktop/mobile Playwright success；浏览器证据已上传 |
+| [GitHub Actions Run 29387047591](https://github.com/qw2261/soulmarker/actions/runs/29387047591) | Commit df969f2，统一时间线/首包加固候选 success |
+| [backend job 87262384999](https://github.com/qw2261/soulmarker/actions/runs/29387047591/job/87262384999) | format、vet、250 tests、race success |
+| [frontend job 87262384985](https://github.com/qw2261/soulmarker/actions/runs/29387047591/job/87262384985) | Node 22 build、3 component tests、desktop/mobile Playwright success；浏览器证据已上传 |
 
 ## Go/No-Go
 
-No-Go：R02 统一时间线加固及 R07、R08 纵向切片已通过本地门禁；新候选仍待远端验证，且 G4 其余 Requirements、完整 E2E 和两场受控测试活动尚未完成。
+No-Go：R02 统一时间线加固及 R07、R08 纵向切片已通过本地和远端候选门禁；G4 其余 Requirements、完整 E2E 和两场受控测试活动尚未完成。
