@@ -26,8 +26,8 @@
 | G2-R09 | v5.4 | Critical | 并发报名不超容量、库存不为负、重复取消只退一次 | Store mutex + transaction | CONC-REG-001 | — | v5.4 test-report | Local Pass |
 | G3-R01 | v5.5 | High | Config 仅在启动入口加载校验，Handler 与中间件使用同一注入实例 | main、Handler、Router、Middleware | ARCH-CONFIG-001 | — | v5.5 test-report | Remote Pass |
 | G3-R02 | v5.5 | High | NewStore 初始化失败返回 error，不 panic 或退出进程 | internal/store/store.go | ARCH-STORE-001 | — | v5.5 test-report | Remote Pass |
-| G3-R03 | v5.5 | High | 报名状态、可信身份、容量提示和取消截止规则由 application service 承载 | RegistrationService、Handler | ARCH-SERVICE-REG-001 | — | v5.5 test-report | Partial: registration only |
-| G3-R05 | v5.5 | Medium | Repository 接口仅包含报名用例需要的 GetEvent、Register、Cancel 方法 | service.RegistrationRepository | ARCH-REPO-001 | — | v5.5 test-report | Local Pass |
-| G3-R06 | v5.5 | High | 业务时间和 JWT 签发/验证可注入并可使用确定时间测试 | Clock、TokenManager、Handler Dependencies | ARCH-DEPS-001 | — | v5.5 test-report | Local Pass |
+| G3-R03 | v5.5 | High | 报名状态、可信身份、容量提示和取消截止规则由 application service 承载 | RegistrationService、Handler | ARCH-SERVICE-REG-001 | — | v5.5 test-report | Partial: registration Remote Pass |
+| G3-R05 | v5.5 | Medium | Repository 接口仅包含报名用例需要的 GetEvent、Register、Cancel 方法 | service.RegistrationRepository | ARCH-REPO-001 | — | v5.5 test-report | Remote Pass |
+| G3-R06 | v5.5 | High | 业务时间和 JWT 签发/验证可注入并可使用确定时间测试 | Clock、TokenManager、Handler Dependencies | ARCH-DEPS-001 | — | v5.5 test-report | Remote Pass |
 
 后续新增 Requirement 时，不得只写实现文件；必须同时填写可验证验收条件和测试 ID。

@@ -691,7 +691,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G0 | Verification | v5.2 | [v5.2 测试报告](releases/v5.2.0/test-report.md) | 候选提交 bc9db6b 的远端 CI 已通过，等待 Tag 与最终发布证据 |
 | G1 | Verification | v5.3 | [追溯矩阵](testing/traceability.md) | R01–R09 已实现并随 v5.4 候选通过远端 CI；仍需关闭完成门槛中的 P0/P1 追溯项 |
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
-| G3 | In Progress | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R02 已远端验证；R05–R06 已实现，R03 完成报名/取消部分；R04、R07–R08 待推进 |
+| G3 | In Progress | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R02、R05–R06 已远端验证；R03 报名/取消切片 dabb8cc 已远端通过；讨论 service、R04、R07–R08 待推进 |
 | G4 | Planned | v6.0 | — | M1 |
 | G5 | Planned | v6.1 | — | 依赖可信身份 |
 | G6 | Planned | v6.2 | — | M2 |
