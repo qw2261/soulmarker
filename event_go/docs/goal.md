@@ -461,7 +461,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理。
 - [x] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境；Commit `8e226fb` / Run `32530864989`（backend `96922429920`、docker `96922429737` success；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过）。通过 `internal/buildinfo`（ldflags 注入 Version/Commit/BuildTime，`runtime/debug.ReadBuildInfo` 读 Go 版本/模块/依赖）、`GET /version` 端点、Dockerfile/CI ldflags 注入与 `build-provenance` artifact 上传实现；docker job 断言容器 `/version` 的 Commit 与 `GITHUB_SHA` 一致，使发布制品、Commit 与触发 workflow 精确绑定。「发布制品、Tag、Commit、测试报告与部署记录互相追溯」的完成门槛仍以真实 staging 部署归档为准（见 G6-R01 与完成门槛）。
 - [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
-- [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，HTTPS/域名、依赖与 Secret 扫描仍待补）。
+- [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，依赖与 Secret 扫描已由 G6.6 切片实现并闭合，HTTPS/域名仍待补）。
 - [ ] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
 
 ### 可观测性与运维
@@ -518,7 +518,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [x] **G6-RL05** 新增 handler 级测试覆盖窗口滚动、IP 识别（XFF 优先/回退）、超限 429、不同 IP 相互独立、非正数不限制、探针/OPTIONS 豁免，以及经 `NewRouter` 的完整集成回归。
 - [x] **G6-RL06** 本地门禁全绿：`gofmt`、`go build`、`go vet`、`go test -count=1 ./...`（361 个顶层测试）、`go test -race ./internal/config/... ./internal/api/... ./internal/handler/...`、OpenAPI/错误码契约；功能候选 Commit `9dd296c` 与远端 CI Run `32529278311` 绑定，backend `96917861081`、frontend `96917860783`、docker `96917861062` 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
-G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名、CORS 收口（除已由 G1-R08 提供的安全头）、依赖与 Secret 扫描仍待补，不能据此宣称 G6-R04 与 G6/M2 完成。
+G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名与 CORS 收口（除已由 G1-R08 提供的安全头）仍待补，不能据此宣称 G6-R04 与 G6/M2 完成。
 
 ### G6.4 当前构建 provenance 切片验收
 
@@ -530,7 +530,7 @@ G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名、CORS
 - [x] **G6-BP06** 新增 6 个 Go 测试（`internal/buildinfo`×4 + `internal/handler/version`×2）覆盖 source version 回退、核心字段填充、`ReadBuildInfo`、handler 响应与路由暴露；本地 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`/`go test -race ./internal/buildinfo/... ./internal/handler/... ./internal/config/...` 全绿。
 - [x] **G6-BP07** 功能候选 Commit `8e226fb` 与远端 CI Run `32530864989` 绑定；backend `96922429920`、docker `96922429737` 全部 success（docker 断言镜像 `/version` Commit 与 `HEAD` 一致）；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
-G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍待补，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
+G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R05/R06 仍待补，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
 
 ### G6.5 当前指标切片验收
 
@@ -542,7 +542,17 @@ G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Com
 - [x] **G6-M06** live smoke 验证：构建二进制以 `APP_ENV=test DATABASE_PATH=/tmp/metrics_smoke.db PORT=18081 RATE_LIMIT_REQUESTS_PER_MINUTE=0` 启动，`/healthz`、`/readyz`、`/version` 返回 200；抓取 `/metrics` 得到 `soulmark_http_requests_total{method="GET",status="200"} 4`、直方图各 `le` 桶累计 4、`soulmark_http_requests_in_flight 0`、`soulmark_build_info{version="dev",commit="unknown"} 1`。
 - [x] **G6-M07** 功能候选 Commit `6eb9ffe` 与远端 CI Run `32532723517` 绑定；backend `96927792454`、frontend `96927792421`、docker `96927792337` 三个 job 全部 success，证据回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)，G6.5 指标切片关闭。
 
-G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R05、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+
+### G6.6 当前依赖与 Secret 扫描切片验收
+
+- [x] **G6-SC01** frontend CI job 新增 `npm audit --omit=dev` 生产依赖门禁，生产依赖存在漏洞即令 job 失败；`npm audit fix` 清除 3 个 high 漏洞（vite→postcss→nanoid 3.3.12→3.3.18、postcss 8.5.14→8.5.26），本地验证 `npm audit --omit=dev`=0 vulnerabilities、`npm run build` 成功、`npm test`（12 文件/19 例）全过。
+- [x] **G6-SC02** backend CI job 新增 gitleaks 全仓 Secret 扫描门禁（`ghcr.io/gitleaks/gitleaks:v8.24.3`，`detect --source /src --no-banner --redact --config /src/.gitleaks.toml`），检出真实凭证即令 job 失败。
+- [x] **G6-SC03** 新增仓库级 `.gitleaks.toml`（`[extend] useDefault = true`），allowlist 仅豁免 `*_test.go`、`*.test.ts`、`*.spec.ts`、`*.test.vue`、`playwright.config.ts`、`e2e/*`、`ds2api/*` 中的测试夹具/E2E/占位密钥；源码、配置、Dockerfile、CI 与脚本中的真实密钥仍会被检出并使门禁失败。
+- [x] **G6-SC04** 本地验证：`npm audit --omit=dev`=0 vulnerabilities；`gitleaks detect --source . --no-banner --redact --config .gitleaks.toml`=no leaks found（105 commits scanned）。
+- [x] **G6-SC05** 功能候选 Commit `5f5dd0f` 与远端 CI Run `32533839331` 绑定；backend `96930938401`、frontend `96930938248`、docker `96930938434` 三个 job 全部 success；gitleaks（`Secret scan (gitleaks)`）与 npm audit（`Production dependency vulnerability audit`）两个新门禁均在 CI 中实际执行并通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+G6-SC01–SC05 关闭 G6-R04 中的「依赖与 Secret 扫描」能力。G6-R04 仅剩 HTTPS/域名（与 CORS 收口，安全头已由 G1-R08 提供）待补；G6-R01 环境隔离/安全存储、G6-R05、G6-R06 的错误追踪与告警、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R04 与 G6/M2 整体完成。
 
 ### 完成门槛
 

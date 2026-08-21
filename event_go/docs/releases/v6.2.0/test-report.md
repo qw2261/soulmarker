@@ -75,7 +75,7 @@ G6 生产上线准备的第一个切片「容器与部署基线」：
 
 - 本机 Docker daemon 未运行（OrbStack socket 不存在），镜像标签经公开镜像源与 Docker Hub 官方镜像库核实；镜像实际构建与运行由远端 CI docker job 在 `ubuntu-latest` 上完成并留下证据。
 - G6-R03 的 `HEALTHCHECK`/smoke 依赖容器内 `/healthz`；G6-R07 的 readiness 依赖数据库 Ping，SQLite `development` 环境无需外部 DB。
-- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，完成 G6-R08 运维 Runbook 文档，并关闭 G6-R04 的限流能力（见下文 G6-R04 切片）。G6-R01/R02/R05/R06、G6-R04 的 HTTPS/域名与依赖/Secret 扫描，以及 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）仍未在本报告完成，不能据此宣称正式生产就绪。
+- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，完成 G6-R08 运维 Runbook 文档，并关闭 G6-R04 的限流能力（见下文 G6-R04 切片）。G6-R01/R02/R05/R06、G6-R04 的 HTTPS/域名，以及 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）仍未在本报告完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -280,7 +280,59 @@ G6 生产上线准备的限流切片，支撑 M2「可上线」的 API 防滥用
 
 ## Go/No-Go
 
-Go（G6-R04 限流）：代码侧实现与完整远端门禁通过，关闭 G6-R04 的限流能力。G6-R04 整体仍未完成（HTTPS/域名、依赖与 Secret 扫描待补），G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败/压测演练、HTTPS/域名依赖扫描与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+Go（G6-R04 限流）：代码侧实现与完整远端门禁通过，关闭 G6-R04 的限流能力。G6-R04 整体仍未完成（HTTPS/域名待补），G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败/压测演练、HTTPS/域名依赖扫描与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R04 依赖与 Secret 扫描
+
+## 本切片范围
+
+G6 生产上线准备的「依赖与 Secret 扫描」切片，支撑 M2「可上线」的无 Critical/High 安全漏洞且不携带硬编码凭证：
+
+- **G6-R04**：HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（本切片交付其中的**依赖与 Secret 扫描**能力）。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R04 或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R04（依赖/Secret 扫描） | DEP-AUDIT-001 / SECRET-SCAN-001…002 | frontend job 在 `npm ci` 后运行 `npm audit --omit=dev`，生产依赖含漏洞即失败；backend job 以 `ghcr.io/gitleaks/gitleaks:v8.24.3` 对全仓运行 `detect --source /src --no-banner --redact --config /src/.gitleaks.toml`，检出真实凭证即失败；`.gitleaks.toml` 仅豁免测试/E2E/占位密钥 |
+
+## 变更清单（Commit 5f5dd0f）
+
+- `.github/workflows/ci.yml`：frontend job 新增 `npm audit --omit=dev` 生产依赖门禁；backend job 新增 gitleaks 全仓 Secret 扫描门禁（复用本地验证的 `v8.24.3` 保证结果可复现）。
+- `event_go/web/package-lock.json`：`npm audit fix` 升级 `nanoid` 3.3.12→3.3.18（vite→postcss 依赖）与 `postcss` 8.5.14→8.5.26，清除 3 个 high 生产依赖漏洞。
+- `.gitleaks.toml`（新增）：仓库级 gitleaks 配置，`[extend] useDefault = true` 以内置规则扫描，allowlist 仅对 `*_test.go`、`*.test.ts`、`*.spec.ts`、`*.test.vue`、`playwright.config.ts`、`e2e/*`、`ds2api/*` 中的占位密钥定向豁免。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `npm audit --omit=dev` | 通过，found 0 vulnerabilities |
+| `npm run build` | 通过 |
+| `npm test` | 通过（12 文件 / 19 例） |
+| `gitleaks detect --source . --no-banner --redact --config .gitleaks.toml` | 通过，no leaks found（105 commits scanned） |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过 |
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R04 依赖/Secret 扫描 Commit 5f5dd0f](https://github.com/qw2261/soulmarker/commit/5f5dd0f) | frontend `npm audit --omit=dev` 门禁 + backend gitleaks 全仓 Secret 扫描门禁 + `.gitleaks.toml` 豁免清单 |
+| [GitHub Actions Run 32533839331](https://github.com/qw2261/soulmarker/actions/runs/32533839331) | success，与 Commit 5f5dd0f 精确绑定 |
+| [backend job 96930938401](https://github.com/qw2261/soulmarker/actions/runs/32533839331/job/96930938401) | secret scan (gitleaks)、vulnerability scan、Go test、race test 全部 success |
+| [frontend job 96930938248](https://github.com/qw2261/soulmarker/actions/runs/32533839331/job/96930938248) | production dependency vulnerability audit、build、test、E2E 全部 success |
+| [docker job 96930938434](https://github.com/qw2261/soulmarker/actions/runs/32533839331/job/96930938434) | 镜像构建、非 root 断言、smoke 探针全部 success |
+
+## 说明
+
+- 生产依赖漏洞以 `npm audit --omit=dev`（仅生产依赖）为门禁，devDependencies 的漏洞不阻断发布，聚焦运行期实际引入的攻击面；`npm audit fix` 已把 3 个 high 降至 0，且 build/test 无回归。
+- gitleaks 在 CI 中扫描全仓（含历史 commit），用与本地一致的 `v8.24.3` 镜像保证结果可复现；allowlist 只豁免测试夹具/E2E 占位密钥，源码、配置、Dockerfile、CI 与脚本中的真实密钥仍会令门禁失败。
+
+## Go/No-Go
+
+Go（G6-R04 依赖/Secret 扫描）：代码侧与远端门禁通过，关闭 G6-R04 的「依赖与 Secret 扫描」能力。G6-R04 仅剩 HTTPS/域名（与 CORS 收口，安全头已由 G1-R08 提供）待补，G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败/压测演练、HTTPS/域名与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
 
 # G6-R02 CI/CD 不可变制品与构建 provenance
 
@@ -342,7 +394,7 @@ G6 生产上线准备的「供应链与发布制品可追溯」切片，支撑 M
 
 ## Go/No-Go
 
-Go（G6-R02 构建 provenance）：代码侧实现与远端门禁通过，关闭 G6-R02 的代码侧能力，并为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01（staging/production 环境隔离与安全存储）、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍未完成，G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+Go（G6-R02 构建 provenance）：代码侧实现与远端门禁通过，关闭 G6-R02 的代码侧能力，并为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01（staging/production 环境隔离与安全存储）、G6-R04 的 HTTPS/域名、G6-R05/R06 仍未完成，G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
 
 # G6-R06 HTTP 指标（G6.5 切片）
 
@@ -403,7 +455,7 @@ G6 生产上线准备的可观测性切片，支撑 M2「可上线」的运行�
 - 指标按 `method`/`status` 维度聚合而非原始路径，避免高基数标签导致无界内存增长；延迟直方图上界桶固定，成本可控。
 - 限流豁免将 `/metrics` 与 `/version` 视为探针/诊断端点，避免 Prometheus 抓取被 `RATE_LIMIT_REQUESTS_PER_MINUTE` 阻断。
 - `GET /metrics` 为可观测性探针路由，不对外开放为 API 业务契约，不纳入 OpenAPI paths 与 DTO schema 契约比较。
-- 本切片关闭 G6-R06 中「指标」的代码侧能力。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05、G6-R07 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+- 本切片关闭 G6-R06 中「指标」的代码侧能力。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R05、G6-R07 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
 
 ## Go/No-Go
 
