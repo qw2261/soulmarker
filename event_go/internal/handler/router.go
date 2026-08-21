@@ -200,5 +200,5 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	mux.HandleFunc("GET /readyz", h.ReadinessHandler)
 	mux.Handle("/", fallback)
 
-	return RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.tokens), h.config.CORSOrigin))))
+	return RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(RateLimitMiddleware(UserAuth(mux, h.tokens), h.config.RateLimitPerMinute), h.config.CORSOrigin))))
 }

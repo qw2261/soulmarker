@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateDevelopmentDefaults(t *testing.T) {
 	cfg := Load()
@@ -63,6 +66,7 @@ func TestValidateProductionConfig(t *testing.T) {
 		NotificationReminderHours:      24,
 		NotificationScanIntervalSec:    60,
 		OrganizationInvitationTTLHours: 72,
+		RateLimitPerMinute:             600,
 		SMTPHost:                       "smtp.example.com",
 		SMTPPort:                       "587",
 		SMTPUsername:                   "mailer",
@@ -180,5 +184,45 @@ func TestLoadRejectsNegativeBackupIntervals(t *testing.T) {
 	cfg = Load()
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("negative BACKUP_DRILL_INTERVAL_SECONDS must fail validation")
+	}
+}
+
+func TestValidateProductionRequiresRateLimit(t *testing.T) {
+	cfg := Config{
+		Environment: "production", AdminToken: "admin-token",
+		JWTSecret: "12345678901234567890123456789012", JWTExpireHours: 168,
+		CORSOrigin: "https://events.example.com", PublicBaseURL: "https://events.example.com",
+		PasswordResetTTLMin: 30, RecoveryEmailTTLMin: 30,
+		NotificationReminderHours: 24, NotificationScanIntervalSec: 60,
+		OrganizationInvitationTTLHours: 72,
+		SMTPHost:                       "smtp.example.com", SMTPPort: "587",
+		SMTPUsername: "mailer", SMTPPassword: "secret", SMTPFrom: "no-reply@example.com",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("production without a positive RATE_LIMIT_REQUESTS_PER_MINUTE must fail closed")
+	}
+	cfg.RateLimitPerMinute = 600
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("production with positive rate limit must be accepted: %v", err)
+	}
+}
+
+func TestLoadRejectsInvalidRateLimit(t *testing.T) {
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "not-a-number")
+	cfg := Load()
+	// Production also requires other secrets, but an invalid rate limit must
+	// not silently fall back to 0 (disabled) without failing closed.
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "RATE_LIMIT_REQUESTS_PER_MINUTE") {
+		t.Fatalf("invalid RATE_LIMIT_REQUESTS_PER_MINUTE must fail closed, got: %v", err)
+	}
+}
+
+func TestLoadRejectsNegativeRateLimit(t *testing.T) {
+	t.Setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "-1")
+	cfg := Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("negative RATE_LIMIT_REQUESTS_PER_MINUTE must fail validation")
 	}
 }

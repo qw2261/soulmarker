@@ -34,6 +34,7 @@ const (
 	CodeAdmissionAlreadyCheckedIn       ErrorCode = "ADMISSION_ALREADY_CHECKED_IN"
 	CodeEventHasAdmissions              ErrorCode = "EVENT_HAS_ADMISSIONS"
 	CodePasswordResetInvalid            ErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
+	CodeRateLimited                     ErrorCode = "RATE_LIMITED"
 	CodeRecoveryEmailInUse              ErrorCode = "RECOVERY_EMAIL_IN_USE"
 	CodeRecoveryEmailAlreadyBound       ErrorCode = "RECOVERY_EMAIL_ALREADY_BOUND"
 	CodeRecoveryEmailTokenInvalid       ErrorCode = "RECOVERY_EMAIL_TOKEN_INVALID"
@@ -85,6 +86,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeAdmissionAlreadyCheckedIn:       "入场凭证已核销",
 	CodeEventHasAdmissions:              "活动已有入场凭证，不能删除",
 	CodePasswordResetInvalid:            "密码重置链接无效或已过期",
+	CodeRateLimited:                     "请求过于频繁，请稍后再试",
 	CodeRecoveryEmailInUse:              "该邮箱已绑定其他账户",
 	CodeRecoveryEmailAlreadyBound:       "该邮箱已绑定当前账户",
 	CodeRecoveryEmailTokenInvalid:       "恢复邮箱验证链接无效或已过期",

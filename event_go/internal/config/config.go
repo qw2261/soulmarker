@@ -39,6 +39,7 @@ type Config struct {
 	BackupIntervalSec              int
 	BackupRetain                   int
 	BackupDrillIntervalSec         int
+	RateLimitPerMinute             int
 	organizationAuthFlagInvalid    bool
 }
 
@@ -73,6 +74,7 @@ func Load() *Config {
 		BackupIntervalSec:              getEnvInt("BACKUP_INTERVAL_SECONDS", 0),
 		BackupRetain:                   getEnvIntStrict("BACKUP_RETAIN", 7),
 		BackupDrillIntervalSec:         getEnvInt("BACKUP_DRILL_INTERVAL_SECONDS", 0),
+		RateLimitPerMinute:             getEnvIntStrict("RATE_LIMIT_REQUESTS_PER_MINUTE", 0),
 		organizationAuthFlagInvalid:    organizationAuthFlagInvalid,
 	}
 }
@@ -105,11 +107,17 @@ func (c *Config) Validate() error {
 	if c.BackupDrillIntervalSec < 0 {
 		return fmt.Errorf("BACKUP_DRILL_INTERVAL_SECONDS 不能为负数")
 	}
+	if c.RateLimitPerMinute < 0 {
+		return fmt.Errorf("RATE_LIMIT_REQUESTS_PER_MINUTE 不能为负数")
+	}
 	env := strings.ToLower(strings.TrimSpace(c.Environment))
 	switch env {
 	case "development", "test":
 		return nil
 	case "staging", "production":
+		if c.RateLimitPerMinute <= 0 {
+			return fmt.Errorf("%s 环境必须设置大于 0 的 RATE_LIMIT_REQUESTS_PER_MINUTE（限流不能关闭）", env)
+		}
 		if strings.TrimSpace(c.AdminToken) == "" {
 			return fmt.Errorf("%s 环境必须设置 ADMIN_TOKEN", env)
 		}
