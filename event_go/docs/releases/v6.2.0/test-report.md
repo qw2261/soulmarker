@@ -1,6 +1,6 @@
 # v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流、构建 provenance 切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）、G6-R02（CI/CD 不可变制品与构建 provenance）与 G6-R06（HTTP 指标，G6.5 切片）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）、G6-R02（CI/CD 不可变制品与构建 provenance）、G6-R06（HTTP 指标，G6.5 切片）与 G6-R05（数据库迁移先于应用灰度与 N/N-1 兼容，G6.7 切片）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
 
 ## 版本身份
 
@@ -15,7 +15,8 @@
 | G6-R04 限流实现 Commit | 9dd296c |
 | G6-R02 构建 provenance 实现 Commit | 8e226fb |
 | G6-R06 指标实现 Commit | 6eb9ffe |
-| Schema | v15（G6-R10 引入数据主体隐私，G6-R02 构建与 G6-R06 指标切片未变更数据库结构） |
+| G6-R05 独立迁移入口实现 Commit | 1da3005 |
+| Schema | v15（G6-R10 引入数据主体隐私，G6-R02 构建与 G6-R06 指标切片未变更数据库结构，G6-R05 独立迁移入口复用既有 v15 迁移） |
 
 ## 本切片范围
 
@@ -75,7 +76,7 @@ G6 生产上线准备的第一个切片「容器与部署基线」：
 
 - 本机 Docker daemon 未运行（OrbStack socket 不存在），镜像标签经公开镜像源与 Docker Hub 官方镜像库核实；镜像实际构建与运行由远端 CI docker job 在 `ubuntu-latest` 上完成并留下证据。
 - G6-R03 的 `HEALTHCHECK`/smoke 依赖容器内 `/healthz`；G6-R07 的 readiness 依赖数据库 Ping，SQLite `development` 环境无需外部 DB。
-- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，完成 G6-R08 运维 Runbook 文档，并关闭 G6-R04 的限流能力（见下文 G6-R04 切片）。G6-R01/R02/R05/R06、G6-R04 的 HTTPS/域名，以及 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）仍未在本报告完成，不能据此宣称正式生产就绪。
+- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，完成 G6-R08 运维 Runbook 文档，关闭 G6-R04 的限流能力与依赖/Secret 扫描（见下文 G6-R04 切片），并关闭 G6-R05 的独立迁移入口代码侧能力（见下文 G6-R05 切片）。G6-R01/R02/R05/R06、G6-R04 的 HTTPS/域名，以及 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）仍未在本报告完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -460,3 +461,59 @@ G6 生产上线准备的可观测性切片，支撑 M2「可上线」的运行�
 ## Go/No-Go
 
 Go（G6-R06 指标）：代码侧实现与完整远端门禁通过，关闭 G6-R06 中「指标」能力。G6-R06 整体仍未完成（错误追踪与告警待补），G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R05 数据库迁移先于应用灰度与 N/N-1 兼容
+
+## 本切片范围
+
+G6 生产上线准备的「数据库迁移」切片，支撑 M2「可上线」的迁移先于应用灰度、且 N-1 旧应用在迁移后仍可读写：
+
+- **G6-R05**：数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
+
+本切片不涉及前端功能调整（Schema 保持 v15），交付独立迁移入口与 N/N-1 兼容验证；「迁移先于应用灰度」作为真实部署编排（staging 预迁移演练）仍归 G6-R01 与 G6 完成门槛，本切片不宣称关闭 G6-R05 的全部操作层面或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R05 | MIGRATE-STANDALONE-001、MIGRATE-IDEMPOTENT-001、MIGRATE-N-N-1-COMPAT-001 | 独立迁移入口 `store.Migrate` 与 `event-go migrate` 命令将库推进到当前 Schema（v15）并可重复执行（幂等）；N-1 旧应用（不感知新增列/表）以显式列清单在已迁移库上读写用户/组织/门店/活动/报名不受影响，`user_auth_versions` 触发器仍正确初始化，当前版本应用重新打开仍可读取旧数据 |
+
+## 变更清单（Commit 1da3005）
+
+- `internal/store/store.go`：抽出 `prepareDB`（打开库、`journal_mode=WAL`、`busy_timeout=5000`、单连接）供 `OpenStore` 与 `Migrate` 共用；新增导出 `Migrate(dbPath) (int, error)`——复用同一批 `migrations()` 推进到 `CurrentSchemaVersion`（15），执行外键校验后返回 `SELECT MAX(version)`，幂等。
+- `cmd/event-go/main.go`：`main()` 检测首个参数为 `migrate` 时执行 `runMigrate()` 并退出；`runMigrate` 读取 `DATABASE_PATH` 后调用 `store.Migrate` 并打印 Schema 版本。
+- `internal/store/migration_test.go`：新增 `TestMigrateCreatesCurrentSchemaOnEmptyDatabase`、`TestMigrateIsIdempotent`、`TestMigrationExpandOnlyOldAppCompatibility` 3 个用例。
+- `docs/runbooks/operations.md`：记录 `event-go migrate` 独立预迁移方式（「执行方式」改为应用启动自动执行 + 独立预迁移两种，升级步骤改为先迁移→部署→校验）。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（含 `internal/store` 新增迁移用例） |
+| `event-go migrate` 端到端 | `go build ./cmd/event-go` 后以 `APP_ENV=test DATABASE_PATH=/tmp/migrate_e2e.db ./event-go migrate` 首跑输出 `Schema 版本: 15`，二跑幂等仍为 15 |
+| `git diff --check` | 通过 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R05 实现 Commit 1da3005](https://github.com/qw2261/soulmarker/commit/1da3005) | 独立迁移入口 `store.Migrate` + `event-go migrate` 子命令 + N/N-1 兼容测试 + operations.md 迁移方式更新 |
+| [GitHub Actions Run 32535000449](https://github.com/qw2261/soulmarker/actions/runs/32535000449) | success，与 Commit 1da3005 精确绑定 |
+| [backend job 96934123793](https://github.com/qw2261/soulmarker/actions/runs/32535000449/job/96934123793) | format、vet、vulnerability scan、gitleaks、Go test（含新增迁移用例）、race test 全部 success |
+| [frontend job 96934123654](https://github.com/qw2261/soulmarker/actions/runs/32535000449/job/96934123654) | install、build、component tests、Browser E2E 与浏览器证据上传 success |
+| [docker job 96934123778](https://github.com/qw2261/soulmarker/actions/runs/32535000449/job/96934123778) | 镜像构建、非 root 断言、smoke 探针与 `/version` Commit 一致断言全部 success |
+
+## 说明
+
+- `Migrate` 与 `OpenStore` 复用同一批 `migrations()` 与 `schema_migrations` 记录，故天然幂等；独立入口在应用灰度前将库推进到当前 Schema，应用启动时不会重复应用已记录的迁移。
+- N/N-1 兼容：更新采用 Expand-only（只新增表/列/索引/触发器，不删旧列/旧表），SQLite `ALTER TABLE ADD COLUMN` 只在表尾追加列；旧应用使用显式列清单（Go `database/sql` 驱动始终如此）时，未引用的新增列取默认值，写入与读取不受影响，完全撤销仍仅靠恢复升级前备份。
+- `event-go migrate` 只需 `DATABASE_PATH` 即可执行，可在部署编排中于应用容器启动前先行运行，从而实现「迁移先于应用灰度」。
+
+## Go/No-Go
+
+Go（G6-R05 代码侧）：独立迁移入口实现与完整远端门禁通过，关闭 G6-R05 的代码侧能力（`event-go migrate` 可执行预迁移、N/N-1 兼容由 Expand-only 策略与测试覆盖）。G6-R05 的「迁移先于应用灰度」作为真实部署编排（staging 预迁移演练）仍归 G6-R01 与 G6 完成门槛；G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。

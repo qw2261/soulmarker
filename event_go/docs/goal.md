@@ -462,7 +462,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [x] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境；Commit `8e226fb` / Run `32530864989`（backend `96922429920`、docker `96922429737` success；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过）。通过 `internal/buildinfo`（ldflags 注入 Version/Commit/BuildTime，`runtime/debug.ReadBuildInfo` 读 Go 版本/模块/依赖）、`GET /version` 端点、Dockerfile/CI ldflags 注入与 `build-provenance` artifact 上传实现；docker job 断言容器 `/version` 的 Commit 与 `GITHUB_SHA` 一致，使发布制品、Commit 与触发 workflow 精确绑定。「发布制品、Tag、Commit、测试报告与部署记录互相追溯」的完成门槛仍以真实 staging 部署归档为准（见 G6-R01 与完成门槛）。
 - [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
 - [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，依赖与 Secret 扫描已由 G6.6 切片实现并闭合，HTTPS/域名仍待补）。
-- [ ] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
+- [x] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容（独立迁移入口已由 G6.7 切片实现并闭合，N/N-1 兼容由 Expand-only 策略与测试覆盖；「迁移先于应用灰度」作为真实 staging 部署编排与预迁移演练仍待补，见 G6-R01 与完成门槛）。
 
 ### 可观测性与运维
 
@@ -530,7 +530,7 @@ G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名与 COR
 - [x] **G6-BP06** 新增 6 个 Go 测试（`internal/buildinfo`×4 + `internal/handler/version`×2）覆盖 source version 回退、核心字段填充、`ReadBuildInfo`、handler 响应与路由暴露；本地 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`/`go test -race ./internal/buildinfo/... ./internal/handler/... ./internal/config/...` 全绿。
 - [x] **G6-BP07** 功能候选 Commit `8e226fb` 与远端 CI Run `32530864989` 绑定；backend `96922429920`、docker `96922429737` 全部 success（docker 断言镜像 `/version` Commit 与 `HEAD` 一致）；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
-G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R05/R06 仍待补，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
+G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R06 的错误追踪与告警仍待补，G6-R05 的真实 staging 预迁移编排与演练仍需真实部署证据，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
 
 ### G6.5 当前指标切片验收
 
@@ -542,7 +542,7 @@ G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Com
 - [x] **G6-M06** live smoke 验证：构建二进制以 `APP_ENV=test DATABASE_PATH=/tmp/metrics_smoke.db PORT=18081 RATE_LIMIT_REQUESTS_PER_MINUTE=0` 启动，`/healthz`、`/readyz`、`/version` 返回 200；抓取 `/metrics` 得到 `soulmark_http_requests_total{method="GET",status="200"} 4`、直方图各 `le` 桶累计 4、`soulmark_http_requests_in_flight 0`、`soulmark_build_info{version="dev",commit="unknown"} 1`。
 - [x] **G6-M07** 功能候选 Commit `6eb9ffe` 与远端 CI Run `32532723517` 绑定；backend `96927792454`、frontend `96927792421`、docker `96927792337` 三个 job 全部 success，证据回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)，G6.5 指标切片关闭。
 
-G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R05、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R07 的 readiness 依赖探测完善仍未完成，G6-R05 的真实 staging 预迁移演练仍待补，不能据此宣称 G6-R06 与 G6/M2 整体完成。
 
 ### G6.6 当前依赖与 Secret 扫描切片验收
 
@@ -552,7 +552,18 @@ G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结�
 - [x] **G6-SC04** 本地验证：`npm audit --omit=dev`=0 vulnerabilities；`gitleaks detect --source . --no-banner --redact --config .gitleaks.toml`=no leaks found（105 commits scanned）。
 - [x] **G6-SC05** 功能候选 Commit `5f5dd0f` 与远端 CI Run `32533839331` 绑定；backend `96930938401`、frontend `96930938248`、docker `96930938434` 三个 job 全部 success；gitleaks（`Secret scan (gitleaks)`）与 npm audit（`Production dependency vulnerability audit`）两个新门禁均在 CI 中实际执行并通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
-G6-SC01–SC05 关闭 G6-R04 中的「依赖与 Secret 扫描」能力。G6-R04 仅剩 HTTPS/域名（与 CORS 收口，安全头已由 G1-R08 提供）待补；G6-R01 环境隔离/安全存储、G6-R05、G6-R06 的错误追踪与告警、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R04 与 G6/M2 整体完成。
+G6-SC01–SC05 关闭 G6-R04 中的「依赖与 Secret 扫描」能力。G6-R04 仅剩 HTTPS/域名（与 CORS 收口，安全头已由 G1-R08 提供）待补；G6-R01 环境隔离/安全存储、G6-R06 的错误追踪与告警、G6-R07 的 readiness 依赖探测完善仍未完成，G6-R05 的真实 staging 预迁移演练仍待补，不能据此宣称 G6-R04 与 G6/M2 整体完成。
+
+### G6.7 当前独立迁移入口与 N/N-1 兼容切片验收
+
+- [x] **G6-MG01** `internal/store/store.go` 抽出 `prepareDB`（打开库、`PRAGMA journal_mode=WAL`、`PRAGMA busy_timeout=5000`、单连接），供 `OpenStore` 与独立迁移入口 `Migrate` 共用，保证两者对库的初始化一致；`OpenStore` 复用 `prepareDB` 去除重复初始化逻辑。
+- [x] **G6-MG02** 新增导出 `store.Migrate(dbPath) (int, error)`：与 `OpenStore` 使用同一批迁移（`migrations()`），将库推进到 `CurrentSchemaVersion`（15），执行外键一致性校验（`PRAGMA foreign_keys=ON` + `validateForeignKeys`）后返回 `SELECT MAX(version)`；幂等——已应用过的迁移不重复执行，随后关闭数据库。
+- [x] **G6-MG03** `cmd/event-go/main.go`：`main()` 检测首个参数为 `migrate` 时执行 `runMigrate()` 并退出；`runMigrate` 用 `config.Load()` 读取 `DATABASE_PATH`（缺失则 `log.Fatal`），调用 `store.Migrate` 后打印 `Schema 版本`，使迁移可在应用灰度前单独执行。
+- [x] **G6-MG04** `internal/store/migration_test.go` 新增 3 测试：`TestMigrateCreatesCurrentSchemaOnEmptyDatabase`（空库 `Migrate` 返回 15 且随后 `OpenStore` 可打开）、`TestMigrateIsIdempotent`（两次 `Migrate` 后 `schema_migrations` 行数仍为 15）、`TestMigrationExpandOnlyOldAppCompatibility`（以显式列清单模拟 N-1 旧应用写入用户/组织/门店/活动/报名，验证旧应用读写不受新增列/表影响、`user_auth_versions` 触发器仍初始化 `authVersion==1`、当前版本应用重新 `OpenStore` 可读取旧应用写入的活动且 Schema 仍为 15）。
+- [x] **G6-MG05** 本地门禁：`go test -count=1 ./...`（store 含新增迁移用例）与 `go vet ./...` 全绿、`gofmt -l .` 无待格式文件；端到端实测 `go build ./cmd/event-go` 后 `APP_ENV=test DATABASE_PATH=/tmp/migrate_e2e.db ./event-go migrate` 首跑输出 `Schema 版本: 15`、二跑幂等仍为 15。
+- [x] **G6-MG06** 功能候选 Commit `1da3005` 与远端 CI Run `32535000449` 绑定；backend `96934123793`、frontend `96934123654`、docker `96934123778` 全部 success（backend Go test 包含新增迁移用例）。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)，G6.7 独立迁移入口切片关闭。
+
+G6-MG01–MG06 关闭 G6-R05 的代码侧能力（`event-go migrate` 独立预迁移 + Expand-only N/N-1 兼容），为「数据库迁移先于应用灰度」提供可执行的独立入口与自动兼容验证。G6-R05 的「迁移先于应用灰度」作为真实部署编排（staging 预迁移演练）仍归 G6-R01 与 G6 完成门槛；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R06 的错误追踪与告警、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6/M2 整体完成。
 
 ### 完成门槛
 
