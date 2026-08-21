@@ -417,3 +417,19 @@ func IdentityMigrationReport(report *model.IdentityMigrationReport) IdentityMigr
 		LegacyRecords: records,
 	}
 }
+
+func DataSubjectRequest(request *model.DataSubjectRequest) DataSubjectRequestResponse {
+	return DataSubjectRequestResponse{
+		ID: request.ID, UserID: request.UserID, RequestType: request.RequestType,
+		Status: request.Status, RequestedAt: request.RequestedAt, ProcessedAt: request.ProcessedAt,
+		Resolution: request.Resolution, CreatedAt: request.CreatedAt,
+	}
+}
+
+func DataSubjectRequests(requests []*model.DataSubjectRequest) []DataSubjectRequestResponse {
+	result := make([]DataSubjectRequestResponse, 0, len(requests))
+	for _, request := range requests {
+		result = append(result, DataSubjectRequest(request))
+	}
+	return result
+}

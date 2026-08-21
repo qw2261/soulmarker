@@ -176,6 +176,7 @@ func TestOpenAPISchemasMatchDTOJSONFields(t *testing.T) {
 		"LegacyIdentityRecordResponse":        dtoType(dto.LegacyIdentityRecordResponse{}),
 		"IdentityMigrationReportResponse":     dtoType(dto.IdentityMigrationReportResponse{}),
 		"HealthResponse":                      dtoType(dto.HealthResponse{}),
+		"DataSubjectRequestResponse":          dtoType(dto.DataSubjectRequestResponse{}),
 	}
 
 	for schemaName, goType := range schemaTypes {

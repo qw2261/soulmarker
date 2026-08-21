@@ -209,6 +209,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, model.ErrInvalidCreds.Error())
 		return
 	}
+	if u.DeletedAt != nil {
+		writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, model.ErrInvalidCreds.Error())
+		return
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
 		writeError(w, http.StatusUnauthorized, api.CodeInvalidCredentials, model.ErrInvalidCreds.Error())
@@ -272,6 +276,10 @@ func (h *Handler) requireUser(w http.ResponseWriter, r *http.Request) (*model.Us
 	}
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "用户不存在或登录已失效")
+		return nil, false
+	}
+	if user.DeletedAt != nil {
+		writeError(w, http.StatusUnauthorized, api.CodeUserTokenInvalid, "账号已注销，登录已失效")
 		return nil, false
 	}
 	claimVersion := claims.AuthVersion

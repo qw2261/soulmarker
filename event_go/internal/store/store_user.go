@@ -44,14 +44,14 @@ func (s *Store) CreateUser(u *model.User) error {
 
 func (s *Store) GetUserByContact(contact string) (*model.User, error) {
 	return scanUser(s.db.QueryRow(`SELECT u.id, u.name, u.contact, u.recovery_email,
-		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.created_at
+		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.deleted_at, u.created_at
 		FROM users u LEFT JOIN user_auth_versions v ON v.user_id = u.id
 		WHERE u.contact = ?`, contact))
 }
 
 func (s *Store) GetUserByRecoveryEmail(email string) (*model.User, error) {
 	return scanUser(s.db.QueryRow(`SELECT u.id, u.name, u.contact, u.recovery_email,
-		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.created_at
+		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.deleted_at, u.created_at
 		FROM users u LEFT JOIN user_auth_versions v ON v.user_id = u.id
 		WHERE u.recovery_email = ?
 		  AND (u.recovery_email_verified_at IS NOT NULL OR u.contact = u.recovery_email)`, email))
@@ -60,10 +60,11 @@ func (s *Store) GetUserByRecoveryEmail(email string) (*model.User, error) {
 func scanUser(row rowScanner) (*model.User, error) {
 	u := &model.User{}
 	var recoveryEmailVerifiedAt sql.NullString
+	var deletedAt sql.NullString
 	var createdAt string
 	err := row.Scan(
 		&u.ID, &u.Name, &u.Contact, &u.RecoveryEmail, &recoveryEmailVerifiedAt,
-		&u.PasswordHash, &u.AuthVersion, &createdAt,
+		&u.PasswordHash, &u.AuthVersion, &deletedAt, &createdAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -72,6 +73,13 @@ func scanUser(row rowScanner) (*model.User, error) {
 		return nil, err
 	}
 	u.CreatedAt, _ = time.Parse(model.TimeFormat, createdAt)
+	if deletedAt.Valid {
+		value, err := time.Parse(model.TimeFormat, deletedAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("解析注销时间失败: %w", err)
+		}
+		u.DeletedAt = &value
+	}
 	if recoveryEmailVerifiedAt.Valid {
 		verifiedAt, err := time.Parse(model.TimeFormat, recoveryEmailVerifiedAt.String)
 		if err != nil {
@@ -84,7 +92,7 @@ func scanUser(row rowScanner) (*model.User, error) {
 
 func (s *Store) GetUserByID(id int64) (*model.User, error) {
 	return scanUser(s.db.QueryRow(`SELECT u.id, u.name, u.contact, u.recovery_email,
-		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.created_at
+		u.recovery_email_verified_at, u.password_hash, COALESCE(v.version, 1), u.deleted_at, u.created_at
 		FROM users u LEFT JOIN user_auth_versions v ON v.user_id = u.id
 		WHERE u.id = ?`, id))
 }

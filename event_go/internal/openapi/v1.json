@@ -235,6 +235,43 @@
         }
       }
     },
+    "/me/privacy/requests": {
+      "get": {
+        "operationId": "listMyPrivacyRequests",
+        "tags": ["Me", "Privacy"],
+        "summary": "List the current user's data-subject requests (account erasure / data export) and their disposition",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/privacy/data-export": {
+      "post": {
+        "operationId": "exportMyData",
+        "tags": ["Me", "Privacy"],
+        "summary": "Record a data-export request and return the current user's full personal-data payload (data portability)",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/me/privacy/account-erasure": {
+      "post": {
+        "operationId": "requestAccountErasure",
+        "tags": ["Me", "Privacy"],
+        "summary": "Request account erasure: mark deleted_at, revoke all sessions, and reject subsequent requests",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/OK" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/organizations": {
       "post": {
         "operationId": "createOrganization",
@@ -956,7 +993,7 @@
         "required": ["code", "message"],
         "properties": {
           "code": { "type": "integer" },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_OWNER_TRANSFER_DENIED", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "SERVICE_UNAVAILABLE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_OWNER_TRANSFER_DENIED", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "SERVICE_UNAVAILABLE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_DELETED", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" },
           "data": {},
           "total": { "type": "integer", "minimum": 0 },
@@ -969,7 +1006,7 @@
         "required": ["code", "error_code", "message"],
         "properties": {
           "code": { "type": "integer", "minimum": 400, "maximum": 599 },
-          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_OWNER_TRANSFER_DENIED", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "SERVICE_UNAVAILABLE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
+          "error_code": { "type": "string", "enum": ["ADMIN_AUTH_INVALID", "ADMISSION_ALREADY_CHECKED_IN", "ADMISSION_NOT_FOUND", "ADMISSION_REVOKED", "API_ROUTE_NOT_FOUND", "CANCELLATION_DEADLINE_EXCEEDED", "CONTENT_ALREADY_REMOVED", "CONTENT_ALREADY_VISIBLE", "CONTENT_REPORT_ALREADY_RESOLVED", "CONTENT_REPORT_NOT_ALLOWED", "CONTENT_REPORT_NOT_FOUND", "EVENT_CAPACITY_FULL", "EVENT_HAS_ADMISSIONS", "EVENT_NOT_FOUND", "EVENT_NOT_PUBLISHED", "INTERNAL_ERROR", "INVALID_CREDENTIALS", "INVALID_JSON", "METHOD_NOT_ALLOWED", "NOTIFICATION_NOT_FOUND", "ORGANIZATION_ACCESS_DENIED", "ORGANIZATION_INVITATION_EXISTS", "ORGANIZATION_INVITATION_INVALID", "ORGANIZATION_MEMBER_CHANGE_DENIED", "ORGANIZATION_MEMBER_EXISTS", "ORGANIZATION_MEMBER_NOT_FOUND", "ORGANIZATION_OWNER_TRANSFER_DENIED", "ORGANIZATION_SLUG_IN_USE", "ORGANIZER_NOT_FOUND", "PARTICIPATION_REQUIRED", "PASSWORD_RESET_TOKEN_INVALID", "POST_NOT_FOUND", "RECOVERY_EMAIL_ALREADY_BOUND", "RECOVERY_EMAIL_IN_USE", "RECOVERY_EMAIL_RATE_LIMITED", "RECOVERY_EMAIL_TOKEN_INVALID", "REGISTRATION_DUPLICATE", "REGISTRATION_NOT_FOUND", "REPLY_NOT_FOUND", "REQUEST_TOO_LARGE", "SERVICE_UNAVAILABLE", "TICKET_NOT_FOUND", "TICKET_SOLD_OUT", "USER_ALREADY_DELETED", "USER_ALREADY_EXISTS", "USER_AUTH_REQUIRED", "USER_TOKEN_INVALID", "VALIDATION_ERROR"] },
           "message": { "type": "string" }
         }
       },
@@ -1028,7 +1065,8 @@
       "IdentityEntityStatsResponse": { "type": "object", "required": ["total", "verified", "backfilled", "legacy"], "properties": { "total": { "type": "integer" }, "verified": { "type": "integer" }, "backfilled": { "type": "integer" }, "legacy": { "type": "integer" } } },
       "LegacyIdentityRecordResponse": { "type": "object", "required": ["entity_type", "id", "parent_id", "name", "contact"], "properties": { "entity_type": { "type": "string" }, "id": { "type": "integer", "format": "int64" }, "parent_id": { "type": "integer", "format": "int64" }, "name": { "type": "string" }, "contact": { "type": "string" } } },
       "IdentityMigrationReportResponse": { "type": "object", "required": ["registrations", "posts", "replies", "legacy_records"], "properties": { "registrations": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "posts": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "replies": { "$ref": "#/components/schemas/IdentityEntityStatsResponse" }, "legacy_records": { "type": "array", "items": { "$ref": "#/components/schemas/LegacyIdentityRecordResponse" } } } },
-      "HealthResponse": { "type": "object", "required": ["status", "version", "uptime_seconds", "db"], "properties": { "status": { "type": "string" }, "version": { "type": "string" }, "uptime_seconds": { "type": "integer", "format": "int64" }, "db": { "type": "string" } } }
+      "HealthResponse": { "type": "object", "required": ["status", "version", "uptime_seconds", "db"], "properties": { "status": { "type": "string" }, "version": { "type": "string" }, "uptime_seconds": { "type": "integer", "format": "int64" }, "db": { "type": "string" } } },
+      "DataSubjectRequestResponse": { "type": "object", "required": ["id", "user_id", "request_type", "status", "requested_at", "resolution", "created_at"], "properties": { "id": { "type": "integer", "format": "int64" }, "user_id": { "type": "integer", "format": "int64" }, "request_type": { "type": "string", "enum": ["account_erasure", "data_export"] }, "status": { "type": "string", "enum": ["pending", "completed", "rejected", "failed"] }, "requested_at": { "type": "string", "format": "date-time" }, "processed_at": { "type": "string", "format": "date-time" }, "resolution": { "type": "string" }, "created_at": { "type": "string", "format": "date-time" } } }
     }
   }
 }

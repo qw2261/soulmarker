@@ -56,6 +56,9 @@ var (
 	ErrContentTargetNotFound           = errors.New("被举报内容不存在")
 	ErrContentAlreadyRemoved           = errors.New("内容已被移除")
 	ErrContentAlreadyVisible           = errors.New("内容已处于可见状态")
+	ErrUserAlreadyDeleted              = errors.New("账号已注销")
+	ErrDataSubjectRequestNotFound      = errors.New("数据主体请求不存在")
+	ErrDataSubjectRequestNotPending    = errors.New("数据主体请求已处理")
 )
 
 const (
@@ -85,6 +88,16 @@ const (
 	AuditOutcomeSuccess = "success"
 	AuditOutcomeDenied  = "denied"
 	AuditOutcomeFailure = "failure"
+
+	// DataSubjectRequestType 标识数据主体请求的类型。
+	DataSubjectRequestAccountErasure = "account_erasure"
+	DataSubjectRequestDataExport     = "data_export"
+
+	// DataSubjectRequestStatus 标识数据主体请求的处置状态。
+	DataSubjectStatusPending   = "pending"
+	DataSubjectStatusCompleted = "completed"
+	DataSubjectStatusRejected  = "rejected"
+	DataSubjectStatusFailed    = "failed"
 )
 
 type Organization struct {
@@ -280,6 +293,77 @@ type User struct {
 	PasswordHash            string     `json:"-"`
 	AuthVersion             int        `json:"-"`
 	CreatedAt               time.Time  `json:"created_at"`
+	DeletedAt               *time.Time `json:"-"`
+}
+
+// DataSubjectRequest 记录一条数据主体（隐私）请求，用于追踪账号注销与数据导出。
+type DataSubjectRequest struct {
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	RequestType string     `json:"request_type"`
+	Status      string     `json:"status"`
+	RequestedAt time.Time  `json:"requested_at"`
+	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+	ProcessedBy *int64     `json:"processed_by,omitempty"`
+	Resolution  string     `json:"resolution"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// UserDataExport 是一次数据主体导出的负载，汇总该用户在整个系统中的个人数据。
+type UserDataExport struct {
+	UserID          int64                        `json:"user_id"`
+	ExportedAt      time.Time                    `json:"exported_at"`
+	Profile         *UserDataExportProfile       `json:"profile,omitempty"`
+	Memberships     []UserDataExportMembership   `json:"memberships,omitempty"`
+	Registrations   []UserDataExportRegistration `json:"registrations,omitempty"`
+	AuthoredPosts   []UserDataExportPost         `json:"authored_posts,omitempty"`
+	AuthoredReplies []UserDataExportReply        `json:"authored_replies,omitempty"`
+	Notifications   []UserDataExportNotification `json:"notifications,omitempty"`
+	PrivacyRequests []DataSubjectRequest         `json:"privacy_requests,omitempty"`
+}
+
+type UserDataExportProfile struct {
+	Name          string    `json:"name"`
+	Contact       string    `json:"contact"`
+	RecoveryEmail string    `json:"recovery_email"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type UserDataExportMembership struct {
+	OrganizationName string    `json:"organization_name"`
+	OrganizationSlug string    `json:"organization_slug"`
+	Role             string    `json:"role"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type UserDataExportRegistration struct {
+	EventID    int64     `json:"event_id"`
+	EventTitle string    `json:"event_title"`
+	Name       string    `json:"name"`
+	Contact    string    `json:"contact"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type UserDataExportPost struct {
+	EventID   int64     `json:"event_id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type UserDataExportReply struct {
+	EventID   int64     `json:"event_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type UserDataExportNotification struct {
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	ReadAt    *time.Time `json:"read_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type UserClaims struct {

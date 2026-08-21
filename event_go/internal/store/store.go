@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 14
+const CurrentSchemaVersion = 15
 
 type Store struct {
 	db             *sql.DB
@@ -179,6 +179,7 @@ func migrations() []migration {
 		{version: 12, name: "organization_tenant_foundation", apply: migrateOrganizationTenantFoundation},
 		{version: 13, name: "event_tenant_scope", apply: migrateEventTenantScope},
 		{version: 14, name: "organization_audit_log", apply: migrateOrganizationAuditLog},
+		{version: 15, name: "data_subject_privacy", apply: migrateDataSubjectPrivacy},
 	}
 }
 
@@ -215,6 +216,31 @@ func migrateOrganizationAuditLog(tx *sql.Tx) error {
 		 BEGIN
 			SELECT RAISE(ABORT, 'organization audit logs are immutable');
 		 END`,
+	})
+}
+
+// migrateDataSubjectPrivacy 为数据主体（隐私）权添加支撑：users.deleted_at 标记注销时间，
+// data_subject_requests 记录账号注销与数据导出等请求及其处置状态，满足隐私请求/留存流程的可追溯性。
+func migrateDataSubjectPrivacy(tx *sql.Tx) error {
+	if err := addColumnIfMissing(tx, "users", "deleted_at", "deleted_at TEXT"); err != nil {
+		return err
+	}
+	return execStatements(tx, []string{
+		`CREATE TABLE IF NOT EXISTS data_subject_requests (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL REFERENCES users(id),
+			request_type TEXT NOT NULL
+			 CHECK (request_type IN ('account_erasure', 'data_export')),
+			status TEXT NOT NULL
+			 CHECK (status IN ('pending', 'completed', 'rejected', 'failed')),
+			requested_at TEXT NOT NULL,
+			processed_at TEXT,
+			processed_by INTEGER,
+			resolution TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX idx_data_subject_requests_user
+		 ON data_subject_requests(user_id, requested_at DESC, id DESC)`,
 	})
 }
 

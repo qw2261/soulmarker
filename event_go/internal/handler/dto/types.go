@@ -157,6 +157,18 @@ type UserResponse struct {
 	CreatedAt               time.Time  `json:"created_at"`
 }
 
+// DataSubjectRequestResponse 是数据主体（隐私）请求的响应视图。
+type DataSubjectRequestResponse struct {
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	RequestType string     `json:"request_type"`
+	Status      string     `json:"status"`
+	RequestedAt time.Time  `json:"requested_at"`
+	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+	Resolution  string     `json:"resolution"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
 type NotificationResponse struct {
 	ID        int64      `json:"id"`
 	EventID   *int64     `json:"event_id,omitempty"`

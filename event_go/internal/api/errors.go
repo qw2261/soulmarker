@@ -52,6 +52,7 @@ const (
 	CodeOrganizationMemberExists        ErrorCode = "ORGANIZATION_MEMBER_EXISTS"
 	CodeOrganizationMemberChangeDenied  ErrorCode = "ORGANIZATION_MEMBER_CHANGE_DENIED"
 	CodeOrganizationOwnerTransferDenied ErrorCode = "ORGANIZATION_OWNER_TRANSFER_DENIED"
+	CodeUserAlreadyDeleted              ErrorCode = "USER_ALREADY_DELETED"
 	CodeServiceUnavailable              ErrorCode = "SERVICE_UNAVAILABLE"
 )
 
@@ -102,6 +103,7 @@ var errorMessages = map[ErrorCode]string{
 	CodeOrganizationMemberExists:        "用户已是组织成员",
 	CodeOrganizationMemberChangeDenied:  "无权变更该组织成员",
 	CodeOrganizationOwnerTransferDenied: "组织所有权转移被拒绝",
+	CodeUserAlreadyDeleted:              "账号已注销",
 	CodeServiceUnavailable:              "服务暂不可用",
 }
 
