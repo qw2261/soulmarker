@@ -37,6 +37,8 @@
 - 256 位组织邀请 Token 生成与 SMTP 投递；数据库仅保存 SHA-256 摘要，投递失败自动撤销邀请。
 - desktop/Pixel 7 自助组织角色旅程与隔离本地 SMTP 捕获器。
 - [ADR-007](docs/adr/007-organization-self-service-and-invitation-delivery.md) 固化自助运营和邀请投递边界。
+- Schema v14 不可变组织审计日志、`OrganizationAudit` 中间件与审计列表 API，记录 actor、tenant、action、resource、request_id、HTTP 状态与结果。
+- 组织者联系方式与参与者 PII 的角色最小授权与脱敏展示；`owner transfer` 所有权转移 API 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` 错误码。
 
 ### Changed
 
@@ -100,6 +102,9 @@
 - platform Token 与 tenant JWT 不能互相替代；新增 `ORGANIZATION_ACCESS_DENIED` 稳定错误码和可关闭租户入口的 fail-closed 配置。
 - Event/Ticket/Registration/Admission/Checkin/Export 的租户管理 SQL 显式绑定 `organization_id`；正确资源 ID、跨组织 OrganizerProfile 或凭证均不能绕过路径 tenant。
 - 组织邀请明文 Token 不落库也不进入 HTTP 响应；owner、自我撤销和 admin 越权角色变更由事务内规则阻断。
+- 将 Go 工具链基线从 1.25.12 提升到 1.25.13，消解远端漏洞扫描发现的可达标准库漏洞（GO-2026-6090、GO-2026-6089、GO-2026-5972）。
+- 组织关键动作写入不可变审计日志；审计列表仅允许本组织读取，跨租户与非法读取被拒绝。
+- PII 仅对 finance/owner 等最小授权角色返回，其余角色返回脱敏结果，低权限响应不暴露 Admission 凭证。
 
 ### Migration
 
@@ -113,3 +118,4 @@
 - Schema 升级到版本 11：新增通知表、用户时间线/未读/活动索引和全局唯一幂等键；活动删除后历史通知保留并将引用置空。
 - Schema 升级到版本 12：历史门店一对一回填为 unclaimed Organization，不猜测 owner；新增成员、邀请、角色/FK/索引，并以创建/删除触发器保持 pre-v12 `/organizers` 写兼容。
 - Schema 升级到版本 13：为 Event 回填稳定 `organization_id` 并增加索引/FK；兼容 pre-v13 INSERT 和 organizer update，删除 OrganizerProfile 不再丢失 Event tenant。
+- Schema 升级到版本 14：新增不可变 `organization_audit_logs` 表与禁止 UPDATE/DELETE 的触发器，并建立 `(organization_id, created_at)`、`request_id` 与 `(organization_id, action)` 索引。
