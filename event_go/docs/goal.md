@@ -468,7 +468,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 
 - [ ] **G6-R06** request_id、结构化日志、指标、错误追踪和告警。
 - [ ] **G6-R07** liveness 与 readiness 分离，依赖异常时返回可操作状态。
-- [ ] **G6-R08** 部署、迁移、备份恢复、回滚、支付关闭、故障响应 Runbook。
+- [x] **G6-R08** 部署、迁移、备份恢复、回滚、支付关闭、故障响应 Runbook；文档见 [runbooks/operations.md](runbooks/operations.md)。「回滚」策略为 Expand-only 迁移不删列/表/触发器、应用整体前后端同制品回滚、完全撤销仅恢复升级前备份；「支付关闭」当前不适用（属 G7），已记录未来一键停新单设计原则。完成门槛中的实际演练（备份恢复/应用回滚/迁移失败/告警）仍需真实 staging 证据。
 - [x] **G6-R09** 自动备份、保留策略、恢复验证和定期演练；Commit `e390d99` / Run `32524900392` 远端通过（backend/frontend/docker 全部 success）。`Store.Backup` 基于 `VACUUM INTO` 生成一致快照，备份管理器以只读校验 `integrity_check`/schema/表数量，按 UTC 时间戳保留最近 N 份，定期恢复演练复制最新备份到临时位置校验后清理。备份恢复仍以真实 staging 持续运行与 SLO 实测验证为准。
 - [ ] **G6-R10** 审计、隐私请求、账号注销、数据导出/删除和留存流程。
 
@@ -820,7 +820,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片已通过远端 CI（Run 32523778826）；M2 仍待审计/隐私/备份/恢复/压测/回滚与发布归档 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过远端 CI（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立；M2 仍待审计/隐私（R10）、真实备份恢复/回滚/压测与发布归档 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 

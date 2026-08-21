@@ -1,6 +1,6 @@
 # v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复切片）
 
-> 状态：G6-R03/R07（容器与部署基线）与 G6-R09（自动备份与恢复验证）Remote Candidate Pass；backend、frontend、docker 三 job 全部通过完整远端 CI
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）与 G6-R08（运维 Runbook）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
 
 ## 版本身份
 
@@ -71,7 +71,7 @@ G6 生产上线准备的第一个切片「容器与部署基线」：
 
 - 本机 Docker daemon 未运行（OrbStack socket 不存在），镜像标签经公开镜像源与 Docker Hub 官方镜像库核实；镜像实际构建与运行由远端 CI docker job 在 `ubuntu-latest` 上完成并留下证据。
 - G6-R03 的 `HEALTHCHECK`/smoke 依赖容器内 `/healthz`；G6-R07 的 readiness 依赖数据库 Ping，SQLite `development` 环境无需外部 DB。
-- 本报告关闭 G6-R03、G6-R07、G6-R09。G6-R01/R02/R04/R05/R06/R08/R10 与 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）未在本报告完成，不能据此宣称正式生产就绪。
+- 本报告关闭 G6-R03、G6-R07、G6-R09，并完成 G6-R08 运维 Runbook 文档。G6-R01/R02/R04/R05/R06/R10 与 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）未在本报告完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -125,8 +125,30 @@ G6 生产上线准备的备份恢复切片，直接支撑 M2「可上线」的�
 - 备份采用 `VACUUM INTO` 生成一致性快照，可在应用运行期间安全执行、不写入业务状态；`BACKUP_INTERVAL_SECONDS=0` 时默认禁用自动备份。
 - 保留策略以 `BACKUP_RETAIN`（默认 7）保留最近 N 份，按文件名 UTC 时间戳排序；`retain <= 0` 视为保留全部。
 - 恢复演练使用临时 `drill-*.db` 且演练后清理，证明最新备份可恢复且不污染生产库。
-- 本切片关闭 G6-R09。G6-R01/R02/R04/R05/R06/R08/R10 与 G6 完成门槛中的「备份恢复演练」（真实 staging 持续运行、SLO 实测与压测）仍待完成，不能据此宣称正式生产就绪。
+- 本切片关闭 G6-R09。G6-R01/R02/R04/R05/R06/R10 与 G6 完成门槛中的「备份恢复演练」（真实 staging 持续运行、SLO 实测与压测）仍待完成，不能据此宣称正式生产就绪。
+
+---
+
+# G6-R08 运维 Runbook
+
+## 本切片范围
+
+G6-R08 要求提供部署、迁移、备份恢复、回滚、支付关闭与故障响应的 Runbook。本切片交付 [runbooks/operations.md](../runbooks/operations.md) 文档，作为 G6/M2 上线与后续故障处理的操作依据。
+
+## 交付内容
+
+- **部署**：镜像构建、staging/production 容器启动命令、fail-closed 配置校验、`healthz`/`readyz` 探针验证。
+- **迁移**：启动自动执行、`schema_migrations` 追溯、升级与失败处理。
+- **备份恢复**：G6-R09 的自动备份/保留/演练配置与实际灾难恢复步骤。
+- **回滚**：应用整体前后端同制品回滚、Expand-only 迁移不删列/表/触发器、完全撤销仅恢复升级前备份、迁移失败回滚。
+- **支付关闭**：当前不适用（属 G7），记录未来一键停新单的设计原则与开关位置。
+- **故障响应**：探针语义、常见故障处置与日志说明；告警/指标尚属 G6-R06。
+
+## 说明
+
+- G6-R08 是文档交付物，不涉及代码或数据库变更，故无本地/远端 CI 门禁；其引用的命令与配置项均取自现有代码（`internal/config/config.go`、`internal/backup`、`internal/store`）与 [Dockerfile](../../../Dockerfile)。
+- **未完成**：G6 完成门槛中的「备份恢复、应用回滚、迁移失败、告警」实际演练仍需在真实 staging 上执行并回填执行人、时间与判定。
 
 ## Go/No-Go
 
-Go（G6-R09 备份恢复切片）：自动备份、保留策略、恢复验证与定期演练通过完整远端 CI 并回填证据。G6/M2 整体仍为 No-Go；在审计、隐私、应用回滚、迁移失败演练与压测门槛完成前，不应启动支付开发或宣称正式生产就绪。
+Go（G6-R08 运维 Runbook）：文档交付完成。G6/M2 整体仍为 No-Go；在审计、隐私（R10）、应用回滚/迁移失败实际演练与压测门槛完成前，不应启动支付开发或宣称正式生产就绪。
