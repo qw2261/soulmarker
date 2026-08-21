@@ -460,7 +460,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 
 - [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理。
 - [ ] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境。
-- [ ] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
+- [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
 - [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描。
 - [ ] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
 
@@ -492,6 +492,13 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 | 核销 P95 | < 800 ms | < 500 ms |
 | RPO | ≤ 24 小时 | ≤ 5 分钟 |
 | RTO | ≤ 4 小时 | ≤ 60 分钟 |
+
+### G6.1 当前容器与部署基线切片验收
+
+- [x] **G6-C01** Dockerfile 固定基础镜像版本（`node:22.14.0-alpine3.21`、`golang:1.25.13-alpine3.24`、`alpine:3.19.1`），以非 root 用户 `app` 运行，`/app/data` 归属 `app:app`。
+- [x] **G6-C02** 镜像提供 `HEALTHCHECK`（`/healthz`），CI docker job 启动容器后断言运行用户 `uid != 0` 并执行 [smoke.sh](../scripts/smoke.sh) 验证 `/healthz` 与 `/readyz`。
+- [x] **G6-C03** `GET /healthz` 仅反映进程存活（不探测依赖），`GET /readyz` 在数据库就绪返回 200、异常返回 503 且保留可操作 `Data`（`ErrorCode=SERVICE_UNAVAILABLE`）；单元测试覆盖 `TestLivenessHandler`、`TestReadinessHandlerHealthy`、`TestReadinessHandlerUnhealthy`。
+- [x] **G6-C04** 完整远端门禁通过：Commit `db62b83`（+gofmt 修复 `ac75417`）/ Run `32523778826`，backend、frontend、docker 三个 job 全部 success。
 
 ### 完成门槛
 
@@ -813,7 +820,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | Planned | v6.2 | — | M2 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片已通过远端 CI（Run 32523778826）；M2 仍待审计/隐私/备份/恢复/压测/回滚与发布归档 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 
