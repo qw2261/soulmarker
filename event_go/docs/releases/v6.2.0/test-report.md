@@ -1,6 +1,6 @@
-# v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复切片）
+# v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）与 G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）与 G6-R04（全局 API 限流）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
 
 ## 版本身份
 
@@ -11,7 +11,9 @@
 | G6-R03/R07 实现 Commit | db62b83 |
 | G6-R03/R07 门禁修复 Commit | ac75417（gofmt 对齐） |
 | G6-R09 实现 Commit | e390d99 |
-| Schema | v14（本切片未变更数据库结构） |
+| G6-R10 实现 Commit | fec363a |
+| G6-R04 限流实现 Commit | 9dd296c |
+| Schema | v15（G6-R10 引入数据主体隐私，本限流切片未变更数据库结构） |
 
 ## 本切片范围
 
@@ -71,7 +73,7 @@ G6 生产上线准备的第一个切片「容器与部署基线」：
 
 - 本机 Docker daemon 未运行（OrbStack socket 不存在），镜像标签经公开镜像源与 Docker Hub 官方镜像库核实；镜像实际构建与运行由远端 CI docker job 在 `ubuntu-latest` 上完成并留下证据。
 - G6-R03 的 `HEALTHCHECK`/smoke 依赖容器内 `/healthz`；G6-R07 的 readiness 依赖数据库 Ping，SQLite `development` 环境无需外部 DB。
-- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，并完成 G6-R08 运维 Runbook 文档。G6-R01/R02/R04/R05/R06 与 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）未在本报告完成，不能据此宣称正式生产就绪。
+- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，完成 G6-R08 运维 Runbook 文档，并关闭 G6-R04 的限流能力（见下文 G6-R04 切片）。G6-R01/R02/R05/R06、G6-R04 的 HTTPS/域名与依赖/Secret 扫描，以及 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）仍未在本报告完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -214,3 +216,66 @@ G6 生产上线准备的审计/隐私切片，支撑 M2「可上线」的数据�
 ## Go/No-Go
 
 Go（G6-R10 数据主体隐私）：代码侧实现与完整远端门禁通过，G6-R10 关闭。G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败演练、压测与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+---
+
+# G6-R04 全局 API 限流
+
+## 本切片范围
+
+G6 生产上线准备的限流切片，支撑 M2「可上线」的 API 防滥用与 fail-closed 配置：
+
+- **G6-R04**：HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（本切片只交付其中的**限流**能力）。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R04 或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R04（限流） | RATE-LIMIT-001…008 | per-minute 固定窗口限流器按客户端 IP（`X-Forwarded-For` 首个地址优先，回退 `RemoteAddr`）计数，非正数不限制；`RateLimitMiddleware` 超限返回 `429 RATE_LIMITED`；健康探针（`/health`、`/healthz`、`/readyz`）与 CORS 预检（`OPTIONS`）直接放行；staging/production 强制正数 `RATE_LIMIT_REQUESTS_PER_MINUTE`，缺失或为 0 拒绝启动、负值在任何环境拒绝；`RATE_LIMITED` 错误码与 OpenAPI enum、错误码总数断言（49）双向一致 |
+
+## 变更清单（Commit 9dd296c）
+
+- `internal/handler/ratelimit.go`：新增 per-minute 固定窗口限流器（窗口滚动、无界内存清理阈值 10000）与 `RateLimitMiddleware`（探针/OPTIONS 豁免、XFF-优先 IP 识别、429 `RATE_LIMITED`）。
+- `internal/handler/ratelimit_test.go`：新增限流器窗口重置、非正数不限制、XFF 优先、RemoteAddr 回退、探针识别、中间件超限 429、不同 IP 独立、非正数不限、探针/OPTIONS 豁免、`NewRouter` 集成回归、正常响应无错误码等用例。
+- `internal/handler/router.go`：`RateLimitMiddleware` 接入 `NewRouter` 中间件链（`CORS` 内、`UserAuth` 外）。
+- `internal/config/config.go`：新增 `RateLimitPerMinute` 字段与 `RATE_LIMIT_REQUESTS_PER_MINUTE` 加载；staging/production 强制正数、负值拒绝的 fail-closed 校验。
+- `internal/config/config_test.go`：新增 production 无正数限流必须失败、正数通过、非法数字与负值拒绝测试。
+- `internal/api/errors.go`：新增稳定错误码 `RATE_LIMITED`（HTTP 429）与默认消息。
+- `internal/api/errors_test.go`：错误码目录总数断言 48→49。
+- `internal/openapi/v1.json`：`error_code` 枚举在 `APIResponse`/`ErrorResponse` 两处加入 `RATE_LIMITED`，与 `api.ErrorCodes()` 双向一致。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（361 个顶层 Go 测试） |
+| `go test -race ./internal/config/... ./internal/api/... ./internal/handler/...` | 通过 |
+| `git diff --check` | 通过 |
+| OpenAPI / 错误码契约 | 通过；`RATE_LIMITED` 入目录后与 OpenAPI 枚举双向一致（错误码总数 49） |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R04 限流实现 Commit 9dd296c](https://github.com/qw2261/soulmarker/commit/9dd296c) | per-minute 固定窗口限流器、中间件接入、fail-closed 配置、`RATE_LIMITED` 错误码与 OpenAPI 同步 |
+| [GitHub Actions Run 32529278311](https://github.com/qw2261/soulmarker/actions/runs/32529278311) | success，与 Commit 9dd296c 精确绑定 |
+| [backend job 96917861081](https://github.com/qw2261/soulmarker/actions/runs/32529278311/job/96917861081) | format、build、vet、vulnerability scan、Go test、race test 全部 success |
+| [frontend job 96917860783](https://github.com/qw2261/soulmarker/actions/runs/32529278311/job/96917860783) | install、build、unit/component tests、E2E 与浏览器证据上传 success |
+| [docker job 96917861062](https://github.com/qw2261/soulmarker/actions/runs/32529278311/job/96917861062) | 镜像构建、非 root 断言、smoke 探针全部 success |
+
+## 说明
+
+- 非正数 `RATE_LIMIT_REQUESTS_PER_MINUTE` 仅在 development 环境表示不限制（默认 0，兼容现有 `config.Load()` 测试装配）；staging/production 必须显式设置大于 0 的限流值，否则拒绝启动，实现 fail-closed。
+- `RateLimitMiddleware` 位于 `CORS` 内、`UserAuth` 外，覆盖包括认证端点在内的全部业务路由；健康探针与 CORS 预检直接放行，避免探针与浏览器 preflight 被误伤。
+- 限流计数以进程内固定窗口实现，单实例部署下有效；多实例分布式限流（如按 Redis 共享计数）归 G6 后续或扩容 ADR 决策，不在本切片范围。
+
+## Go/No-Go
+
+Go（G6-R04 限流）：代码侧实现与完整远端门禁通过，关闭 G6-R04 的限流能力。G6-R04 整体仍未完成（HTTPS/域名、依赖与 Secret 扫描待补），G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败/压测演练、HTTPS/域名依赖扫描与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。

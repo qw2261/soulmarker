@@ -461,7 +461,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理。
 - [ ] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境。
 - [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
-- [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描。
+- [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，HTTPS/域名、依赖与 Secret 扫描仍待补）。
 - [ ] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
 
 ### 可观测性与运维
@@ -508,6 +508,17 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [x] **G6-P04** 新增 `/me/privacy/requests`、`/me/privacy/data-export`、`/me/privacy/account-erasure` 路由，DTO、稳定错误码（`USER_ALREADY_DELETED`）、OpenAPI 与路由/契约测试一致。
 - [x] **G6-P05** Store 层 12 个用例与 Handler 集成层 3 个用例覆盖创建、列表、完成、导出、注销（含重复注销）、留存清理及未登录/无效/已注销拒绝路径；本地 `go test -count=1 ./...`、`go vet ./...` 全绿。
 - [x] **G6-P06** 功能候选 Commit `fec363a` 与远端 CI Run `32527562084` 绑定；backend `96912745077`、frontend `96912744683`、docker `96912745103` 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+### G6.3 当前限流切片验收
+
+- [x] **G6-RL01** 新增 per-minute 固定窗口限流器（`internal/handler/ratelimit.go`），按客户端 IP 计数（`X-Forwarded-For` 首个地址优先，回退 `RemoteAddr`），超限返回 `429 RATE_LIMITED`；非正数 `RATE_LIMIT_REQUESTS_PER_MINUTE` 在 development 环境表示不限制。
+- [x] **G6-RL02** `RateLimitMiddleware` 接入 `NewRouter` 中间件链（`CORS` 内、`UserAuth` 外），全局保护认证与匿名端点；健康探针（`/health`、`/healthz`、`/readyz`）与 CORS 预检（`OPTIONS`）直接放行，探针不会被误伤。
+- [x] **G6-RL03** staging/production 环境 fail-closed：`RATE_LIMIT_REQUESTS_PER_MINUTE` 必须为正数，缺失或为 0 拒绝启动；负值配置在任意环境拒绝。
+- [x] **G6-RL04** 新增稳定错误码 `RATE_LIMITED`（HTTP 429），并同步 OpenAPI `error_code` 枚举（`APIResponse`/`ErrorResponse` 两处）与错误码总数断言（48→49）；`TestOpenAPIErrorCodesMatchCatalog`、`TestErrorCodeCatalog` 通过。
+- [x] **G6-RL05** 新增 handler 级测试覆盖窗口滚动、IP 识别（XFF 优先/回退）、超限 429、不同 IP 相互独立、非正数不限制、探针/OPTIONS 豁免，以及经 `NewRouter` 的完整集成回归。
+- [x] **G6-RL06** 本地门禁全绿：`gofmt`、`go build`、`go vet`、`go test -count=1 ./...`（361 个顶层测试）、`go test -race ./internal/config/... ./internal/api/... ./internal/handler/...`、OpenAPI/错误码契约；功能候选 Commit `9dd296c` 与远端 CI Run `32529278311` 绑定，backend `96917861081`、frontend `96917860783`、docker `96917861062` 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名、CORS 收口（除已由 G1-R08 提供的安全头）、依赖与 Secret 扫描仍待补，不能据此宣称 G6-R04 与 G6/M2 完成。
 
 ### 完成门槛
 
@@ -829,7 +840,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084），G6-R04 限流切片通过（Run 32529278311）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 
