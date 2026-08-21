@@ -814,6 +814,49 @@ func TestMigrationV12ToV13BackfillsStableEventTenant(t *testing.T) {
 	}
 }
 
+func TestMigrationV13ToV14AddsImmutableOrganizationAudit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v13-to-v14.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`DROP TRIGGER organization_audit_logs_immutable_delete`,
+		`DROP TRIGGER organization_audit_logs_immutable_update`,
+		`DROP INDEX idx_organization_audit_action`,
+		`DROP INDEX idx_organization_audit_request`,
+		`DROP INDEX idx_organization_audit_org_created`,
+		`DROP TABLE organization_audit_logs`,
+		`DELETE FROM schema_migrations WHERE version = 14`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			_ = db.Close()
+			t.Fatalf("prepare v13 fixture: %v", err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = OpenStore(path)
+	if err != nil {
+		t.Fatalf("migrate v13 database: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+	assertTableExists(t, s.db, "organization_audit_logs")
+	assertIndexExists(t, s.db, "idx_organization_audit_org_created")
+	assertIndexExists(t, s.db, "idx_organization_audit_request")
+	assertTriggerExists(t, s.db, "organization_audit_logs_immutable_update")
+	assertTriggerExists(t, s.db, "organization_audit_logs_immutable_delete")
+}
+
 func TestMigrationRepeatedExecution(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "repeat.db")
 	for i := 0; i < 2; i++ {

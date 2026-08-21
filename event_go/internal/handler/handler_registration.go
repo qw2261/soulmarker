@@ -251,5 +251,5 @@ func (h *Handler) ListRegistrations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	paginatedOK(w, dto.Registrations(registrations), total, page, pageSize)
+	paginatedOK(w, dto.RegistrationsWithPII(registrations, fullPIIAccess(r)), total, page, pageSize)
 }

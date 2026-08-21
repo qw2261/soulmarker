@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/authorization"
@@ -35,6 +36,8 @@ func writeOrganizationSelfServiceError(w http.ResponseWriter, operation string, 
 		writeError(w, http.StatusNotFound, api.CodeOrganizationMemberNotFound, "")
 	case errors.Is(err, model.ErrOrganizationMemberChangeDenied), errors.Is(err, model.ErrOrganizationPermissionDenied):
 		writeError(w, http.StatusForbidden, api.CodeOrganizationMemberChangeDenied, "")
+	case errors.Is(err, model.ErrOrganizationOwnerTransferDenied):
+		writeError(w, http.StatusForbidden, api.CodeOrganizationOwnerTransferDenied, "")
 	default:
 		writeInternalError(w, operation, err)
 	}
@@ -62,6 +65,16 @@ func (h *Handler) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 		writeOrganizationSelfServiceError(w, "create_organization", err)
 		return
 	}
+	h.appendOrganizationAudit(r, &model.OrganizationAuditLog{
+		OrganizationID: organization.ID,
+		ActorType:      model.AuditActorOrganizationMember,
+		ActorID:        &user.ID,
+		Action:         "createOrganization",
+		ResourceType:   "organization",
+		ResourceID:     strconv.FormatInt(organization.ID, 10),
+		Outcome:        model.AuditOutcomeSuccess,
+		HTTPStatus:     http.StatusCreated,
+	})
 	writeJSON(w, http.StatusCreated, dto.Response{
 		Code: http.StatusCreated, Message: "组织创建成功", Data: dto.OrganizationWorkspace(organization, profile),
 	})
@@ -83,7 +96,7 @@ func (h *Handler) GetOrganizationWorkspace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.Response{
-		Code: http.StatusOK, Message: "ok", Data: dto.OrganizationWorkspace(organization, profile),
+		Code: http.StatusOK, Message: "ok", Data: dto.OrganizationWorkspaceWithPII(organization, profile, fullPIIAccess(r)),
 	})
 }
 
@@ -98,7 +111,7 @@ func (h *Handler) ListOrganizationMembers(w http.ResponseWriter, r *http.Request
 		writeInternalError(w, "list_organization_members", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "ok", Data: dto.OrganizationMembers(members)})
+	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "ok", Data: dto.OrganizationMembersWithPII(members, fullPIIAccess(r))})
 }
 
 func (h *Handler) UpdateOrganizationMember(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +154,27 @@ func (h *Handler) RevokeOrganizationMember(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "成员已撤销"})
 }
 
+func (h *Handler) TransferOrganizationOwnership(w http.ResponseWriter, r *http.Request) {
+	value, ok := authorization.OrganizationContextFromContext(r.Context())
+	if !ok {
+		writeInternalError(w, "organization_context_missing", errors.New("organization context missing"))
+		return
+	}
+	var request dto.TransferOrganizationOwnerRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if request.MemberID <= 0 {
+		writeError(w, http.StatusBadRequest, api.CodeValidationError, "无效的新所有者成员 ID")
+		return
+	}
+	if err := h.selfService.TransferOwnership(value.OrganizationID, value.UserID, request.MemberID); err != nil {
+		writeOrganizationSelfServiceError(w, "transfer_organization_ownership", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "组织所有权已转移"})
+}
+
 func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Request) {
 	value, ok := authorization.OrganizationContextFromContext(r.Context())
 	if !ok {
@@ -159,7 +193,8 @@ func (h *Handler) CreateOrganizationInvitation(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusCreated, dto.Response{
-		Code: http.StatusCreated, Message: "邀请已发送", Data: dto.OrganizationInvitation(invitation),
+		Code: http.StatusCreated, Message: "邀请已发送",
+		Data: dto.OrganizationInvitationWithPII(invitation, fullPIIAccess(r)),
 	})
 }
 
@@ -175,7 +210,7 @@ func (h *Handler) ListOrganizationInvitations(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.Response{
-		Code: http.StatusOK, Message: "ok", Data: dto.OrganizationInvitations(invitations),
+		Code: http.StatusOK, Message: "ok", Data: dto.OrganizationInvitationsWithPII(invitations, fullPIIAccess(r)),
 	})
 }
 
@@ -209,9 +244,24 @@ func (h *Handler) AcceptOrganizationInvitation(w http.ResponseWriter, r *http.Re
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := h.selfService.Accept(request.Token, user.ID); err != nil {
+	organizationID, err := h.selfService.Accept(request.Token, user.ID)
+	if err != nil {
+		if organizationID > 0 {
+			h.appendOrganizationAudit(r, &model.OrganizationAuditLog{
+				OrganizationID: organizationID, ActorType: model.AuditActorOrganizationMember,
+				ActorID: &user.ID, Action: "acceptOrganizationInvitation",
+				ResourceType: "membership", ResourceID: strconv.FormatInt(user.ID, 10),
+				Outcome: model.AuditOutcomeFailure, HTTPStatus: http.StatusBadRequest,
+			})
+		}
 		writeOrganizationSelfServiceError(w, "accept_organization_invitation", err)
 		return
 	}
+	h.appendOrganizationAudit(r, &model.OrganizationAuditLog{
+		OrganizationID: organizationID, ActorType: model.AuditActorOrganizationMember,
+		ActorID: &user.ID, Action: "acceptOrganizationInvitation",
+		ResourceType: "membership", ResourceID: strconv.FormatInt(user.ID, 10),
+		Outcome: model.AuditOutcomeSuccess, HTTPStatus: http.StatusOK,
+	})
 	writeJSON(w, http.StatusOK, dto.Response{Code: http.StatusOK, Message: "已加入组织"})
 }

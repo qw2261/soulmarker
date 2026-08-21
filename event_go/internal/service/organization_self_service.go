@@ -30,10 +30,12 @@ type OrganizationSelfServiceRepository interface {
 	ListOrganizationMembers(organizationID int64) ([]*model.OrganizationMember, error)
 	UpdateOrganizationMemberRole(organizationID, actorUserID, memberID int64, role string, updatedAt time.Time) error
 	RevokeOrganizationMember(organizationID, actorUserID, memberID int64, revokedAt time.Time) error
+	TransferOrganizationOwnership(organizationID, actorUserID, targetMemberID int64, transferredAt time.Time) error
 	CreateOrganizationInvitation(invitation *model.OrganizationInvitation) error
 	ListOrganizationInvitations(organizationID int64, now time.Time) ([]*model.OrganizationInvitation, error)
 	RevokeOrganizationInvitation(organizationID, actorUserID, invitationID int64, revokedAt time.Time) error
 	AcceptOrganizationInvitation(tokenHash string, userID int64, acceptedAt time.Time) error
+	GetOrganizationInvitationByTokenHash(tokenHash string) (*model.OrganizationInvitation, error)
 }
 
 type OrganizationSelfService struct {
@@ -112,6 +114,15 @@ func (s *OrganizationSelfService) RevokeMember(organizationID, actorUserID, memb
 	return s.repository.RevokeOrganizationMember(organizationID, actorUserID, memberID, s.clock.Now())
 }
 
+func (s *OrganizationSelfService) TransferOwnership(organizationID, actorUserID, targetMemberID int64) error {
+	if organizationID <= 0 || actorUserID <= 0 || targetMemberID <= 0 {
+		return model.ErrOrganizationOwnerTransferDenied
+	}
+	return s.repository.TransferOrganizationOwnership(
+		organizationID, actorUserID, targetMemberID, s.clock.Now(),
+	)
+}
+
 func canSelfServiceRole(role string) bool {
 	switch role {
 	case model.OrganizationRoleAdmin, model.OrganizationRoleEditor,
@@ -179,9 +190,17 @@ func (s *OrganizationSelfService) RevokeInvitation(organizationID, actorUserID, 
 	return s.repository.RevokeOrganizationInvitation(organizationID, actorUserID, invitationID, s.clock.Now())
 }
 
-func (s *OrganizationSelfService) Accept(rawToken string, userID int64) error {
+func (s *OrganizationSelfService) Accept(rawToken string, userID int64) (int64, error) {
 	if strings.TrimSpace(rawToken) == "" || userID <= 0 {
-		return model.ErrOrganizationInvitationInvalid
+		return 0, model.ErrOrganizationInvitationInvalid
 	}
-	return s.repository.AcceptOrganizationInvitation(resetTokenHash(rawToken), userID, s.clock.Now())
+	tokenHash := resetTokenHash(rawToken)
+	invitation, err := s.repository.GetOrganizationInvitationByTokenHash(tokenHash)
+	if err != nil {
+		return 0, err
+	}
+	if invitation == nil {
+		return 0, model.ErrOrganizationInvitationInvalid
+	}
+	return invitation.OrganizationID, s.repository.AcceptOrganizationInvitation(tokenHash, userID, s.clock.Now())
 }

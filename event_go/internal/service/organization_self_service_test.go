@@ -69,14 +69,14 @@ func TestOrganizationSelfServiceCreatesInvitesAndAcceptsWithoutStoringRawToken(t
 	if invitation.TokenHash == "raw-invitation-token" || invitation.TokenHash != resetTokenHash("raw-invitation-token") {
 		t.Fatalf("raw invitation token was stored: %+v", invitation)
 	}
-	if err := selfService.Accept("raw-invitation-token", invitee.ID); err != nil {
+	if _, err := selfService.Accept("raw-invitation-token", invitee.ID); err != nil {
 		t.Fatal(err)
 	}
 	members, err := selfService.ListMembers(organization.ID)
 	if err != nil || len(members) != 2 || members[1].UserID != invitee.ID || members[1].Role != model.OrganizationRoleEditor {
 		t.Fatalf("accepted member mismatch: members=%+v err=%v", members, err)
 	}
-	if err := selfService.Accept("raw-invitation-token", invitee.ID); !errors.Is(err, model.ErrOrganizationInvitationInvalid) {
+	if _, err := selfService.Accept("raw-invitation-token", invitee.ID); !errors.Is(err, model.ErrOrganizationInvitationInvalid) {
 		t.Fatalf("invitation was reusable: %v", err)
 	}
 }

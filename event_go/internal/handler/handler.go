@@ -120,10 +120,11 @@ type OrganizationSelfService interface {
 	ListMembers(organizationID int64) ([]*model.OrganizationMember, error)
 	UpdateMemberRole(organizationID, actorUserID, memberID int64, role string) error
 	RevokeMember(organizationID, actorUserID, memberID int64) error
+	TransferOwnership(organizationID, actorUserID, targetMemberID int64) error
 	Invite(ctx context.Context, organizationID, actorUserID int64, email, role string) (*model.OrganizationInvitation, error)
 	ListInvitations(organizationID int64) ([]*model.OrganizationInvitation, error)
 	RevokeInvitation(organizationID, actorUserID, invitationID int64) error
-	Accept(rawToken string, userID int64) error
+	Accept(rawToken string, userID int64) (int64, error)
 }
 
 type Dependencies struct {
@@ -193,6 +194,10 @@ func parseOrganizationMemberID(r *http.Request) (int64, error) {
 
 func parseOrganizationInvitationID(r *http.Request) (int64, error) {
 	return strconv.ParseInt(r.PathValue("invitationId"), 10, 64)
+}
+
+func parseOrganizationAuditID(r *http.Request) (int64, error) {
+	return strconv.ParseInt(r.PathValue("auditId"), 10, 64)
 }
 
 // parseTicketID 从URL路径中解析门票ID
@@ -313,7 +318,8 @@ func CORS(next http.Handler, allowedOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token, X-Request-ID")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

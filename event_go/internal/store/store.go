@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const CurrentSchemaVersion = 13
+const CurrentSchemaVersion = 14
 
 type Store struct {
 	db             *sql.DB
@@ -161,7 +161,44 @@ func migrations() []migration {
 		{version: 11, name: "in_app_notifications", apply: migrateInAppNotifications},
 		{version: 12, name: "organization_tenant_foundation", apply: migrateOrganizationTenantFoundation},
 		{version: 13, name: "event_tenant_scope", apply: migrateEventTenantScope},
+		{version: 14, name: "organization_audit_log", apply: migrateOrganizationAuditLog},
 	}
+}
+
+func migrateOrganizationAuditLog(tx *sql.Tx) error {
+	return execStatements(tx, []string{
+		`CREATE TABLE organization_audit_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			organization_id INTEGER NOT NULL REFERENCES organizations(id),
+			actor_type TEXT NOT NULL
+			 CHECK (actor_type IN ('organization_member', 'platform_admin', 'system')),
+			actor_id INTEGER,
+			action TEXT NOT NULL,
+			resource_type TEXT NOT NULL,
+			resource_id TEXT NOT NULL DEFAULT '',
+			request_id TEXT NOT NULL,
+			outcome TEXT NOT NULL
+			 CHECK (outcome IN ('success', 'denied', 'failure')),
+			http_status INTEGER NOT NULL CHECK (http_status BETWEEN 100 AND 599),
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX idx_organization_audit_org_created
+		 ON organization_audit_logs(organization_id, created_at DESC, id DESC)`,
+		`CREATE INDEX idx_organization_audit_request
+		 ON organization_audit_logs(request_id)`,
+		`CREATE INDEX idx_organization_audit_action
+		 ON organization_audit_logs(organization_id, action, created_at DESC)`,
+		`CREATE TRIGGER organization_audit_logs_immutable_update
+		 BEFORE UPDATE ON organization_audit_logs
+		 BEGIN
+			SELECT RAISE(ABORT, 'organization audit logs are immutable');
+		 END`,
+		`CREATE TRIGGER organization_audit_logs_immutable_delete
+		 BEFORE DELETE ON organization_audit_logs
+		 BEGIN
+			SELECT RAISE(ABORT, 'organization audit logs are immutable');
+		 END`,
+	})
 }
 
 func migrateEventTenantScope(tx *sql.Tx) error {

@@ -3,6 +3,7 @@ package dto
 import (
 	"github.com/qw2261/soulmarker/event_go/internal/authorization"
 	"github.com/qw2261/soulmarker/event_go/internal/model"
+	"github.com/qw2261/soulmarker/event_go/internal/privacy"
 )
 
 func (r UpdateOrganizerRequest) Command() model.UpdateOrganizerReq {
@@ -63,9 +64,13 @@ func OrganizationContexts(values []authorization.OrganizationContext) []Organiza
 }
 
 func OrganizationWorkspace(organization *model.Organization, profile *model.OrganizerProfile) OrganizationWorkspaceResponse {
+	return OrganizationWorkspaceWithPII(organization, profile, true)
+}
+
+func OrganizationWorkspaceWithPII(organization *model.Organization, profile *model.OrganizerProfile, full bool) OrganizationWorkspaceResponse {
 	return OrganizationWorkspaceResponse{
 		ID: organization.ID, Name: organization.Name, Slug: organization.Slug, Status: organization.Status,
-		Profile: Organizer(profile), CreatedAt: organization.CreatedAt, UpdatedAt: organization.UpdatedAt,
+		Profile: OrganizerWithPII(profile, full), CreatedAt: organization.CreatedAt, UpdatedAt: organization.UpdatedAt,
 	}
 }
 
@@ -77,42 +82,92 @@ func OrganizationMember(member *model.OrganizationMember) OrganizationMemberResp
 }
 
 func OrganizationMembers(members []*model.OrganizationMember) []OrganizationMemberResponse {
+	return OrganizationMembersWithPII(members, true)
+}
+
+func OrganizationMembersWithPII(members []*model.OrganizationMember, full bool) []OrganizationMemberResponse {
 	result := make([]OrganizationMemberResponse, 0, len(members))
 	for _, member := range members {
-		result = append(result, OrganizationMember(member))
+		mapped := OrganizationMember(member)
+		if !full {
+			mapped.Name = privacy.MaskName(mapped.Name)
+			mapped.Contact = privacy.MaskContact(mapped.Contact)
+		}
+		result = append(result, mapped)
 	}
 	return result
 }
 
 func OrganizationInvitation(invitation *model.OrganizationInvitation) OrganizationInvitationResponse {
+	return OrganizationInvitationWithPII(invitation, true)
+}
+
+func OrganizationInvitationWithPII(invitation *model.OrganizationInvitation, full bool) OrganizationInvitationResponse {
+	email := invitation.Email
+	if !full {
+		email = privacy.MaskContact(email)
+	}
 	return OrganizationInvitationResponse{
-		ID: invitation.ID, Email: invitation.Email, Role: invitation.Role, Status: invitation.Status,
+		ID: invitation.ID, Email: email, Role: invitation.Role, Status: invitation.Status,
 		ExpiresAt: invitation.ExpiresAt, AcceptedAt: invitation.AcceptedAt, RevokedAt: invitation.RevokedAt,
 		InvitedByUserID: invitation.InvitedByUserID, CreatedAt: invitation.CreatedAt, UpdatedAt: invitation.UpdatedAt,
 	}
 }
 
 func OrganizationInvitations(invitations []*model.OrganizationInvitation) []OrganizationInvitationResponse {
+	return OrganizationInvitationsWithPII(invitations, true)
+}
+
+func OrganizationInvitationsWithPII(invitations []*model.OrganizationInvitation, full bool) []OrganizationInvitationResponse {
 	result := make([]OrganizationInvitationResponse, 0, len(invitations))
 	for _, invitation := range invitations {
-		result = append(result, OrganizationInvitation(invitation))
+		result = append(result, OrganizationInvitationWithPII(invitation, full))
+	}
+	return result
+}
+
+func OrganizationAudit(entry *model.OrganizationAuditLog) OrganizationAuditResponse {
+	return OrganizationAuditResponse{
+		ID: entry.ID, OrganizationID: entry.OrganizationID, ActorType: entry.ActorType,
+		ActorID: entry.ActorID, Action: entry.Action, ResourceType: entry.ResourceType,
+		ResourceID: entry.ResourceID, RequestID: entry.RequestID, Outcome: entry.Outcome,
+		HTTPStatus: entry.HTTPStatus, CreatedAt: entry.CreatedAt,
+	}
+}
+
+func OrganizationAudits(entries []*model.OrganizationAuditLog) []OrganizationAuditResponse {
+	result := make([]OrganizationAuditResponse, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, OrganizationAudit(entry))
 	}
 	return result
 }
 
 func Organizer(organizer *model.Organizer) OrganizerResponse {
+	return OrganizerWithPII(organizer, true)
+}
+
+func OrganizerWithPII(organizer *model.Organizer, full bool) OrganizerResponse {
+	contact := organizer.Contact
+	if !full {
+		contact = privacy.MaskContact(contact)
+	}
 	return OrganizerResponse{
 		ID: organizer.ID, Name: organizer.Name, Description: organizer.Description,
-		Contact: organizer.Contact, LogoURL: organizer.LogoURL, Address: organizer.Address,
+		Contact: contact, LogoURL: organizer.LogoURL, Address: organizer.Address,
 		Website: organizer.Website, Tags: organizer.Tags, EventCount: organizer.EventCount,
 		CreatedAt: organizer.CreatedAt, UpdatedAt: organizer.UpdatedAt,
 	}
 }
 
 func Organizers(organizers []*model.Organizer) []OrganizerResponse {
+	return OrganizersWithPII(organizers, true)
+}
+
+func OrganizersWithPII(organizers []*model.Organizer, full bool) []OrganizerResponse {
 	result := make([]OrganizerResponse, 0, len(organizers))
 	for _, organizer := range organizers {
-		result = append(result, Organizer(organizer))
+		result = append(result, OrganizerWithPII(organizer, full))
 	}
 	return result
 }
@@ -210,25 +265,49 @@ func MyActivities(activities []*model.MyActivity) []MyActivityResponse {
 }
 
 func Checkin(checkin *model.Checkin) CheckinResponse {
+	return CheckinWithPII(checkin, true)
+}
+
+func CheckinWithPII(checkin *model.Checkin, full bool) CheckinResponse {
+	credentialCode, userName, userContact := checkin.CredentialCode, checkin.UserName, checkin.UserContact
+	if !full {
+		credentialCode = ""
+		userName = privacy.MaskName(userName)
+		userContact = privacy.MaskContact(userContact)
+	}
 	return CheckinResponse{
 		ID: checkin.ID, AdmissionID: checkin.AdmissionID, EventID: checkin.EventID,
-		CredentialCode: checkin.CredentialCode, UserName: checkin.UserName,
-		UserContact: checkin.UserContact, CheckedInAt: checkin.CheckedInAt, CheckedInBy: checkin.CheckedInBy,
+		CredentialCode: credentialCode, UserName: userName,
+		UserContact: userContact, CheckedInAt: checkin.CheckedInAt, CheckedInBy: checkin.CheckedInBy,
 	}
 }
 
 func Checkins(checkins []*model.Checkin) []CheckinResponse {
+	return CheckinsWithPII(checkins, true)
+}
+
+func CheckinsWithPII(checkins []*model.Checkin, full bool) []CheckinResponse {
 	result := make([]CheckinResponse, 0, len(checkins))
 	for _, checkin := range checkins {
-		result = append(result, Checkin(checkin))
+		result = append(result, CheckinWithPII(checkin, full))
 	}
 	return result
 }
 
 func Registrations(registrations []*model.Registration) []RegistrationResponse {
+	return RegistrationsWithPII(registrations, true)
+}
+
+func RegistrationsWithPII(registrations []*model.Registration, full bool) []RegistrationResponse {
 	result := make([]RegistrationResponse, 0, len(registrations))
 	for _, registration := range registrations {
-		result = append(result, Registration(registration))
+		mapped := Registration(registration)
+		if !full {
+			mapped.Name = privacy.MaskName(mapped.Name)
+			mapped.Contact = privacy.MaskContact(mapped.Contact)
+			mapped.Admission = nil
+		}
+		result = append(result, mapped)
 	}
 	return result
 }

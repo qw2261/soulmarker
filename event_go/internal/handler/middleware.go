@@ -1,13 +1,46 @@
 package handler
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 )
+
+type requestIDContextKey struct{}
+
+var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{8,128}$`)
+
+func RequestIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(requestIDContextKey{}).(string)
+	return value
+}
+
+func newRequestID() string {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err == nil {
+		return hex.EncodeToString(buffer)
+	}
+	return time.Now().UTC().Format("20060102T150405.000000000")
+}
+
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get("X-Request-ID")
+		if !requestIDPattern.MatchString(requestID) {
+			requestID = newRequestID()
+		}
+		w.Header().Set("X-Request-ID", requestID)
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -69,6 +102,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 		slog.LogAttrs(r.Context(), level, "request",
 			slog.Time("time", start),
+			slog.String("request_id", RequestIDFromContext(r.Context())),
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", status),

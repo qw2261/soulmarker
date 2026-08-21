@@ -376,6 +376,60 @@ func (s *Store) RevokeOrganizationMember(organizationID, actorUserID, memberID i
 	return tx.Commit()
 }
 
+func (s *Store) TransferOrganizationOwnership(organizationID, actorUserID, targetMemberID int64, transferredAt time.Time) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开启组织所有权转移事务失败: %w", err)
+	}
+	defer tx.Rollback()
+	var actorMemberID int64
+	var actorRole, actorStatus, organizationStatus string
+	if err := tx.QueryRow(
+		`SELECT m.id, m.role, m.status, o.status
+		 FROM organization_members m JOIN organizations o ON o.id = m.organization_id
+		 WHERE m.organization_id = ? AND m.user_id = ?`, organizationID, actorUserID,
+	).Scan(&actorMemberID, &actorRole, &actorStatus, &organizationStatus); errors.Is(err, sql.ErrNoRows) {
+		return model.ErrOrganizationOwnerTransferDenied
+	} else if err != nil {
+		return fmt.Errorf("查询当前组织所有者失败: %w", err)
+	}
+	var targetUserID int64
+	var targetRole, targetStatus string
+	if err := tx.QueryRow(
+		`SELECT user_id, role, status FROM organization_members
+		 WHERE organization_id = ? AND id = ?`, organizationID, targetMemberID,
+	).Scan(&targetUserID, &targetRole, &targetStatus); errors.Is(err, sql.ErrNoRows) {
+		return model.ErrOrganizationMemberNotFound
+	} else if err != nil {
+		return fmt.Errorf("查询新组织所有者失败: %w", err)
+	}
+	if organizationStatus != model.OrganizationStatusActive || actorStatus != model.OrganizationMemberStatusActive ||
+		actorRole != model.OrganizationRoleOwner || targetStatus != model.OrganizationMemberStatusActive ||
+		targetRole == model.OrganizationRoleOwner || targetUserID == actorUserID {
+		return model.ErrOrganizationOwnerTransferDenied
+	}
+	timestamp := transferredAt.UTC().Format(model.TimeFormat)
+	if result, err := tx.Exec(
+		`UPDATE organization_members SET role = 'admin', updated_at = ?
+		 WHERE id = ? AND organization_id = ? AND role = 'owner' AND status = 'active'`,
+		timestamp, actorMemberID, organizationID,
+	); err != nil {
+		return fmt.Errorf("降级原组织所有者失败: %w", err)
+	} else if updated, err := result.RowsAffected(); err != nil || updated != 1 {
+		return model.ErrOrganizationOwnerTransferDenied
+	}
+	if result, err := tx.Exec(
+		`UPDATE organization_members SET role = 'owner', updated_at = ?
+		 WHERE id = ? AND organization_id = ? AND status = 'active' AND role <> 'owner'`,
+		timestamp, targetMemberID, organizationID,
+	); err != nil {
+		return fmt.Errorf("设置新组织所有者失败: %w", err)
+	} else if updated, err := result.RowsAffected(); err != nil || updated != 1 {
+		return model.ErrOrganizationOwnerTransferDenied
+	}
+	return tx.Commit()
+}
+
 func canInviteOrganizationRole(role string) bool {
 	switch role {
 	case model.OrganizationRoleAdmin, model.OrganizationRoleEditor,

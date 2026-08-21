@@ -282,6 +282,56 @@ func TestOrganizationMemberManagementProtectsOwnerAndSupportsReinvite(t *testing
 	}
 }
 
+func TestOrganizationOwnershipTransferIsAtomicAndOwnerOnly(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	owner := &model.User{Name: "原所有者", Contact: "transfer-owner@example.com", PasswordHash: "hash"}
+	target := &model.User{Name: "新所有者", Contact: "transfer-target@example.com", PasswordHash: "hash"}
+	editor := &model.User{Name: "普通编辑", Contact: "transfer-editor@example.com", PasswordHash: "hash"}
+	for _, user := range []*model.User{owner, target, editor} {
+		if err := s.CreateUser(user); err != nil {
+			t.Fatal(err)
+		}
+	}
+	organization := &model.Organization{Name: "转移组织", Slug: "ownership-transfer"}
+	profile := &model.OrganizerProfile{Name: "转移资料"}
+	if err := s.CreateOrganizationWithOwner(organization, profile, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	targetMember := &model.OrganizationMember{OrganizationID: organization.ID, UserID: target.ID, Role: model.OrganizationRoleAdmin}
+	editorMember := &model.OrganizationMember{OrganizationID: organization.ID, UserID: editor.ID, Role: model.OrganizationRoleEditor}
+	if err := s.AddOrganizationMember(targetMember); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddOrganizationMember(editorMember); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2032, 3, 4, 5, 6, 7, 0, time.UTC)
+	if err := s.TransferOrganizationOwnership(organization.ID, editor.ID, targetMember.ID, now); !errors.Is(err, model.ErrOrganizationOwnerTransferDenied) {
+		t.Fatalf("non-owner transferred ownership: %v", err)
+	}
+	if err := s.TransferOrganizationOwnership(organization.ID, owner.ID, targetMember.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	oldOwner, err := s.GetOrganizationMember(organization.ID, owner.ID)
+	if err != nil || oldOwner == nil || oldOwner.Role != model.OrganizationRoleAdmin {
+		t.Fatalf("old owner was not downgraded to admin: member=%+v err=%v", oldOwner, err)
+	}
+	newOwner, err := s.GetOrganizationMember(organization.ID, target.ID)
+	if err != nil || newOwner == nil || newOwner.Role != model.OrganizationRoleOwner {
+		t.Fatalf("target was not promoted to owner: member=%+v err=%v", newOwner, err)
+	}
+	if err := s.TransferOrganizationOwnership(organization.ID, owner.ID, editorMember.ID, now.Add(time.Minute)); !errors.Is(err, model.ErrOrganizationOwnerTransferDenied) {
+		t.Fatalf("former owner retained transfer authority: %v", err)
+	}
+	if err := s.TransferOrganizationOwnership(organization.ID, target.ID, targetMember.ID, now.Add(time.Minute)); !errors.Is(err, model.ErrOrganizationOwnerTransferDenied) {
+		t.Fatalf("owner transferred ownership to self: %v", err)
+	}
+}
+
 func TestOrganizationInvitationRejectsSuspendedOrganization(t *testing.T) {
 	s, err := NewStore(":memory:")
 	if err != nil {

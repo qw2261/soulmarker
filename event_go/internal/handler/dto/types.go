@@ -62,6 +62,10 @@ type UpdateOrganizationMemberRequest struct {
 	Role string `json:"role"`
 }
 
+type TransferOrganizationOwnerRequest struct {
+	MemberID int64 `json:"member_id"`
+}
+
 type CreateOrganizerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -225,6 +229,20 @@ type OrganizationInvitationResponse struct {
 	InvitedByUserID int64      `json:"invited_by_user_id"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type OrganizationAuditResponse struct {
+	ID             int64     `json:"id"`
+	OrganizationID int64     `json:"organization_id"`
+	ActorType      string    `json:"actor_type"`
+	ActorID        *int64    `json:"actor_id,omitempty"`
+	Action         string    `json:"action"`
+	ResourceType   string    `json:"resource_type"`
+	ResourceID     string    `json:"resource_id"`
+	RequestID      string    `json:"request_id"`
+	Outcome        string    `json:"outcome"`
+	HTTPStatus     int       `json:"http_status"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type OrganizerResponse struct {

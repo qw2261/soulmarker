@@ -51,7 +51,7 @@ func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, api.CodeOrganizerNotFound, model.ErrOrganizerNotFound.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.Organizer(o)})
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: dto.OrganizerWithPII(o, false)})
 }
 
 func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, "list_organizers", err)
 		return
 	}
-	paginatedOK(w, dto.Organizers(organizers), total, page, pageSize)
+	paginatedOK(w, dto.OrganizersWithPII(organizers, false), total, page, pageSize)
 }
 
 func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {

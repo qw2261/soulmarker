@@ -98,7 +98,7 @@ func (h *Handler) CheckIn(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, status, dto.Response{
 		Code: status, Message: message,
-		Data: dto.CheckinResultResponse{Checkin: dto.Checkin(checkin), AlreadyCheckedIn: duplicate},
+		Data: dto.CheckinResultResponse{Checkin: dto.CheckinWithPII(checkin, fullPIIAccess(r)), AlreadyCheckedIn: duplicate},
 	})
 }
 
@@ -125,5 +125,5 @@ func (h *Handler) ListCheckins(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, "list_checkins", err)
 		return
 	}
-	paginatedOK(w, dto.Checkins(checkins), total, page, pageSize)
+	paginatedOK(w, dto.CheckinsWithPII(checkins, fullPIIAccess(r)), total, page, pageSize)
 }

@@ -29,7 +29,7 @@ func (h *Handler) apiRoutes() []apiRoute {
 		return handler
 	}
 
-	return []apiRoute{
+	routes := []apiRoute{
 		{http.MethodPost, "/auth/register", "registerUser", "RegisterUserRequest", plain(h.RegisterUser)},
 		{http.MethodPost, "/auth/login", "loginUser", "LoginRequest", plain(h.Login)},
 		{http.MethodPost, "/auth/logout", "logoutUser", "", plain(h.Logout)},
@@ -52,9 +52,11 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodGet, "/organizations/{organizationId}/members", "listOrganizationMembers", "", tenant(authorization.CapabilityMembersRead, h.ListOrganizationMembers)},
 		{http.MethodPut, "/organizations/{organizationId}/members/{memberId}", "updateOrganizationMember", "UpdateOrganizationMemberRequest", tenant(authorization.CapabilityMembersManage, h.UpdateOrganizationMember)},
 		{http.MethodDelete, "/organizations/{organizationId}/members/{memberId}", "revokeOrganizationMember", "", tenant(authorization.CapabilityMembersManage, h.RevokeOrganizationMember)},
+		{http.MethodPost, "/organizations/{organizationId}/owner-transfer", "transferOrganizationOwnership", "TransferOrganizationOwnerRequest", tenant(authorization.CapabilityOwnerTransfer, h.TransferOrganizationOwnership)},
 		{http.MethodGet, "/organizations/{organizationId}/invitations", "listOrganizationInvitations", "", tenant(authorization.CapabilityMembersRead, h.ListOrganizationInvitations)},
 		{http.MethodPost, "/organizations/{organizationId}/invitations", "createOrganizationInvitation", "CreateOrganizationInvitationRequest", tenant(authorization.CapabilityMembersInvite, h.CreateOrganizationInvitation)},
 		{http.MethodDelete, "/organizations/{organizationId}/invitations/{invitationId}", "revokeOrganizationInvitation", "", tenant(authorization.CapabilityMembersInvite, h.RevokeOrganizationInvitation)},
+		{http.MethodGet, "/organizations/{organizationId}/audits", "listOrganizationAudits", "", tenant(authorization.CapabilityAuditRead, h.ListOrganizationAudits)},
 		{http.MethodPost, "/organizations/{organizationId}/events", "createOrganizationEvent", "CreateEventRequest", tenant(authorization.CapabilityEventsManage, h.CreateEvent)},
 		{http.MethodGet, "/organizations/{organizationId}/events", "listOrganizationEvents", "", tenant(authorization.CapabilityOrganizationRead, h.ListOrganizationEvents)},
 		{http.MethodGet, "/organizations/{organizationId}/events/{id}", "getOrganizationEvent", "", tenant(authorization.CapabilityOrganizationRead, h.GetOrganizationEvent)},
@@ -113,6 +115,16 @@ func (h *Handler) apiRoutes() []apiRoute {
 		{http.MethodPut, "/events/{id}/tickets/{ticketId}", "updateTicket", "UpdateTicketRequest", platformAdmin(h.UpdateTicket)},
 		{http.MethodDelete, "/events/{id}/tickets/{ticketId}", "deleteTicket", "", platformAdmin(h.DeleteTicket)},
 	}
+	for index := range routes {
+		if strings.HasPrefix(routes[index].Path, "/organizations/{organizationId}") {
+			routes[index].Handler = h.OrganizationAudit(
+				routes[index].OperationID,
+				auditResourceType(routes[index].Path),
+				routes[index].Handler,
+			)
+		}
+	}
+	return routes
 }
 
 func registerAPIRoutes(mux *http.ServeMux, prefix string, routes []apiRoute) {
@@ -183,5 +195,5 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	mux.HandleFunc("GET /health", h.HealthHandler)
 	mux.Handle("/", fallback)
 
-	return LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.tokens), h.config.CORSOrigin)))
+	return RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.tokens), h.config.CORSOrigin))))
 }
