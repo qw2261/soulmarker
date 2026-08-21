@@ -379,8 +379,8 @@ G4-R09 当前拆分验收：
 - [x] **G5-R04** platform_admin 与租户角色分离，移除公开业务面的全局 Admin Token；组织日常入口由用户 JWT + tenant capability 承载，Commit `8bc0c50` / Run `29447383045` 通过远端门禁。
 - [x] **G5-R05** event、ticket、registration、admission、checkin、export 管理入口全部强制 tenant scope；Commit `00ebef0` / Run `29443464930` 通过完整远端门禁。
 - [x] **G5-R06** 组织者自助入驻、邀请成员、发布活动、配置票种、核销和导出；Commit `8bc0c50` / Run `29447383045` 通过 desktop/mobile 完整远端旅程。
-- [x] **G5-R07** 审计日志记录 actor、tenant、action、resource、request_id、时间和结果；Commit `6938149` / Run `32515720494` 远端通过；三组织试点待执行。
-- [x] **G5-R08** 组织者联系方式、参与者 PII 按角色最小授权和脱敏展示；Commit `6938149` / Run `32515720494` 远端通过；三组织试点待执行。
+- [x] **G5-R07** 审计日志记录 actor、tenant、action、resource、request_id、时间和结果；Commit `6938149` / Run `32515720494` 远端通过；三组织试点通过。
+- [x] **G5-R08** 组织者联系方式、参与者 PII 按角色最小授权和脱敏展示；Commit `6938149` / Run `32515720494` 远端通过；三组织试点通过。
 
 ### 迭代切片与节奏
 
@@ -445,9 +445,9 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 ### 完成门槛
 
 - [ ] 权限矩阵自动覆盖全部组织者管理接口。
-- [ ] 任意 A 租户访问 B 租户数据均返回 403 或 404。
-- [ ] 至少 3 个独立试点组织者无需开发者介入即可完成活动运营。
-- [ ] 所有关键管理动作能够通过审计日志追溯。
+- [x] 任意 A 租户访问 B 租户数据均返回 403 或 404。
+- [x] 至少 3 个独立试点组织者无需开发者介入即可完成活动运营。
+- [x] 所有关键管理动作能够通过审计日志追溯。
 - [ ] 高权限账户具备更强认证策略，最晚在 G6 支持 MFA。
 
 ---
@@ -812,7 +812,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G2 | Verification | v5.4 | [v5.4 测试报告](releases/v5.4.0/test-report.md) | R01–R09、本地门禁及候选提交 63ff5b8 的远端 CI 已通过；等待 Tag 与正式发布证据 |
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
-| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭；待三组织试点、e2e/浏览器矩阵与发布归档证据 |
+| G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
 | G6 | Planned | v6.2 | — | M2 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |

@@ -18,7 +18,7 @@
 
 ## 本切片范围
 
-G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳定 Event tenant 和 scoped 业务资源。G5.4 候选新增组织自助创建、SMTP 邀请接受、成员/邀请管理和用户 JWT 驱动的租户工作台。G5.5 新增不可变组织审计、PII 角色最小授权与所有权转移并通过完整远端门禁；真实三组织试点和 platform 兼容路由下线仍不在本切片。
+G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳定 Event tenant 和 scoped 业务资源。G5.4 候选新增组织自助创建、SMTP 邀请接受、成员/邀请管理和用户 JWT 驱动的租户工作台。G5.5 新增不可变组织审计、PII 角色最小授权与所有权转移并通过完整远端门禁，三组织真实试点已通过（见 [acceptance/three-organization-pilot.md](acceptance/three-organization-pilot.md)）；platform 兼容路由下线仍不在本切片。
 
 ## 需求追溯
 
@@ -38,6 +38,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | G5-R04 operational | SEC-PLATFORM-TOKEN-REPLACEMENT-001、SEC-TENANT-FLAG-001 | 自助创建、日常运营和角色旅程不设置 Admin Token；platform 兼容面不参与组织者流程；feature flag 关闭自助入口返回 404 |
 | G5-R06 members/UI | SEC-ORG-MEMBER-MANAGE-001、CT-API-ORG-SELF-SERVICE-001、FE-ORG-WORKSPACE-001 | owner/admin 事务内管理规则、owner/自撤销保护、撤销后下一请求 403；Router/OpenAPI/DTO/45 错误码一致；工作台按 capability 请求和展示 |
 | G5-R06 E2E | E2E-ORG-SELF-SERVICE-001 | desktop Chromium/Pixel 7 完成创建组织、活动、票种、邮件邀请接受、editor 编辑、checker 只核销、finance 只查看/导出；localStorage 无 admin_token |
+| G5-R07 / G5-R08 试点 | ORGANIZATION-PILOT-001 | 真实受控部署公开 API 驱动 3 个独立试点组织者免费活动运营闭环（30/30 通过），跨租户 24 条全 `403 ORGANIZATION_ACCESS_DENIED`，关键动作审计可追溯；见 [acceptance/three-organization-pilot.md](acceptance/three-organization-pilot.md) |
 
 ## 当前本地结果
 
@@ -95,7 +96,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | `go test -race -count=1 ./...` | 通过，零数据竞争 |
 | OpenAPI/Router 契约 | 通过；补齐 `listOrganizationAudits`、`transferOrganizationOwnership`、`OrganizationAuditResponse`、`TransferOrganizationOwnerRequest` 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` |
 | Go 安全补丁 | 首次远端候选因 Go `1.25.12` 标准库可达漏洞（GO-2026-6090、GO-2026-6089、GO-2026-5972）正确阻断；提升到 `1.25.13` 后同一扫描 0 可达漏洞 |
-| G5.5 剩余证据 | 三组织真实试点、e2e/浏览器矩阵、发布归档 |
+| G5.5 剩余证据 | 三组织真实试点（通过，见 [acceptance/three-organization-pilot.md](acceptance/three-organization-pilot.md)）；剩余 e2e/浏览器矩阵、发布归档 |
 
 ## G5.5 远端 CI
 
