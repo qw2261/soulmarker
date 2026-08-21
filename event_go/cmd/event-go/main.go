@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/auth"
+	"github.com/qw2261/soulmarker/event_go/internal/backup"
 	"github.com/qw2261/soulmarker/event_go/internal/clock"
 	"github.com/qw2261/soulmarker/event_go/internal/config"
 	"github.com/qw2261/soulmarker/event_go/internal/handler"
@@ -85,6 +86,18 @@ func main() {
 		time.Duration(cfg.NotificationScanIntervalSec)*time.Second,
 		func(err error) { log.Printf("活动提醒调度失败: %v", err) },
 	)
+
+	if cfg.BackupIntervalSec > 0 {
+		backupManager := backup.New(s, cfg.BackupDir, cfg.BackupRetain)
+		go backupManager.Run(
+			appContext,
+			time.Duration(cfg.BackupIntervalSec)*time.Second,
+			time.Duration(cfg.BackupDrillIntervalSec)*time.Second,
+			func(err error) { log.Printf("备份/恢复演练失败: %v", err) },
+		)
+		log.Printf("💾 自动备份已启用：目录=%s，保留=%d 份，间隔=%ds，恢复演练间隔=%ds",
+			cfg.BackupDir, cfg.BackupRetain, cfg.BackupIntervalSec, cfg.BackupDrillIntervalSec)
+	}
 
 	port := cfg.Port
 	addr := ":" + port

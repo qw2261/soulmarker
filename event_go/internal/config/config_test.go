@@ -168,3 +168,17 @@ func TestLoadOrganizationAuthorizationFeatureFlag(t *testing.T) {
 		t.Fatal("invalid organization authorization feature flag must fail validation")
 	}
 }
+
+func TestLoadRejectsNegativeBackupIntervals(t *testing.T) {
+	t.Setenv("BACKUP_INTERVAL_SECONDS", "-5")
+	cfg := Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("negative BACKUP_INTERVAL_SECONDS must fail validation")
+	}
+	t.Setenv("BACKUP_INTERVAL_SECONDS", "0")
+	t.Setenv("BACKUP_DRILL_INTERVAL_SECONDS", "-1")
+	cfg = Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("negative BACKUP_DRILL_INTERVAL_SECONDS must fail validation")
+	}
+}

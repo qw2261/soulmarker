@@ -35,6 +35,10 @@ type Config struct {
 	SMTPUsername                   string
 	SMTPPassword                   string
 	SMTPFrom                       string
+	BackupDir                      string
+	BackupIntervalSec              int
+	BackupRetain                   int
+	BackupDrillIntervalSec         int
 	organizationAuthFlagInvalid    bool
 }
 
@@ -65,6 +69,10 @@ func Load() *Config {
 		SMTPUsername:                   getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                   getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                       getEnv("SMTP_FROM", ""),
+		BackupDir:                      getEnv("BACKUP_DIR", "data/backups"),
+		BackupIntervalSec:              getEnvInt("BACKUP_INTERVAL_SECONDS", 0),
+		BackupRetain:                   getEnvIntStrict("BACKUP_RETAIN", 7),
+		BackupDrillIntervalSec:         getEnvInt("BACKUP_DRILL_INTERVAL_SECONDS", 0),
 		organizationAuthFlagInvalid:    organizationAuthFlagInvalid,
 	}
 }
@@ -90,6 +98,12 @@ func (c *Config) Validate() error {
 	}
 	if c.OrganizationInvitationTTLHours <= 0 || c.OrganizationInvitationTTLHours > 168 {
 		return fmt.Errorf("ORGANIZATION_INVITATION_TTL_HOURS 必须在 1 到 168 之间")
+	}
+	if c.BackupIntervalSec < 0 {
+		return fmt.Errorf("BACKUP_INTERVAL_SECONDS 不能为负数")
+	}
+	if c.BackupDrillIntervalSec < 0 {
+		return fmt.Errorf("BACKUP_DRILL_INTERVAL_SECONDS 不能为负数")
 	}
 	env := strings.ToLower(strings.TrimSpace(c.Environment))
 	switch env {

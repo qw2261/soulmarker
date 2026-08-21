@@ -44,6 +44,23 @@ func (s *Store) Ping() error {
 	return s.db.Ping()
 }
 
+// Backup 将当前数据库的一致性快照写入 destPath，返回写入的文件大小。
+// 使用 VACUUM INTO，目标文件将被完整重建并生成一份经过 checkpoint 的紧凑快照，
+// 可在应用运行期间安全执行，且不会写入任何业务状态。
+func (s *Store) Backup(destPath string) (int64, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("数据库未初始化")
+	}
+	if _, err := s.db.Exec(`VACUUM INTO ?`, destPath); err != nil {
+		return 0, fmt.Errorf("创建数据库备份失败: %w", err)
+	}
+	info, err := os.Stat(destPath)
+	if err != nil {
+		return 0, fmt.Errorf("读取备份文件信息失败: %w", err)
+	}
+	return info.Size(), nil
+}
+
 // OpenStore 打开数据库并执行版本化迁移，任何初始化失败都会返回给调用方。
 func OpenStore(dbPath string) (*Store, error) {
 	if dbPath != ":memory:" && !strings.HasPrefix(dbPath, "file:") {
