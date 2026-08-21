@@ -470,7 +470,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [ ] **G6-R07** liveness 与 readiness 分离，依赖异常时返回可操作状态。
 - [x] **G6-R08** 部署、迁移、备份恢复、回滚、支付关闭、故障响应 Runbook；文档见 [runbooks/operations.md](runbooks/operations.md)。「回滚」策略为 Expand-only 迁移不删列/表/触发器、应用整体前后端同制品回滚、完全撤销仅恢复升级前备份；「支付关闭」当前不适用（属 G7），已记录未来一键停新单设计原则。完成门槛中的实际演练（备份恢复/应用回滚/迁移失败/告警）仍需真实 staging 证据。
 - [x] **G6-R09** 自动备份、保留策略、恢复验证和定期演练；Commit `e390d99` / Run `32524900392` 远端通过（backend/frontend/docker 全部 success）。`Store.Backup` 基于 `VACUUM INTO` 生成一致快照，备份管理器以只读校验 `integrity_check`/schema/表数量，按 UTC 时间戳保留最近 N 份，定期恢复演练复制最新备份到临时位置校验后清理。备份恢复仍以真实 staging 持续运行与 SLO 实测验证为准。
-- [ ] **G6-R10** 审计、隐私请求、账号注销、数据导出/删除和留存流程。
+- [x] **G6-R10** 审计、隐私请求、账号注销、数据导出/删除和留存流程；Commit `fec363a` / Run `32527562084` 远端通过（backend/frontend/docker 全部 success）。
 
 ### 数据库决策闸门
 
@@ -499,6 +499,15 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [x] **G6-C02** 镜像提供 `HEALTHCHECK`（`/healthz`），CI docker job 启动容器后断言运行用户 `uid != 0` 并执行 [smoke.sh](../scripts/smoke.sh) 验证 `/healthz` 与 `/readyz`。
 - [x] **G6-C03** `GET /healthz` 仅反映进程存活（不探测依赖），`GET /readyz` 在数据库就绪返回 200、异常返回 503 且保留可操作 `Data`（`ErrorCode=SERVICE_UNAVAILABLE`）；单元测试覆盖 `TestLivenessHandler`、`TestReadinessHandlerHealthy`、`TestReadinessHandlerUnhealthy`。
 - [x] **G6-C04** 完整远端门禁通过：Commit `db62b83`（+gofmt 修复 `ac75417`）/ Run `32523778826`，backend、frontend、docker 三个 job 全部 success。
+
+### G6.2 当前数据主体隐私切片验收
+
+- [x] **G6-P01** Schema v15 新增 `users.deleted_at`（软删除标记）与 `data_subject_requests` 表，记录数据主体请求类型（`account_erasure`/`data_export`）、请求时间、处理时间、处理人、处置状态与说明；触发器保证创建用户时 `user_auth_versions` 初始版本已就绪。
+- [x] **G6-P02** `Store` 数据主体方法：`CreateDataSubjectRequest`、`ListDataSubjectRequests`、`CompleteDataSubjectRequest`、`ExportUserData`、`ErasureUser`、`SweepExpiredRequests`；导出聚合 profile、memberships、registrations、authored posts/replies、notifications、privacy requests，留存粒度按 `processed_at` 过期清理。
+- [x] **G6-P03** 账号注销在单事务内完成：创建 erasure 请求、标记 `deleted_at`、递增 `AuthVersion` 撤销全部既有会话/令牌；`requireUser` 对已注销或认证版本不匹配的 JWT 统一返回 `401 USER_TOKEN_INVALID`。
+- [x] **G6-P04** 新增 `/me/privacy/requests`、`/me/privacy/data-export`、`/me/privacy/account-erasure` 路由，DTO、稳定错误码（`USER_ALREADY_DELETED`）、OpenAPI 与路由/契约测试一致。
+- [x] **G6-P05** Store 层 12 个用例与 Handler 集成层 3 个用例覆盖创建、列表、完成、导出、注销（含重复注销）、留存清理及未登录/无效/已注销拒绝路径；本地 `go test -count=1 ./...`、`go vet ./...` 全绿。
+- [x] **G6-P06** 功能候选 Commit `fec363a` 与远端 CI Run `32527562084` 绑定；backend `96912745077`、frontend `96912744683`、docker `96912745103` 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
 ### 完成门槛
 
@@ -820,7 +829,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过远端 CI（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立；M2 仍待审计/隐私（R10）、真实备份恢复/回滚/压测与发布归档 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 

@@ -1,6 +1,6 @@
 # v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）与 G6-R08（运维 Runbook）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）与 G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
 
 ## 版本身份
 
@@ -71,7 +71,7 @@ G6 生产上线准备的第一个切片「容器与部署基线」：
 
 - 本机 Docker daemon 未运行（OrbStack socket 不存在），镜像标签经公开镜像源与 Docker Hub 官方镜像库核实；镜像实际构建与运行由远端 CI docker job 在 `ubuntu-latest` 上完成并留下证据。
 - G6-R03 的 `HEALTHCHECK`/smoke 依赖容器内 `/healthz`；G6-R07 的 readiness 依赖数据库 Ping，SQLite `development` 环境无需外部 DB。
-- 本报告关闭 G6-R03、G6-R07、G6-R09，并完成 G6-R08 运维 Runbook 文档。G6-R01/R02/R04/R05/R06/R10 与 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）未在本报告完成，不能据此宣称正式生产就绪。
+- 本报告关闭 G6-R03、G6-R07、G6-R09、G6-R10，并完成 G6-R08 运维 Runbook 文档。G6-R01/R02/R04/R05/R06 与 G6 完成门槛（7 天 staging、30 分钟压测、应用回滚/迁移失败演练、Legal/隐私流程、无 Critical/High 漏洞与发布归档）未在本报告完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -125,7 +125,7 @@ G6 生产上线准备的备份恢复切片，直接支撑 M2「可上线」的�
 - 备份采用 `VACUUM INTO` 生成一致性快照，可在应用运行期间安全执行、不写入业务状态；`BACKUP_INTERVAL_SECONDS=0` 时默认禁用自动备份。
 - 保留策略以 `BACKUP_RETAIN`（默认 7）保留最近 N 份，按文件名 UTC 时间戳排序；`retain <= 0` 视为保留全部。
 - 恢复演练使用临时 `drill-*.db` 且演练后清理，证明最新备份可恢复且不污染生产库。
-- 本切片关闭 G6-R09。G6-R01/R02/R04/R05/R06/R10 与 G6 完成门槛中的「备份恢复演练」（真实 staging 持续运行、SLO 实测与压测）仍待完成，不能据此宣称正式生产就绪。
+- 本切片关闭 G6-R09。G6-R01/R02/R04/R05/R06 与 G6 完成门槛中的「备份恢复演练」（真实 staging 持续运行、SLO 实测与压测）仍待完成，不能据此宣称正式生产就绪。
 
 ---
 
@@ -149,6 +149,68 @@ G6-R08 要求提供部署、迁移、备份恢复、回滚、支付关闭与故�
 - G6-R08 是文档交付物，不涉及代码或数据库变更，故无本地/远端 CI 门禁；其引用的命令与配置项均取自现有代码（`internal/config/config.go`、`internal/backup`、`internal/store`）与 [Dockerfile](../../../Dockerfile)。
 - **未完成**：G6 完成门槛中的「备份恢复、应用回滚、迁移失败、告警」实际演练仍需在真实 staging 上执行并回填执行人、时间与判定。
 
+---
+
+# G6-R10 数据主体隐私、账号注销与数据导出
+
+## 本切片范围
+
+G6 生产上线准备的审计/隐私切片，支撑 M2「可上线」的数据主体（隐私）权利与留存可追溯性：
+
+- **G6-R10**：审计、隐私请求、账号注销、数据导出/删除和留存流程。
+
+本切片引入 Schema v15（`users.deleted_at` + `data_subject_requests`），涉及数据库结构变更；不涉及前端功能调整，也不宣称完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R10 | UT-STO-DSR-001…012、IT-API-PRIVACY-001…003 | `users.deleted_at` 软删除标记注销；`data_subject_requests` 记录 `account_erasure`/`data_export` 请求类型、请求/处理时间、处理人、处置状态与说明；`Store.Create/List/CompleteDataSubjectRequest`、`ExportUserData`、`ErasureUser`、`SweepExpiredRequests` 覆盖创建、列表、完成、导出、注销、留存清理；注销在单事务内标记删除并递增 `AuthVersion` 撤销全部既有 JWT，`requireUser` 对已注销或版本不匹配的 token 返回 `401 USER_TOKEN_INVALID`；重复注销返回 `USER_ALREADY_DELETED` |
+
+## 变更清单（Commit fec363a）
+
+- `internal/model/types.go`：新增 `User.DeletedAt`、`DataSubjectRequest`、`UserDataExport` 相关类型及请求/状态常量。
+- `internal/store/store.go`：`CurrentSchemaVersion` 14→15，新增迁移 v15（`users.deleted_at` + `data_subject_requests` 表与索引）。
+- `internal/store/store_user.go`：用户查询/scan 纳入 `deleted_at`，认证失效基线与 `auth_version` 递增。
+- `internal/store/store_privacy.go`：数据主体方法（Create/List/Complete/Export/Erasure/Sweep）。
+- `internal/handler/handler_privacy.go`：`ListMyPrivacyRequests`、`ExportMyData`、`RequestAccountErasure`。
+- `internal/handler/handler_auth.go`：`requireUser` 校验已注销与认证版本。
+- `internal/handler/router.go`：新增 `/me/privacy/requests`、`/me/privacy/data-export`、`/me/privacy/account-erasure`。
+- `internal/handler/dto/{types,mappers}.go`：`DataSubjectRequestResponse` 与映射。
+- `internal/api/errors.go`：新增稳定错误码 `USER_ALREADY_DELETED`。
+- `internal/openapi/v1.json`：三条隐私路由与 `DataSubjectRequestResponse` schema。
+- `internal/handler/openapi_contract_test.go`：注册新 schema。
+- `internal/store/store_privacy_test.go`、`internal/handler/handler_privacy_test.go`：新增 12 个 Store 用例与 3 个 Handler 集成用例。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（含 `internal/store`、`internal/handler` 新增隐私用例） |
+| `git diff --check` | 通过 |
+| OpenAPI / 错误码契约 | 通过；`USER_ALREADY_DELETED` 入目录后与 OpenAPI 枚举双向一致（错误码总数 48） |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R10 实现 Commit fec363a](https://github.com/qw2261/soulmarker/commit/fec363a) | Schema v15 数据主体隐私、账号注销、数据导出/删除与留存流程实现 |
+| [GitHub Actions Run 32527562084](https://github.com/qw2261/soulmarker/actions/runs/32527562084) | success，与 Commit fec363a 精确绑定 |
+| [backend job 96912745077](https://github.com/qw2261/soulmarker/actions/runs/32527562084/job/96912745077) | format、build、vet、Go test 全部 success |
+| [frontend job 96912744683](https://github.com/qw2261/soulmarker/actions/runs/32527562084/job/96912744683) | install、build、unit/component tests、E2E 与浏览器证据上传 success |
+| [docker job 96912745103](https://github.com/qw2261/soulmarker/actions/runs/32527562084/job/96912745103) | 镜像构建、非 root 断言、smoke 探针全部 success |
+
+## 说明
+
+- 注销采用软删除（`deleted_at`），配合递增 `auth_version` 使被注销用户的既有 JWT 在 `requireUser` 层统一失效，无需物理删除用户即满足撤销会话要求。
+- 数据导出聚合 profile、memberships、registrations、authored posts/replies、notifications 与 privacy requests；留存清理按 `processed_at` 早于保留边界清理已处理请求，pending 请求保留。
+- **未完成**：G6 完成门槛中的「法律文本、隐私同意、投诉和数据主体请求流程已按实际经营地区确认」仍须由实际经营地区确认；本切片只完成数据主体请求与账号注销/导出的代码侧与自动化门禁。
+
 ## Go/No-Go
 
-Go（G6-R08 运维 Runbook）：文档交付完成。G6/M2 整体仍为 No-Go；在审计、隐私（R10）、应用回滚/迁移失败实际演练与压测门槛完成前，不应启动支付开发或宣称正式生产就绪。
+Go（G6-R10 数据主体隐私）：代码侧实现与完整远端门禁通过，G6-R10 关闭。G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败演练、压测与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
