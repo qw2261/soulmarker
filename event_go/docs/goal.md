@@ -540,7 +540,7 @@ G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Com
 - [x] **G6-M04** `isHealthPath` 将 `/metrics` 与 `/version` 加入豁免，使探针与指标抓取不受 `RATE_LIMIT_REQUESTS_PER_MINUTE` 限流误伤；`TestIsHealthPath` 同步扩充断言。
 - [x] **G6-M05** 新增 6 个测试（`internal/metrics`×4 + `internal/handler`×2）覆盖聚合、直方图桶累积、Prometheus 文本渲染、空 Registry、`/metrics` 路由暴露、中间件记录与抓取自跳过；本地 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`/`go test -race ./internal/metrics/... ./internal/handler/... ./internal/config/... ./internal/buildinfo/...` 全绿。
 - [x] **G6-M06** live smoke 验证：构建二进制以 `APP_ENV=test DATABASE_PATH=/tmp/metrics_smoke.db PORT=18081 RATE_LIMIT_REQUESTS_PER_MINUTE=0` 启动，`/healthz`、`/readyz`、`/version` 返回 200；抓取 `/metrics` 得到 `soulmark_http_requests_total{method="GET",status="200"} 4`、直方图各 `le` 桶累计 4、`soulmark_http_requests_in_flight 0`、`soulmark_build_info{version="dev",commit="unknown"} 1`。
-- [ ] **G6-M07** 功能候选 Commit 与远端 CI Run 绑定；backend/frontend/docker 三个 job 全部 success，证据回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+- [x] **G6-M07** 功能候选 Commit `6eb9ffe` 与远端 CI Run `32532723517` 绑定；backend `96927792454`、frontend `96927792421`、docker `96927792337` 三个 job 全部 success，证据回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)，G6.5 指标切片关闭。
 
 G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
 
@@ -864,7 +864,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084），G6-R04 限流切片通过（Run 32529278311）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084），G6-R04 限流切片通过（Run 32529278311），G6-R02 构建 provenance 切片通过（Run 32530864989），G6-R06 指标切片通过（Run 32532723517）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 

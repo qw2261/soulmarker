@@ -1,6 +1,6 @@
 # v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流、构建 provenance 切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）与 G6-R02（CI/CD 不可变制品与构建 provenance）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）、G6-R02（CI/CD 不可变制品与构建 provenance）与 G6-R06（HTTP 指标，G6.5 切片）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
 
 ## 版本身份
 
@@ -14,7 +14,8 @@
 | G6-R10 实现 Commit | fec363a |
 | G6-R04 限流实现 Commit | 9dd296c |
 | G6-R02 构建 provenance 实现 Commit | 8e226fb |
-| Schema | v15（G6-R10 引入数据主体隐私，G6-R02 构建切片未变更数据库结构） |
+| G6-R06 指标实现 Commit | 6eb9ffe |
+| Schema | v15（G6-R10 引入数据主体隐私，G6-R02 构建与 G6-R06 指标切片未变更数据库结构） |
 
 ## 本切片范围
 
@@ -342,3 +343,68 @@ G6 生产上线准备的「供应链与发布制品可追溯」切片，支撑 M
 ## Go/No-Go
 
 Go（G6-R02 构建 provenance）：代码侧实现与远端门禁通过，关闭 G6-R02 的代码侧能力，并为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01（staging/production 环境隔离与安全存储）、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍未完成，G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R06 HTTP 指标（G6.5 切片）
+
+## 本切片范围
+
+G6 生产上线准备的可观测性切片，支撑 M2「可上线」的运行时指标能力：
+
+- **G6-R06**：request_id、结构化日志、指标、错误追踪和告警（本切片只交付其中的**指标**能力；request_id 与结构化日志在 G3 已具备，错误追踪与告警仍待补）。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R06 或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R06（指标） | METRICS-REGISTRY-001、METRICS-AGGREGATE-001、METRICS-BUCKETS-001、METRICS-RENDER-001、METRICS-EMPTY-001、METRICS-HANDLER-001…003 | `internal/metrics.Registry` 按 `method`/`status` 聚合请求总数、in-flight 仪表、进程运行时长与构建 provenance；延迟直方图使用固定上界桶 `{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}` 秒；`MetricsMiddleware` 记录每次请求的方法/状态码/延迟并跳过 `/metrics` 自身；`GET /metrics` 输出 OpenMetrics/Prometheus 文本；`isHealthPath` 豁免 `/metrics` 与 `/version` 使抓取不受 `RATE_LIMIT_REQUESTS_PER_MINUTE` 影响 |
+
+## 变更清单（Commit 6eb9ffe）
+
+- `internal/metrics/metrics.go`（新增）：`Registry` + `histogram`，实现 Prometheus 文本渲染（`text/plain; version=0.0.4; charset=utf-8`）、聚合与 `SetBuild`/`Observe`/`IncInFlight`/`DecInFlight`。
+- `internal/metrics/metrics_test.go`（新增）：4 个测试覆盖聚合、直方图桶累积、文本渲染与空 Registry。
+- `internal/handler/middleware_metrics.go`（新增）：`MetricsMiddleware` 作为最外层中间件记录请求并跳过 `/metrics` 抓取污染。
+- `internal/handler/metrics_handler_test.go`（新增）：2 个测试覆盖 `/metrics` 路由暴露、中间件记录与抓取自跳过。
+- `internal/handler/router.go`：注册 `GET /metrics`（复用 `buildinfo` 注入 `soulmark_build_info`），包裹 `MetricsMiddleware`。
+- `internal/handler/ratelimit.go`：`isHealthPath` 加入 `/metrics` 与 `/version`。
+- `internal/handler/ratelimit_test.go`：`TestIsHealthPath` 同步扩充豁免/非豁免断言。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过 |
+| `go test -race ./internal/metrics/... ./internal/handler/... ./internal/config/... ./internal/buildinfo/...` | 通过 |
+| `git diff --check` | 通过 |
+| OpenAPI / 错误码契约 | 通过；`/metrics` 为非 API 路由，不落入 `apiRoutes()` 与 OpenAPI paths/dto schema 比较，契约测试不受影响 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## live smoke
+
+以 `APP_ENV=test DATABASE_PATH=/tmp/metrics_smoke.db PORT=18081 RATE_LIMIT_REQUESTS_PER_MINUTE=0 /tmp/event-go-metrics` 启动，`/healthz`、`/readyz`、`/version` 均返回 200；抓取 `/metrics` 得到 `soulmark_http_requests_total{method="GET",status="200"} 4`、延迟直方图各 `le` 桶累计 4、`soulmark_http_requests_in_flight 0`、`soulmark_build_info{version="dev",commit="unknown"} 1`，证明聚合、抓取自跳过与构建 provenance 注入正确。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R06 指标实现 Commit 6eb9ffe](https://github.com/qw2261/soulmarker/commit/6eb9ffe) | `internal/metrics` 包、`MetricsMiddleware`、`GET /metrics` 路由、`buildinfo` 注入与 `/metrics`/`/version` 限流豁免 |
+| [GitHub Actions Run 32532723517](https://github.com/qw2261/soulmarker/actions/runs/32532723517) | success，与 Commit 6eb9ffe 精确绑定 |
+| [backend job 96927792454](https://github.com/qw2261/soulmarker/actions/runs/32532723517/job/96927792454) | format、build、vet、vulnerability scan、Go test、race test 全部 success |
+| [frontend job 96927792421](https://github.com/qw2261/soulmarker/actions/runs/32532723517/job/96927792421) | install、build、unit/component tests、E2E 与浏览器证据上传 success |
+| [docker job 96927792337](https://github.com/qw2261/soulmarker/actions/runs/32532723517/job/96927792337) | 镜像构建、非 root 断言、smoke 探针全部 success |
+
+## 说明与未包含项
+
+- 指标按 `method`/`status` 维度聚合而非原始路径，避免高基数标签导致无界内存增长；延迟直方图上界桶固定，成本可控。
+- 限流豁免将 `/metrics` 与 `/version` 视为探针/诊断端点，避免 Prometheus 抓取被 `RATE_LIMIT_REQUESTS_PER_MINUTE` 阻断。
+- `GET /metrics` 为可观测性探针路由，不对外开放为 API 业务契约，不纳入 OpenAPI paths 与 DTO schema 契约比较。
+- 本切片关闭 G6-R06 中「指标」的代码侧能力。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05、G6-R07 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+
+## Go/No-Go
+
+Go（G6-R06 指标）：代码侧实现与完整远端门禁通过，关闭 G6-R06 中「指标」能力。G6-R06 整体仍未完成（错误追踪与告警待补），G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
