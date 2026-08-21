@@ -26,6 +26,12 @@ jobs:
         run: go vet ./...
       - name: Go vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      - name: Secret scan (gitleaks)
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/src" \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            detect --source /src --no-banner --redact --config /src/.gitleaks.toml
       - name: Test
         run: go test -count=1 ./...
       - name: Race test
@@ -74,6 +80,8 @@ jobs:
           cache-dependency-path: event_go/go.sum
       - name: Install
         run: npm ci
+      - name: Production dependency vulnerability audit
+        run: npm audit --omit=dev
       - name: Build
         run: npm run build
       - name: Component tests

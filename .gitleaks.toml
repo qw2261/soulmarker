@@ -1,0 +1,20 @@
+# Soulmark 仓库级 gitleaks 配置。
+# 策略：使用 gitleaks 内置规则集，仅对测试夹具、E2E 配置与文档示例中的
+# 占位密钥（如假 JWT、Bearer 测试令牌、示例 Authorization 头）做定向豁免；
+# 源码、音译配置、Dockerfile、CI 与脚本中的真实密钥仍会被检出并使门禁失败。
+title = "soulmark gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "测试夹具、E2E 配置与文档示例中的占位密钥（非真实凭证）"
+paths = [
+  '''event_go/internal/.*_test\.go''',
+  '''event_go/web/.*\.test\.ts''',
+  '''event_go/web/.*\.spec\.ts''',
+  '''event_go/web/.*\.test\.vue''',
+  '''event_go/web/playwright\.config\.ts''',
+  '''event_go/web/e2e/.*''',
+  '''ds2api/.*''',
+]
