@@ -1,6 +1,6 @@
 # v6.1.0 测试报告
 
-> 状态：G5.5 Remote Candidate Pass；组织审计、PII 最小授权、所有权转移与 Go 安全补丁完整远端门禁通过
+> 状态：G5.5 Remote Candidate Pass；组织审计、PII 最小授权、所有权转移、Go 安全补丁与三组织试点验收证据完整远端门禁通过
 
 ## 版本身份
 
@@ -85,7 +85,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 
 ## G5.5 候选远端门禁
 
-> 状态：Remote Candidate Pass；功能候选 Commit `6938149`、Go 安全补丁 `9b3e8a8` 与回填 `7b28647` 绑定远端 Run `32515720494` 全部 success。
+> 状态：Remote Candidate Pass；功能候选 Commit `6938149`、Go 安全补丁 `9b3e8a8`、回填 `7b28647`（Run `32515720494`）与验收证据 `63a72a9`（Run `32522959668`）全部 success。
 
 | 门禁 | 结果 |
 |---|---|
@@ -96,7 +96,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | `go test -race -count=1 ./...` | 通过，零数据竞争 |
 | OpenAPI/Router 契约 | 通过；补齐 `listOrganizationAudits`、`transferOrganizationOwnership`、`OrganizationAuditResponse`、`TransferOrganizationOwnerRequest` 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` |
 | Go 安全补丁 | 首次远端候选因 Go `1.25.12` 标准库可达漏洞（GO-2026-6090、GO-2026-6089、GO-2026-5972）正确阻断；提升到 `1.25.13` 后同一扫描 0 可达漏洞 |
-| G5.5 剩余证据 | 三组织真实试点（通过，见 [acceptance/three-organization-pilot.md](acceptance/three-organization-pilot.md)）；剩余 e2e/浏览器矩阵、发布归档 |
+| G5.5 剩余证据 | 剩余 e2e/浏览器矩阵、发布归档 |
 
 ## G5.5 远端 CI
 
@@ -107,7 +107,11 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | [backend job 96876804640](https://github.com/qw2261/soulmarker/actions/runs/32515720494/job/96876804640) | format、vet、govulncheck、Go test 与 race 全部 success |
 | [frontend job 96876804924](https://github.com/qw2261/soulmarker/actions/runs/32515720494/job/96876804924) | install、build、unit/component tests、desktop/mobile E2E 与浏览器证据上传 success |
 | [Go 安全补丁 Commit 9b3e8a8](https://github.com/qw2261/soulmarker/commit/9b3e8a8) | 将 Go 工具链基线从 1.25.12 提升到 1.25.13，消解远端扫描发现的可达标准库漏洞 |
+| [G5.5 验收证据 Commit 63a72a9](https://github.com/qw2261/soulmarker/commit/63a72a9cf11019878083de517a572773f12280ab) | 回填 staging SMTP、两场受控活动与三组织试点真实验收证据 |
+| [GitHub Actions Run 32522959668](https://github.com/qw2261/soulmarker/actions/runs/32522959668) | success，与 Commit 63a72a9 精确绑定 |
+| [backend job 96898970164](https://github.com/qw2261/soulmarker/actions/runs/32522959668/job/96898970164) | format、vet、govulncheck、Go test 与 race 全部 success |
+| [frontend job 96898970077](https://github.com/qw2261/soulmarker/actions/runs/32522959668/job/96898970077) | install、build、unit/component tests、desktop/mobile E2E 与浏览器证据上传 success |
 
 ## Go/No-Go
 
-Go（G5.4 与 G5.5 代码候选）：自助组织 API/UI、安全邀请、desktop/mobile 四角色旅程、不可变组织审计、PII 最小授权与所有权转移均已通过完整远端门禁。完整 G5、M2 与商业化仍为 No-Go；G5.5 仍须完成真实三组织试点、e2e/浏览器矩阵并回填发布归档，之后才允许进入 G6 发布准备；在审计/PII/备份恢复/回滚门槛完成前不应启动支付开发或宣称生产就绪。
+Go（G5.4 与 G5.5 代码候选）：自助组织 API/UI、安全邀请、desktop/mobile 四角色旅程、不可变组织审计、PII 最小授权、所有权转移与三组织真实试点均已通过完整远端门禁并回填验收证据。完整 G5、M2 与商业化仍为 No-Go；G5.5 仍须完成 e2e/浏览器矩阵与发布归档，之后才允许进入 G6 发布准备；在审计/PII/备份恢复/回滚门槛完成前不应启动支付开发或宣称生产就绪。
