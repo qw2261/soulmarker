@@ -83,10 +83,10 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// isHealthPath 识别探针端点，这些路径不应被限流以免探针被误伤。
+// isHealthPath 识别探针和诊断端点，这些路径不应被限流以免探针被误伤或抓取被阻断。
 func isHealthPath(path string) bool {
 	switch path {
-	case "/health", "/healthz", "/readyz":
+	case "/health", "/healthz", "/readyz", "/metrics", "/version":
 		return true
 	default:
 		return false

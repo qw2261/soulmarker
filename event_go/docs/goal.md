@@ -466,7 +466,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 
 ### 可观测性与运维
 
-- [ ] **G6-R06** request_id、结构化日志、指标、错误追踪和告警。
+- [ ] **G6-R06** request_id、结构化日志、指标、错误追踪和告警（request_id 与结构化日志在 G3 已具备；指标由 G6.5 切片实现并闭合，错误追踪与告警仍待补）。
 - [ ] **G6-R07** liveness 与 readiness 分离，依赖异常时返回可操作状态。
 - [x] **G6-R08** 部署、迁移、备份恢复、回滚、支付关闭、故障响应 Runbook；文档见 [runbooks/operations.md](runbooks/operations.md)。「回滚」策略为 Expand-only 迁移不删列/表/触发器、应用整体前后端同制品回滚、完全撤销仅恢复升级前备份；「支付关闭」当前不适用（属 G7），已记录未来一键停新单设计原则。完成门槛中的实际演练（备份恢复/应用回滚/迁移失败/告警）仍需真实 staging 证据。
 - [x] **G6-R09** 自动备份、保留策略、恢复验证和定期演练；Commit `e390d99` / Run `32524900392` 远端通过（backend/frontend/docker 全部 success）。`Store.Backup` 基于 `VACUUM INTO` 生成一致快照，备份管理器以只读校验 `integrity_check`/schema/表数量，按 UTC 时间戳保留最近 N 份，定期恢复演练复制最新备份到临时位置校验后清理。备份恢复仍以真实 staging 持续运行与 SLO 实测验证为准。
@@ -531,6 +531,18 @@ G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名、CORS
 - [x] **G6-BP07** 功能候选 Commit `8e226fb` 与远端 CI Run `32530864989` 绑定；backend `96922429920`、docker `96922429737` 全部 success（docker 断言镜像 `/version` Commit 与 `HEAD` 一致）；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
 G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍待补，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
+
+### G6.5 当前指标切片验收
+
+- [x] **G6-M01** 新增 `internal/metrics` 包，提供基于 OpenMetrics/Prometheus 文本格式（`text/plain; version=0.0.4; charset=utf-8`）的 HTTP 运行时指标；`Registry` 记录请求总数（按 `method`/`status` 维度）、in-flight 仪表、进程启动时长与构建 provenance；延迟直方图使用固定上界桶 `{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}` 秒。
+- [x] **G6-M02** 新增 `MetricsMiddleware`（`internal/handler/middleware_metrics.go`），作为最外层中间件记录每个请求的方法、状态码与延迟；`responseWriter` 复用已有 statusCode 追踪；跳过 `/metrics` 自身以避免抓取请求自我污染 in-flight 与计数器。
+- [x] **G6-M03** `NewRouter` 注册 `GET /metrics`（复用 `buildinfo` 注入 `soulmark_build_info{version,commit}`），并将 `MetricsMiddleware` 包裹整个中间件链；`/metrics` 为非 API 业务路由，不落入 `apiRoutes()` 与 OpenAPI paths/dto schema 契约比较。
+- [x] **G6-M04** `isHealthPath` 将 `/metrics` 与 `/version` 加入豁免，使探针与指标抓取不受 `RATE_LIMIT_REQUESTS_PER_MINUTE` 限流误伤；`TestIsHealthPath` 同步扩充断言。
+- [x] **G6-M05** 新增 6 个测试（`internal/metrics`×4 + `internal/handler`×2）覆盖聚合、直方图桶累积、Prometheus 文本渲染、空 Registry、`/metrics` 路由暴露、中间件记录与抓取自跳过；本地 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`/`go test -race ./internal/metrics/... ./internal/handler/... ./internal/config/... ./internal/buildinfo/...` 全绿。
+- [x] **G6-M06** live smoke 验证：构建二进制以 `APP_ENV=test DATABASE_PATH=/tmp/metrics_smoke.db PORT=18081 RATE_LIMIT_REQUESTS_PER_MINUTE=0` 启动，`/healthz`、`/readyz`、`/version` 返回 200；抓取 `/metrics` 得到 `soulmark_http_requests_total{method="GET",status="200"} 4`、直方图各 `le` 桶累计 4、`soulmark_http_requests_in_flight 0`、`soulmark_build_info{version="dev",commit="unknown"} 1`。
+- [ ] **G6-M07** 功能候选 Commit 与远端 CI Run 绑定；backend/frontend/docker 三个 job 全部 success，证据回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+G6-M01–M06 关闭 G6-R06 中「指标」的代码侧能力（request_id、结构化日志在 G3 已具备）。G6-R06 仍缺错误追踪与告警；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6-R06 与 G6/M2 整体完成。
 
 ### 完成门槛
 

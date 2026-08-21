@@ -7,6 +7,8 @@ import (
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
 	"github.com/qw2261/soulmarker/event_go/internal/authorization"
+	"github.com/qw2261/soulmarker/event_go/internal/buildinfo"
+	"github.com/qw2261/soulmarker/event_go/internal/metrics"
 	"github.com/qw2261/soulmarker/event_go/internal/openapi"
 )
 
@@ -199,7 +201,11 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	mux.HandleFunc("GET /healthz", h.LivenessHandler)
 	mux.HandleFunc("GET /readyz", h.ReadinessHandler)
 	mux.HandleFunc("GET /version", h.VersionHandler)
+	registry := metrics.NewRegistry()
+	registry.SetBuild(buildinfo.Version, buildinfo.Commit)
+	mux.Handle("GET /metrics", registry.Handler())
 	mux.Handle("/", fallback)
 
-	return RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(RateLimitMiddleware(UserAuth(mux, h.tokens), h.config.RateLimitPerMinute), h.config.CORSOrigin))))
+	chain := RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(RateLimitMiddleware(UserAuth(mux, h.tokens), h.config.RateLimitPerMinute), h.config.CORSOrigin))))
+	return MetricsMiddleware(registry)(chain)
 }

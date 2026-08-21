@@ -67,12 +67,12 @@ func TestClientIPFallsBackToRemoteAddr(t *testing.T) {
 }
 
 func TestIsHealthPath(t *testing.T) {
-	for _, path := range []string{"/health", "/healthz", "/readyz"} {
+	for _, path := range []string{"/health", "/healthz", "/readyz", "/metrics", "/version"} {
 		if !isHealthPath(path) {
 			t.Errorf("expected %q to be a health path", path)
 		}
 	}
-	for _, path := range []string{"/api/events", "/", "/healthz/extra"} {
+	for _, path := range []string{"/api/events", "/", "/healthz/extra", "/metrics/extra"} {
 		if isHealthPath(path) {
 			t.Errorf("did not expect %q to be a health path", path)
 		}
