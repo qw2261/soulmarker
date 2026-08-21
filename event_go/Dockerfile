@@ -12,6 +12,10 @@ FROM golang:1.25.13-alpine3.24 AS backend
 
 ENV GOPROXY=https://goproxy.cn,direct
 
+ARG BUILD_VERSION=dev
+ARG BUILD_COMMIT=unknown
+ARG BUILD_TIME=unknown
+
 WORKDIR /build
 
 COPY go.mod go.sum ./
@@ -20,7 +24,9 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /web/dist /build/web/dist
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o event-go ./cmd/event-go/
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-X github.com/qw2261/soulmarker/event_go/internal/buildinfo.Version=${BUILD_VERSION} -X github.com/qw2261/soulmarker/event_go/internal/buildinfo.Commit=${BUILD_COMMIT} -X github.com/qw2261/soulmarker/event_go/internal/buildinfo.BuildTime=${BUILD_TIME}" \
+    -o event-go ./cmd/event-go/
 
 FROM alpine:3.19.1
 

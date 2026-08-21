@@ -30,6 +30,31 @@ jobs:
         run: go test -count=1 ./...
       - name: Race test
         run: go test -race -count=1 ./...
+      - name: Build binary with provenance ldflags
+        run: |
+          mkdir -p build-provenance
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          COMMIT="${GITHUB_SHA}"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CGO_ENABLED=0 go build \
+            -ldflags "-X github.com/qw2261/soulmarker/event_go/internal/buildinfo.Version=${VERSION} -X github.com/qw2261/soulmarker/event_go/internal/buildinfo.Commit=${COMMIT} -X github.com/qw2261/soulmarker/event_go/internal/buildinfo.BuildTime=${BUILD_TIME}" \
+            -o event-go ./cmd/event-go/
+          go list -m all > build-provenance/dependencies.txt
+          go env GOVERSION GOOS GOARCH > build-provenance/env.txt
+          node --version > build-provenance/node.txt 2>/dev/null || true
+          npm --version > build-provenance/npm.txt 2>/dev/null || true
+          printf '{"version":"%s","commit":"%s","commit_short":"%s","build_time":"%s","go_version":"%s","goos":"%s","goarch":"%s","trigger":"%s","workflow":"%s","run_id":"%s","run_attempt":"%s"}\n' \
+            "${VERSION}" "${COMMIT}" "${COMMIT:0:7}" "${BUILD_TIME}" "$(go version | awk '{print $3}')" "$(go env GOOS)" "$(go env GOARCH)" \
+            "${GITHUB_EVENT_NAME}" "${GITHUB_WORKFLOW}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" \
+            > build-provenance/metadata.json
+          cat build-provenance/metadata.json
+      - name: Upload build provenance artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-provenance
+          path: event_go/build-provenance
+          if-no-files-found: error
+          retention-days: 14
 
   frontend:
     runs-on: ubuntu-latest
@@ -73,8 +98,13 @@ jobs:
         working-directory: event_go
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t event-go:smoke .
+      - name: Build image with provenance build args
+        run: |
+          docker build \
+            --build-arg BUILD_VERSION="${GITHUB_REF_NAME:-dev}" \
+            --build-arg BUILD_COMMIT="${GITHUB_SHA}" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t event-go:smoke .
       - name: Run container
         run: |
           docker run -d --name event-go-smoke \
@@ -87,6 +117,11 @@ jobs:
           test "$uid" != "0" || { echo "container runs as root (uid=0)"; exit 1; }
       - name: Smoke test probes
         run: sh ./scripts/smoke.sh http://127.0.0.1:8080
+      - name: Assert /version commit matches HEAD
+        run: |
+          commit=$(curl -fsS http://127.0.0.1:8080/version | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['commit'])")
+          echo "container commit: ${commit}, expected: ${GITHUB_SHA}"
+          test "$commit" = "${GITHUB_SHA}" || { echo "version commit mismatch"; exit 1; }
       - name: Show container logs on failure
         if: failure()
         run: docker logs event-go-smoke

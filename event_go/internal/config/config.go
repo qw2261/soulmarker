@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/qw2261/soulmarker/event_go/internal/buildinfo"
 )
 
 const DefaultJWTSecret = "event-go-dev-secret-change-in-production"
@@ -54,7 +56,7 @@ func Load() *Config {
 		LogLevel:                       getEnv("LOG_LEVEL", "info"),
 		DatabasePath:                   getEnv("DATABASE_PATH", "data/event_go.db"),
 		Port:                           port,
-		Version:                        getEnv("VERSION", "dev"),
+		Version:                        getEnv("VERSION", buildinfo.DefaultVersion()),
 		CancelDeadlineHours:            getEnvInt("CANCEL_DEADLINE_HOURS", 24),
 		JWTSecret:                      getEnv("JWT_SECRET", DefaultJWTSecret),
 		JWTExpireHours:                 getEnvInt("JWT_EXPIRE_HOURS", 168),
