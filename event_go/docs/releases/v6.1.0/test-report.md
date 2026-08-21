@@ -80,6 +80,19 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | [backend job 87461129648](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129648) | format、vet、govulncheck、Go test 与 race 全部 success |
 | [frontend job 87461129666](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129666) | install、build、19 unit/component tests、6 desktop/mobile E2E 与浏览器证据上传 success |
 
+## G5.5 预提交本地门禁
+
+> 状态：Local Candidate Pass；尚未绑定 Commit 或远端 CI，不能作为正式发布证据。
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `git diff --check` | 通过 |
+| `go test ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| OpenAPI/Router 契约 | 通过；补齐 `listOrganizationAudits`、`transferOrganizationOwnership`、`OrganizationAuditResponse`、`TransferOrganizationOwnerRequest` 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` |
+| G5.5 剩余证据 | 远端 CI、三组织真实试点、e2e/浏览器矩阵、发布归档 |
+
 ## Go/No-Go
 
-Go（仅 G5.4）：自助组织 API/UI、安全邀请和 desktop/mobile 四角色旅程已通过完整远端门禁，G5-R04/G5-R06 可以关闭。完整 G5、M2 与商业化仍为 No-Go；后续还必须完成 G5.5 审计/PII/所有权转移/真实试点，以及 G6–G8 生产、支付和商业化基线。
+Go（仅 G5.4）：自助组织 API/UI、安全邀请和 desktop/mobile 四角色旅程已通过完整远端门禁，G5-R04/G5-R06 可以关闭。完整 G5、M2 与商业化仍为 No-Go；G5.5 审计/PII/所有权转移已达到本地候选门槛，但仍须先提交并通过远端 CI、再完成真实三组织试点，之后才允许进入 G6 发布准备。
