@@ -1,6 +1,6 @@
 # v6.1.0 测试报告
 
-> 状态：G5.4 Remote Candidate Pass；自助运营完整远端门禁通过
+> 状态：G5.5 Remote Candidate Pass；组织审计、PII 最小授权、所有权转移与 Go 安全补丁完整远端门禁通过
 
 ## 版本身份
 
@@ -11,12 +11,14 @@
 | G5.2 已验证 Commit | 780c4966cb20ce6384a4756db4443c4181d9161d |
 | G5.3 已验证 Commit | 00ebef05634467f5a5befb8c1de0303c82cb2a4d |
 | G5.4 已验证 Commit | 8bc0c501f7567d389cee2c2703cd02383682b80a |
+| G5.5 功能候选 Commit | 6938149 |
+| G5.5 已验证 Commit | 7b28647ac3e6cfcec41cc21676e6243fa5f8ae2e |
 | 候选分支 | origin/codex/update_project |
-| Schema | v13；v12 租户基础 + Event 稳定 tenant、索引/FK 与 `/events` N/N-1 写兼容 |
+| Schema | v14；v12 租户基础 + Event 稳定 tenant、索引/FK 与 `/events` N/N-1 写兼容；v14 不可变组织审计日志 |
 
 ## 本切片范围
 
-G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳定 Event tenant 和 scoped 业务资源。G5.4 候选新增组织自助创建、SMTP 邀请接受、成员/邀请管理和用户 JWT 驱动的租户工作台；owner/editor/checker/finance 可以在没有 Admin Token 的情况下完成免费活动运营。完整审计、PII 脱敏、所有权转移、真实三组织试点和 platform 兼容路由下线仍不在本切片。
+G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳定 Event tenant 和 scoped 业务资源。G5.4 候选新增组织自助创建、SMTP 邀请接受、成员/邀请管理和用户 JWT 驱动的租户工作台。G5.5 新增不可变组织审计、PII 角色最小授权与所有权转移并通过完整远端门禁；真实三组织试点和 platform 兼容路由下线仍不在本切片。
 
 ## 需求追溯
 
@@ -41,7 +43,7 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 
 | 门禁 | 结果 |
 |---|---|
-| Go Test pass 事件数量 | 350（含表驱动 subtest；不使用 covdata） |
+| Go Test pass 事件数量 | 364（含表驱动 subtest；不使用 covdata） |
 | `go test -count=1 ./...` | 通过 |
 | `go test -race -count=1 ./...` | 通过，零数据竞争 |
 | `go vet ./...` | 通过，无警告 |
@@ -80,19 +82,31 @@ G5.1 交付租户数据基础，G5.2 交付集中授权内核，G5.3 交付稳�
 | [backend job 87461129648](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129648) | format、vet、govulncheck、Go test 与 race 全部 success |
 | [frontend job 87461129666](https://github.com/qw2261/soulmarker/actions/runs/29447383045/job/87461129666) | install、build、19 unit/component tests、6 desktop/mobile E2E 与浏览器证据上传 success |
 
-## G5.5 预提交本地门禁
+## G5.5 候选远端门禁
 
-> 状态：Local Candidate Pass；尚未绑定 Commit 或远端 CI，不能作为正式发布证据。
+> 状态：Remote Candidate Pass；功能候选 Commit `6938149`、Go 安全补丁 `9b3e8a8` 与回填 `7b28647` 绑定远端 Run `32515720494` 全部 success。
 
 | 门禁 | 结果 |
 |---|---|
 | `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
 | `git diff --check` | 通过 |
-| `go test ./...` | 通过 |
+| `go test -count=1 ./...` | 通过 |
 | `go vet ./...` | 通过 |
+| `go test -race -count=1 ./...` | 通过，零数据竞争 |
 | OpenAPI/Router 契约 | 通过；补齐 `listOrganizationAudits`、`transferOrganizationOwnership`、`OrganizationAuditResponse`、`TransferOrganizationOwnerRequest` 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` |
-| G5.5 剩余证据 | 远端 CI、三组织真实试点、e2e/浏览器矩阵、发布归档 |
+| Go 安全补丁 | 首次远端候选因 Go `1.25.12` 标准库可达漏洞（GO-2026-6090、GO-2026-6089、GO-2026-5972）正确阻断；提升到 `1.25.13` 后同一扫描 0 可达漏洞 |
+| G5.5 剩余证据 | 三组织真实试点、e2e/浏览器矩阵、发布归档 |
+
+## G5.5 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G5.5 功能候选 Commit 6938149](https://github.com/qw2261/soulmarker/commit/6938149) | Schema v14 不可变审计、OrganizationAudit 中间件、审计列表、PII 最小授权、所有权转移与隐私/契约测试 |
+| [GitHub Actions Run 32515720494](https://github.com/qw2261/soulmarker/actions/runs/32515720494) | success，与 Commit 7b28647 精确绑定 |
+| [backend job 96876804640](https://github.com/qw2261/soulmarker/actions/runs/32515720494/job/96876804640) | format、vet、govulncheck、Go test 与 race 全部 success |
+| [frontend job 96876804924](https://github.com/qw2261/soulmarker/actions/runs/32515720494/job/96876804924) | install、build、unit/component tests、desktop/mobile E2E 与浏览器证据上传 success |
+| [Go 安全补丁 Commit 9b3e8a8](https://github.com/qw2261/soulmarker/commit/9b3e8a8) | 将 Go 工具链基线从 1.25.12 提升到 1.25.13，消解远端扫描发现的可达标准库漏洞 |
 
 ## Go/No-Go
 
-Go（仅 G5.4）：自助组织 API/UI、安全邀请和 desktop/mobile 四角色旅程已通过完整远端门禁，G5-R04/G5-R06 可以关闭。完整 G5、M2 与商业化仍为 No-Go；G5.5 审计/PII/所有权转移已达到本地候选门槛，但仍须先提交并通过远端 CI、再完成真实三组织试点，之后才允许进入 G6 发布准备。
+Go（G5.4 与 G5.5 代码候选）：自助组织 API/UI、安全邀请、desktop/mobile 四角色旅程、不可变组织审计、PII 最小授权与所有权转移均已通过完整远端门禁。完整 G5、M2 与商业化仍为 No-Go；G5.5 仍须完成真实三组织试点、e2e/浏览器矩阵并回填发布归档，之后才允许进入 G6 发布准备；在审计/PII/备份恢复/回滚门槛完成前不应启动支付开发或宣称生产就绪。
