@@ -463,3 +463,16 @@ type HealthResponse struct {
 	UptimeSeconds int64  `json:"uptime_seconds"`
 	DB            string `json:"db"`
 }
+
+// LivenessResponse 是 liveness 探针的响应，仅表示进程存活，不探测依赖。
+type LivenessResponse struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
+// ReadinessResponse 是 readiness 探针的响应，反映依赖（数据库）是否就绪。
+type ReadinessResponse struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+	DB      string `json:"db"`
+}

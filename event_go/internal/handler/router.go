@@ -193,6 +193,8 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	registerAPIFallback(mux, "/api/v1", v1FallbackRoutes)
 	registerAPIFallback(mux, "/api", routes)
 	mux.HandleFunc("GET /health", h.HealthHandler)
+	mux.HandleFunc("GET /healthz", h.LivenessHandler)
+	mux.HandleFunc("GET /readyz", h.ReadinessHandler)
 	mux.Handle("/", fallback)
 
 	return RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(UserAuth(mux, h.tokens), h.config.CORSOrigin))))

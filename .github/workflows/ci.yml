@@ -65,3 +65,33 @@ jobs:
           path: event_go/test_reports
           if-no-files-found: ignore
           retention-days: 14
+
+  docker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: event_go
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t event-go:smoke .
+      - name: Run container
+        run: |
+          docker run -d --name event-go-smoke \
+            -e APP_ENV=development \
+            -p 8080:8080 \
+            event-go:smoke
+      - name: Assert non-root runtime user
+        run: |
+          uid=$(docker exec event-go-smoke id -u)
+          test "$uid" != "0" || { echo "container runs as root (uid=0)"; exit 1; }
+      - name: Smoke test probes
+        run: sh ./scripts/smoke.sh http://127.0.0.1:8080
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs event-go-smoke
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop event-go-smoke >/dev/null 2>&1 || true
+          docker rm event-go-smoke >/dev/null 2>&1 || true

@@ -310,6 +310,35 @@ func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: data})
 }
 
+// LivenessHandler 是 liveness 探针，进程存活即返回 200，不探测任何依赖。
+func (h *Handler) LivenessHandler(w http.ResponseWriter, r *http.Request) {
+	data := dto.LivenessResponse{Status: "ok", Version: h.version}
+	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: data})
+}
+
+// ReadinessHandler 是 readiness 探针，依赖（数据库）就绪返回 200，否则返回 503。
+func (h *Handler) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
+	dbStatus := "connected"
+	if err := h.store.Ping(); err != nil {
+		dbStatus = "disconnected"
+		slog.Error("readiness check database failure", "error", err)
+	}
+
+	status := "ok"
+	httpStatus := http.StatusOK
+	code := 200
+	var errorCode string
+	if dbStatus == "disconnected" {
+		status = "not_ready"
+		httpStatus = http.StatusServiceUnavailable
+		code = 503
+		errorCode = string(api.CodeServiceUnavailable)
+	}
+
+	data := dto.ReadinessResponse{Status: status, Version: h.version, DB: dbStatus}
+	writeJSON(w, httpStatus, dto.Response{Code: code, Message: status, Data: data, ErrorCode: errorCode})
+}
+
 // CORS 中间件使用启动时注入的允许来源处理跨域请求。
 func CORS(next http.Handler, allowedOrigin string) http.Handler {
 	if allowedOrigin == "" {

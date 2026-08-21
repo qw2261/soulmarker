@@ -1424,6 +1424,125 @@ func TestHealthHandlerResponseStructure(t *testing.T) {
 	}
 }
 
+func TestLivenessHandler(t *testing.T) {
+	// liveness 探针只关心进程存活，不依赖数据库；即使数据库已关闭也应返回 200。
+	s := mustNewStore(t)
+	defer s.Close()
+	cfg := config.Load()
+	cfg.Version = "dev"
+	h := newTestHandler(s, cfg)
+
+	// 关闭数据库，模拟依赖异常，验证 liveness 不受影响。
+	if err := s.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	h.LivenessHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+	if data["status"] != "ok" {
+		t.Errorf("expected status ok, got %v", data["status"])
+	}
+	if data["version"] != "dev" {
+		t.Errorf("expected version dev, got %v", data["version"])
+	}
+}
+
+func TestReadinessHandlerHealthy(t *testing.T) {
+	s := mustNewStore(t)
+	defer s.Close()
+	cfg := config.Load()
+	cfg.Version = "dev"
+	h := newTestHandler(s, cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	h.ReadinessHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+	if data["status"] != "ok" {
+		t.Errorf("expected status ok, got %v", data["status"])
+	}
+	if data["db"] != "connected" {
+		t.Errorf("expected db connected, got %v", data["db"])
+	}
+	if data["version"] != "dev" {
+		t.Errorf("expected version dev, got %v", data["version"])
+	}
+}
+
+func TestReadinessHandlerUnhealthy(t *testing.T) {
+	s := mustNewStore(t)
+	defer s.Close()
+	cfg := config.Load()
+	cfg.Version = "dev"
+	h := newTestHandler(s, cfg)
+
+	// 关闭数据库，模拟依赖不可用，readiness 应返回 503。
+	if err := s.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	h.ReadinessHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+	if data["status"] != "not_ready" {
+		t.Errorf("expected status not_ready, got %v", data["status"])
+	}
+	if data["db"] != "disconnected" {
+		t.Errorf("expected db disconnected, got %v", data["db"])
+	}
+}
+
 func TestHandlerUsesStartupConfigSnapshot(t *testing.T) {
 	s := mustNewStore(t)
 	defer s.Close()
