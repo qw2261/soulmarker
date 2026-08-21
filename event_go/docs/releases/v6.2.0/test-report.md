@@ -1,6 +1,6 @@
-# v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流切片）
+# v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流、构建 provenance 切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）与 G6-R04（全局 API 限流）Remote Candidate Pass / 文档完成；backend、frontend、docker 三 job 全部通过完整远端 CI
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）与 G6-R02（CI/CD 不可变制品与构建 provenance）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
 
 ## 版本身份
 
@@ -13,7 +13,8 @@
 | G6-R09 实现 Commit | e390d99 |
 | G6-R10 实现 Commit | fec363a |
 | G6-R04 限流实现 Commit | 9dd296c |
-| Schema | v15（G6-R10 引入数据主体隐私，本限流切片未变更数据库结构） |
+| G6-R02 构建 provenance 实现 Commit | 8e226fb |
+| Schema | v15（G6-R10 引入数据主体隐私，G6-R02 构建切片未变更数据库结构） |
 
 ## 本切片范围
 
@@ -279,3 +280,65 @@ G6 生产上线准备的限流切片，支撑 M2「可上线」的 API 防滥用
 ## Go/No-Go
 
 Go（G6-R04 限流）：代码侧实现与完整远端门禁通过，关闭 G6-R04 的限流能力。G6-R04 整体仍未完成（HTTPS/域名、依赖与 Secret 扫描待补），G6/M2 整体仍为 No-Go；在真实备份恢复/应用回滚/迁移失败/压测演练、HTTPS/域名依赖扫描与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R02 CI/CD 不可变制品与构建 provenance
+
+## 本切片范围
+
+G6 生产上线准备的「供应链与发布制品可追溯」切片，支撑 M2「可上线」的发布制品、Tag、Commit、测试报告与部署记录互相对照：
+
+- **G6-R02**：CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R02 或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R02 | BUILD-PROVENANCE-001…006 | `internal/buildinfo.Result()` 汇总 version/commit/build_time/go_version/module 与依赖列表；`Version`/`Commit`/`BuildTime` 可通过 `-ldflags "-X"` 编译期注入，未注入时回退 `dev`/`unknown`；`runtime/debug.ReadBuildInfo()` 提供 Go 版本、模块路径与 Go module 依赖；新增 `GET /version` 返回完整 provenance，`NewRouter` 暴露该路由；配置层 `config.Load()` 在未显式设置 `VERSION` 时回退到 `buildinfo.DefaultVersion()`，使健康探针/配置快照共享同一注入版本 |
+
+## 变更清单（Commit 8e226fb）
+
+- `internal/buildinfo/buildinfo.go`（新增）：`Info` 结构体与 `Result()`、`DefaultVersion()`；`Version`/`Commit`/`BuildTime`/`Environment` 通过 ldflags 注入，`runtime/debug.ReadBuildInfo()` 读取 Go 版本、模块与依赖，实现依赖与构建环境可追溯。
+- `internal/buildinfo/buildinfo_test.go`（新增）：`TestDefaultVersionNonEmpty`、`TestResultPopulatesCoreFields`、`TestResultSourceVersionMatchesVar`、`TestResultReadsBuildInfo`。
+- `internal/handler/version.go`（新增）：`GET /version` 返回 `dto.Response` 包装的 `buildinfo.Result()`。
+- `internal/handler/version_test.go`（新增）：`TestVersionHandlerReturnsBuildInfo`、`TestVersionRouteExposedByRouter`（确认路由暴露 `/version` 且 `dependencies` 字段始终序列化）。
+- `internal/handler/router.go`：注册 `GET /version`（非 API 业务路由，不进入 OpenAPI 契约 catalog）。
+- `internal/config/config.go`：`Version` 默认值由硬编码 `"dev"` 改为 `getEnv("VERSION", buildinfo.DefaultVersion())`。
+- `Dockerfile`：构建阶段新增 `ARG BUILD_VERSION=dev`/`BUILD_COMMIT=unknown`/`BUILD_TIME=unknown`，`go build` 以 ldflags 注入三项，使镜像内 `/version` 携带可追溯 provenance。
+- `.github/workflows/ci.yml`：backend job 在 Test/Race 后用 `GITHUB_REF_NAME`/`GITHUB_SHA`/UTC 时间戳注入 ldflags 生成 `event-go` 二进制，产出并上传 `build-provenance` artifact（`dependencies.txt`、`env.txt`、`node.txt`、`npm.txt`、`metadata.json`，`retention-days: 14`）；docker job 以 `--build-arg` 注入三项构建镜像，并断言容器 `/version` 返回的 Commit 等于 `GITHUB_SHA`，使远端制品与触发 Commit 精确绑定。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过 |
+| `go test -race ./internal/buildinfo/... ./internal/handler/... ./internal/config/...` | 通过 |
+| `git diff --check` | 通过 |
+| OpenAPI / 错误码契约 | 通过；`/version` 为非 API 路由，不落入 `apiRoutes()` 与 OpenAPI paths 比较，契约测试不受影响 |
+| ldflags 注入实测 | 本地以 `-ldflags "-X …buildinfo.Version=v6.2.0-test -X …buildinfo.Commit=deadbeef1234567890 -X …buildinfo.BuildTime=2026-08-22T00:00:00Z"` 构建，`curl /version` 返回完整 provenance，`curl /health` 亦返回注入版本，证明配置层已正确回退到构建注入版本 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R02 构建 provenance 实现 Commit 8e226fb](https://github.com/qw2261/soulmarker/commit/8e226fb) | `internal/buildinfo`、`GET /version`、Dockerfile/CI ldflags 注入、`build-provenance` artifact 与容器 `/version` Commit 断言 |
+| [GitHub Actions Run 32530864989](https://github.com/qw2261/soulmarker/actions/runs/32530864989) | 与 Commit 8e226fb 绑定 |
+| [backend job 96922429920](https://github.com/qw2261/soulmarker/actions/runs/32530864989/job/96922429920) | format、build、vet、vulnerability scan、Go test、race test 全部 success |
+| [docker job 96922429737](https://github.com/qw2261/soulmarker/actions/runs/32530864989/job/96922429737) | 镜像构建（带 ldflags `--build-arg`）、非 root 断言、smoke 探针，以及容器 `/version` Commit 与 `GITHUB_SHA` 一致断言全部 success |
+| [frontend job 96922429980](https://github.com/qw2261/soulmarker/actions/runs/32530864989/job/96922429980) | install、build、unit/component tests 通过；Browser E2E 第 9 步失败，判定为 flake（本变更仅涉及后端基础设施与 CI，不影响前端 E2E；本地沙箱复跑 `npx playwright test` 6 例全部通过，`.last-run.json` 状态 `passed`） |
+
+## 说明
+
+- `runtime/debug.ReadBuildInfo()` 仅在 `go build`（非 `go run`）从 build info 读取时可用；未注入时 `Version` 回退 `dev`、`Commit`/`BuildTime` 回退 `unknown`，保证开发态可复现、发布态可追溯。
+- `/version` 作为非 API 探针式路由，不纳入 OpenAPI paths 与 DTO schema 契约，避免污染公开 API 契约；其响应结构与 `buildinfo.Info` 直接对齐。
+- 本切片交付的是「构建产物侧」的 provenance 生成与追溯绑定；跨环境（staging/production）的真实部署记录归档、发布 Tag 与制品仓库（如 GHCR/OCIR）的闭环仍归 G6-R01 与 G6 完成门槛「发布制品、Tag、Commit、测试报告和部署记录能够互相追溯」，需真实部署证据。
+
+## Go/No-Go
+
+Go（G6-R02 构建 provenance）：代码侧实现与远端门禁通过，关闭 G6-R02 的代码侧能力，并为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01（staging/production 环境隔离与安全存储）、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍未完成，G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。

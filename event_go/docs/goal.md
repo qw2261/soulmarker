@@ -459,7 +459,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 ### 部署与供应链
 
 - [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理。
-- [ ] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境。
+- [x] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境；Commit `8e226fb` / Run `32530864989`（backend `96922429920`、docker `96922429737` success；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过）。通过 `internal/buildinfo`（ldflags 注入 Version/Commit/BuildTime，`runtime/debug.ReadBuildInfo` 读 Go 版本/模块/依赖）、`GET /version` 端点、Dockerfile/CI ldflags 注入与 `build-provenance` artifact 上传实现；docker job 断言容器 `/version` 的 Commit 与 `GITHUB_SHA` 一致，使发布制品、Commit 与触发 workflow 精确绑定。「发布制品、Tag、Commit、测试报告与部署记录互相追溯」的完成门槛仍以真实 staging 部署归档为准（见 G6-R01 与完成门槛）。
 - [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
 - [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，HTTPS/域名、依赖与 Secret 扫描仍待补）。
 - [ ] **G6-R05** 数据库迁移先于应用灰度，并保持 N/N-1 应用兼容。
@@ -519,6 +519,18 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 - [x] **G6-RL06** 本地门禁全绿：`gofmt`、`go build`、`go vet`、`go test -count=1 ./...`（361 个顶层测试）、`go test -race ./internal/config/... ./internal/api/... ./internal/handler/...`、OpenAPI/错误码契约；功能候选 Commit `9dd296c` 与远端 CI Run `32529278311` 绑定，backend `96917861081`、frontend `96917860783`、docker `96917861062` 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
 
 G6-RL01–RL06 关闭 G6-R04 中的限流能力。G6-R04 的 HTTPS/域名、CORS 收口（除已由 G1-R08 提供的安全头）、依赖与 Secret 扫描仍待补，不能据此宣称 G6-R04 与 G6/M2 完成。
+
+### G6.4 当前构建 provenance 切片验收
+
+- [x] **G6-BP01** 新增 `internal/buildinfo` 包，定义 `Info` 结构体（Version、Commit、BuildTime、Environment、GoVersion、Module、Dependencies）；`Version`/`Commit`/`BuildTime`/`Environment` 通过 `-ldflags "-X"` 编译期注入，未注入时回退「dev」/「unknown」；`runtime/debug.ReadBuildInfo()` 读取 Go 版本、模块路径与 Go module 依赖。
+- [x] **G6-BP02** 新增 `GET /version` 端点（`internal/handler/version.go`）返回 `buildinfo.Result()` 完整 provenance；`NewRouter` 暴露该路由，且为非 API 业务路由，不落入 `apiRoutes()` 与 OpenAPI paths/dto schema 契约比较。
+- [x] **G6-BP03** 配置层回退：`config.Load()` 的 `Version` 默认值由硬编码 `"dev"` 改为 `getEnv("VERSION", buildinfo.DefaultVersion())`，使未显式设置 `VERSION` 时健康探针/配置快照共享构建注入版本。
+- [x] **G6-BP04** Dockerfile 构建阶段新增 `ARG BUILD_VERSION`/`BUILD_COMMIT`/`BUILD_TIME` 并以 ldflags 注入 `go build`，镜像内 `/version` 携带可追溯 provenance；CI docker job 以 `--build-arg` 注入三项，并断言容器 `/version` 的 Commit 等于 `GITHUB_SHA`。
+- [x] **G6-BP05** CI backend job 用 `GITHUB_REF_NAME`/`GITHUB_SHA`/UTC 时间戳注入 ldflags 生成 `event-go` 二进制，产出并上传 `build-provenance` artifact（`dependencies.txt`、`env.txt`、`node.txt`、`npm.txt`、`metadata.json`，`retention-days: 14`），记录版本、Commit、构建时间、Go 版本与依赖。
+- [x] **G6-BP06** 新增 6 个 Go 测试（`internal/buildinfo`×4 + `internal/handler/version`×2）覆盖 source version 回退、核心字段填充、`ReadBuildInfo`、handler 响应与路由暴露；本地 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`/`go test -race ./internal/buildinfo/... ./internal/handler/... ./internal/config/...` 全绿。
+- [x] **G6-BP07** 功能候选 Commit `8e226fb` 与远端 CI Run `32530864989` 绑定；backend `96922429920`、docker `96922429737` 全部 success（docker 断言镜像 `/version` Commit 与 `HEAD` 一致）；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+G6-BP01–BP07 关闭 G6-R02 的代码侧能力，为「发布制品、Tag、Commit、测试报告与部署记录互相追溯」提供构建侧基础。G6-R01 的环境隔离/安全存储、G6-R04 的 HTTPS/域名与依赖/Secret 扫描、G6-R05/R06 仍待补，且「发布制品可追溯」的完成门槛仍需真实 staging 部署归档，不能据此宣称 G6-R02 与 G6/M2 整体完成。
 
 ### 完成门槛
 
