@@ -898,6 +898,138 @@ func TestMigrationFailureIsReturned(t *testing.T) {
 	}
 }
 
+func TestMigrateCreatesCurrentSchemaOnEmptyDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migrate-empty.db")
+	version, err := Migrate(path)
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if version != CurrentSchemaVersion {
+		t.Fatalf("expected version %d, got %d", CurrentSchemaVersion, version)
+	}
+	// 迁移完成后，应用可直接打开同一库且不会重复迁移。
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("OpenStore after Migrate: %v", err)
+	}
+	defer s.Close()
+	assertSchemaVersion(t, s.db, CurrentSchemaVersion)
+}
+
+func TestMigrateIsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migrate-idempotent.db")
+	if _, err := Migrate(path); err != nil {
+		t.Fatalf("Migrate pass 1: %v", err)
+	}
+	version, err := Migrate(path)
+	if err != nil {
+		t.Fatalf("Migrate pass 2: %v", err)
+	}
+	if version != CurrentSchemaVersion {
+		t.Fatalf("expected version %d after second migrate, got %d", CurrentSchemaVersion, version)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
+		t.Fatalf("count migrations: %v", err)
+	}
+	if count != CurrentSchemaVersion {
+		t.Fatalf("expected %d migration rows, got %d", CurrentSchemaVersion, count)
+	}
+}
+
+func TestMigrationExpandOnlyOldAppCompatibility(t *testing.T) {
+	// 构建当前 Schema vN（最新）的库，模拟 N-1 应用（旧版本，不感知新增的
+	// users.deleted_at 与 data_subject_requests）仍可读写既有表。SQLite ALTER TABLE
+	// ADD COLUMN 只在表尾追加列，旧应用未显式引用的新列默认为 NULL/有默认值，因此
+	// 只要旧应用使用显式列清单（Go sql 驱动始终如此），写入与读取均不受影响。
+	path := filepath.Join(t.TempDir(), "expand-only.db")
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	for _, u := range []struct {
+		id      int64
+		name    string
+		contact string
+	}{
+		{1, "旧应用用户一", "old-app@example.com"},
+		{2, "旧应用用户二", "old-app-2@example.com"},
+	} {
+		if _, err := db.Exec(
+			`INSERT INTO users (id, name, contact, password_hash, created_at) VALUES (?, ?, ?, 'hash', '2026-01-01T00:00:00Z')`,
+			u.id, u.name, u.contact,
+		); err != nil {
+			t.Fatalf("N-1 app insert user %d: %v", u.id, err)
+		}
+	}
+	if _, err := db.Exec(
+		`INSERT INTO organizations (id, name, slug, status, created_at, updated_at)
+		 VALUES (1, '旧应用组织', 'old-app-org', 'unclaimed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	); err != nil {
+		t.Fatalf("N-1 app insert organization: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO organizers (id, organization_id, name, description, contact, logo_url, address, website, tags, created_at, updated_at)
+		 VALUES (1, 1, '旧应用门店', '', 'operator@example.com', '', '', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	); err != nil {
+		t.Fatalf("N-1 app insert organizer: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO events (id, organizer_id, title, description, cover_url, event_time, location, capacity, price, status, created_at, updated_at)
+		 VALUES (1, 1, '旧应用活动', '', '', '2099-01-01T00:00:00Z', '线上', 10, 0, 'published', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+	); err != nil {
+		t.Fatalf("N-1 app insert event: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO registrations (id, event_id, user_id, name, contact, ticket_id, ticket_name, identity_status, created_at)
+		 VALUES (1, 1, 1, '旧应用用户一', 'old-app@example.com', NULL, '', 'verified', '2026-01-01T00:00:00Z')`,
+	); err != nil {
+		t.Fatalf("N-1 app insert registration: %v", err)
+	}
+
+	var name string
+	if err := db.QueryRow(`SELECT name FROM users WHERE id = 1`).Scan(&name); err != nil {
+		t.Fatalf("N-1 app read user: %v", err)
+	}
+	if name != "旧应用用户一" {
+		t.Fatalf("unexpected user name: %q", name)
+	}
+	var authVersion int
+	if err := db.QueryRow(`SELECT version FROM user_auth_versions WHERE user_id = 1`).Scan(&authVersion); err != nil {
+		t.Fatalf("auth version missing for N-1 app: %v", err)
+	}
+	if authVersion != 1 {
+		t.Fatalf("unexpected auth version: %d", authVersion)
+	}
+
+	// 新 Schema 仍为当前版本，且库可被当前版本应用再次打开并读取旧应用写入的数据。
+	assertSchemaVersion(t, db, CurrentSchemaVersion)
+	restored, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("reopen migrated database: %v", err)
+	}
+	defer restored.Close()
+	event, err := restored.GetEvent(1)
+	if err != nil || event == nil || event.Title != "旧应用活动" {
+		t.Fatalf("N-1 app event lost after reopen: event=%+v err=%v", event, err)
+	}
+}
+
 func assertSchemaVersion(t *testing.T, db *sql.DB, want int) {
 	t.Helper()
 	var got int

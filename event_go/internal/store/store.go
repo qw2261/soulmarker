@@ -61,8 +61,9 @@ func (s *Store) Backup(destPath string) (int64, error) {
 	return info.Size(), nil
 }
 
-// OpenStore 打开数据库并执行版本化迁移，任何初始化失败都会返回给调用方。
-func OpenStore(dbPath string) (*Store, error) {
+// prepareDB 打开 SQLite 数据库并应用连接级基础配置（WAL / busy_timeout）。
+// 供 OpenStore 与独立迁移入口 Migrate 共用，保证两者对库的初始化一致。
+func prepareDB(dbPath string) (*sql.DB, error) {
 	if dbPath != ":memory:" && !strings.HasPrefix(dbPath, "file:") {
 		dir := filepath.Dir(dbPath)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -74,21 +75,33 @@ func OpenStore(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库失败: %w", err)
 	}
-	closeOnError := func(err error) (*Store, error) {
-		_ = db.Close()
-		return nil, err
-	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
 	if err := db.Ping(); err != nil {
-		return closeOnError(fmt.Errorf("连接数据库失败: %w", err))
+		_ = db.Close()
+		return nil, fmt.Errorf("连接数据库失败: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		return closeOnError(fmt.Errorf("设置 WAL 模式失败: %w", err))
+		_ = db.Close()
+		return nil, fmt.Errorf("设置 WAL 模式失败: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		return closeOnError(fmt.Errorf("设置 busy_timeout 失败: %w", err))
+		_ = db.Close()
+		return nil, fmt.Errorf("设置 busy_timeout 失败: %w", err)
+	}
+	return db, nil
+}
+
+// OpenStore 打开数据库并执行版本化迁移，任何初始化失败都会返回给调用方。
+func OpenStore(dbPath string) (*Store, error) {
+	db, err := prepareDB(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	closeOnError := func(err error) (*Store, error) {
+		_ = db.Close()
+		return nil, err
 	}
 	if err := migrate(db); err != nil {
 		return closeOnError(fmt.Errorf("数据库迁移失败: %w", err))
@@ -101,6 +114,32 @@ func OpenStore(dbPath string) (*Store, error) {
 	}
 
 	return &Store{db: db}, nil
+}
+
+// Migrate 独立执行数据库迁移，供 `event-go migrate` 命令在应用灰度前单独运行，
+// 使数据库先于新应用版本就绪。与 OpenStore 使用同一批迁移（migrations()），
+// 将库推进到当前 Schema（CurrentSchemaVersion）并完成外键一致性校验，随后关闭数据库。
+// 幂等：已应用过的迁移不会重复执行；返回最终 Schema 版本。
+func Migrate(dbPath string) (int, error) {
+	db, err := prepareDB(dbPath)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	if err := migrate(db); err != nil {
+		return 0, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		return 0, fmt.Errorf("启用外键失败: %w", err)
+	}
+	if err := validateForeignKeys(db); err != nil {
+		return 0, err
+	}
+	var version int
+	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("读取迁移版本失败: %w", err)
+	}
+	return version, nil
 }
 
 // NewStore 打开数据库并显式返回初始化错误。

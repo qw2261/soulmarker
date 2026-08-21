@@ -8,7 +8,7 @@
 
 ## 0. 前置事实（本文依据）
 
-- 数据库：SQLite，启动时自动执行版本化迁移，`schema_migrations` 记录已应用版本；当前 Schema v14。
+- 数据库：SQLite，版本化迁移在应用启动时自动执行，也可用 `event-go migrate` 在应用灰度前独立预迁移；`schema_migrations` 记录已应用版本；当前 Schema v15。
 - 迁移模式：**Expand-only**，创建新表/新列/新索引/兼容触发器，**不删除旧列或旧表**；完全撤销仅靠恢复升级前备份。
 - 备份（G6-R09）：`Store.Backup` 基于 `VACUUM INTO` 生成一致快照；备份管理器以只读校验 `integrity_check`/schema/表数量，按 UTC 时间戳保留最近 N 份，定期恢复演练复制最新备份到临时位置校验后清理。
 - 运行环境变量（`internal/config/config.go`）：
@@ -76,17 +76,23 @@ curl -fsS http://localhost:8080/readyz      # 依赖就绪（否则 503）
 
 ### 2.1 执行方式
 
-迁移在应用启动时由 `store.OpenStore` → `migrate` 自动执行，按 `migrations()` 顺序，每个迁移在独立事务中应用并写入 `schema_migrations`，失败即回滚该事务并拒绝启动。**无独立迁移 CLI**。
+迁移有两种执行方式，均基于同一批迁移（`store.migrations()`），按 `migrations()` 顺序在独立事务中应用并写入 `schema_migrations`，失败即回滚该事务并拒绝启动：
+
+1. **应用启动自动执行**：`store.OpenStore` → `migrate` 在启动时把库推进到 `CurrentSchemaVersion`。已应用于 `schema_migrations` 的版本不会重复执行（幂等）。
+2. **独立预迁移**（G6-R05，推荐用于灰度前）：`event-go migrate` 仅读取 `DATABASE_PATH` 并执行迁移，随后关闭数据库并退出，不启动 HTTP 服务。迁移先于新应用版本就绪，应用启动时跳过已应用迁移。
+
+`event-go migrate` 是幂等的，可重复执行；结束时返回最终 Schema 版本（如 `Schema 版本: 15`）。该命令只依赖 `DATABASE_PATH`，不校验 SMTP/JWT 等运行期配置，因此可在运行期配置完备前先行迁移。
 
 ### 2.2 升级步骤
 
 1. 停止写入；记录当前应用 Commit、Schema 版本与 `DATABASE_PATH`。
 2. 做一致性备份（推荐先正常停止应用再复制单文件，或用 `VACUUM INTO`，见第 3 节）。
-3. 部署新镜像，让其自动应用迁移。
-4. 应用后校验：
+3. **先迁移**：`DATABASE_PATH=<path> ./event-go migrate` 把库推进到当前 Schema（迁移先于应用灰度）。
+4. 部署新镜像启动应用（启动时自动迁移已为 no-op）。
+5. 应用后校验：
 
 ```sql
-SELECT MAX(version) FROM schema_migrations;   -- 期望为最新版本，当前 14
+SELECT MAX(version) FROM schema_migrations;   -- 期望为最新版本，当前 15
 PRAGMA foreign_key_check;                      -- 期望无行
 ```
 
@@ -94,7 +100,7 @@ PRAGMA foreign_key_check;                      -- 期望无行
 
 ### 2.3 迁移失败处理
 
-- 应用因迁移失败而启动失败时，进程不会监听端口；直接检查日志定位失败的迁移号与名称。
+- `event-go migrate` 或应用启动因迁移失败而退出时，进程不会监听端口；直接检查日志定位失败的迁移号与名称。
 - 使用**前向修复**：提交修复该迁移的新迁移，而不是手工改库或 DROP。
 - 需要立即恢复服务时，回滚到上一兼容制品并恢复升级前备份（见第 4 节）。
 
@@ -130,7 +136,7 @@ cp /app/data/event_go.db /app/data/backups/manual-$(date -u +%Y%m%dT%H%M%S).db
 1. 停止应用，避免写入。
 2. 选择一份已校验的备份（可用恢复演练或 `PRAGMA integrity_check` 验证）。
 3. 复制备份为 `DATABASE_PATH` 目标文件；确认目标文件不存在或已移走（避免覆盖冲突）。
-4. 重新启动应用，让迁移补齐到当前 Schema 版本。
+4. 先运行 `event-go migrate`（或重启应用让其自动补齐）到当前 Schema 版本。
 5. 校验 `readyz`、`SELECT MAX(version) FROM schema_migrations` 与关键业务数据。
 
 > RPO/RTO 目标见 [goal.md](../goal.md) 初始 SLO（Public Beta：RPO ≤ 24h、RTO ≤ 4h）。

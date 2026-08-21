@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +24,10 @@ import (
 const staticDir = "web/dist"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		runMigrate()
+		return
+	}
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("配置校验失败: %v", err)
@@ -187,6 +192,19 @@ func main() {
 		log.Printf("服务关闭失败: %v", err)
 	}
 	log.Println("✅ 服务已关闭")
+}
+
+func runMigrate() {
+	cfg := config.Load()
+	if strings.TrimSpace(cfg.DatabasePath) == "" {
+		log.Fatalf("迁移需要设置 DATABASE_PATH")
+	}
+	log.Printf("🛠  正在将数据库迁移至当前 Schema: %s", cfg.DatabasePath)
+	version, err := store.Migrate(cfg.DatabasePath)
+	if err != nil {
+		log.Fatalf("数据库迁移失败: %v", err)
+	}
+	log.Printf("✅ 数据库迁移完成，Schema 版本: %d", version)
 }
 
 func spaHandler(root string) http.HandlerFunc {
