@@ -332,8 +332,11 @@ func (h *Handler) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Error("readiness check schema version failure", "error", err)
 	} else {
 		schemaVersion = version
-		if version < store.CurrentSchemaVersion {
+		switch {
+		case version < store.CurrentSchemaVersion:
 			schemaStatus = "pending_migration"
+		case version > store.CurrentSchemaVersion:
+			schemaStatus = "incompatible"
 		}
 	}
 

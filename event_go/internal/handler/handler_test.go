@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1553,6 +1555,66 @@ func TestReadinessHandlerUnhealthy(t *testing.T) {
 	}
 	if schemaVersion, ok := data["schema_version"].(float64); !ok || int(schemaVersion) != 0 {
 		t.Errorf("expected schema_version 0, got %v", data["schema_version"])
+	}
+}
+
+func TestReadinessHandlerUnhealthyFutureSchema(t *testing.T) {
+	// 使用文件库（而非 :memory:），以便用第二个连接注入未来 schema 版本。
+	path := filepath.Join(t.TempDir(), "future.db")
+	s, err := store.NewStore(path)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer s.Close()
+
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(
+		`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, 'future_incompatible', ?)`,
+		store.CurrentSchemaVersion+1, time.Now().UTC().Format(time.RFC3339),
+	); err != nil {
+		t.Fatalf("insert future migration: %v", err)
+	}
+
+	cfg := config.Load()
+	cfg.Version = "dev"
+	h := newTestHandler(s, cfg)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+	h.ReadinessHandler(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.StatusCode)
+	}
+
+	var apiResp model.APIResp
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		t.Fatalf("json decode failed: %v", err)
+	}
+
+	data, ok := apiResp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data to be object, got %T", apiResp.Data)
+	}
+	if data["status"] != "not_ready" {
+		t.Errorf("expected status not_ready, got %v", data["status"])
+	}
+	if data["db"] != "connected" {
+		t.Errorf("expected db connected, got %v", data["db"])
+	}
+	// 库由更新版本应用生成（version > CurrentSchemaVersion），readiness 应 fail-closed 为 incompatible。
+	if data["schema"] != "incompatible" {
+		t.Errorf("expected schema incompatible, got %v", data["schema"])
+	}
+	if schemaVersion, ok := data["schema_version"].(float64); !ok || int(schemaVersion) != store.CurrentSchemaVersion+1 {
+		t.Errorf("expected schema_version %d, got %v", store.CurrentSchemaVersion+1, data["schema_version"])
 	}
 }
 

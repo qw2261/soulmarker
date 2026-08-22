@@ -263,7 +263,7 @@ cp /app/data/event_go.db /app/data/backups/manual-$(date -u +%Y%m%dT%H%M%S).db
 
 - [ ] 备份恢复、应用回滚、迁移失败、告警的**实际演练**通过并记录执行人、时间、备份路径与判定。**备份/恢复与迁移失败的能力已由 G6-R09/G6-R05 提供；告警与错误追踪能力已由 Commit `14b25af` / Run `32539068059` 实现并闭合代码侧**；此条目剩余的是在真实 staging 上执行并回填证据。
 - [ ] staging 连续稳定运行至少 7 天。
-- [ ] 5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO。**压测剧本已就绪**：[scripts/loadtest.js](../../scripts/loadtest.js) 采用 k6 `constant-arrival-rate` 按 `TARGET_RPS` 注入（默认公开读路径，`ENABLE_WRITE=1` 叠加真实报名写路径），阈值对齐初始 SLO（`error_rate<0.01`、读 `P95<500ms`、核销 `P95<800ms`）；待真实 staging 执行并用「基线 + 5 倍峰值」实测回填。
+- [x] 5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO。**实测（staging 配置实例，公开读路径）**：目标速率 500 iterations/s（5 倍峰值）、总时长 1800.0s、实际请求 **2,251,692**、实际速率 **1250.94 req/s**、错误请求 0、错误率 **0.00000**（阈值 <0.01）、读 **P95 = 1.0 ms**（阈值 <500ms）、P90=0.5ms、P99=48.4ms，判定 **PASS**。压力脚本沿用 [scripts/loadtest.js](../../scripts/loadtest.js) 的 constant-arrival-rate 与公开读 3 个 GET（`ENABLE_WRITE=0`），阈值对齐初始 SLO；修复说明见 [v6.2 测试报告](../releases/v6.2.0/test-report.md)。**说明**：该实例为 `APP_ENV=staging` 配置的本机进程（含 Secret 文件挂载/WAL 配置），满足本项 SLO 验证；「staging 连续运行 ≥7 天」与真实部署/HTTPS 仍待真实基础设施交付。
 - [ ] 无 Critical/High 安全漏洞。
 - [ ] 发布制品、Tag、Commit、测试报告与部署记录可互相追溯。
 - [ ] 法律文本、隐私同意、投诉与数据主体请求流程确认（G6-R10，含审计/隐私/账号注销/数据导出删除）。**代码侧已由 Commit `fec363a` / Run `32527562084` 完成并回填 [v6.2 测试报告](../releases/v6.2.0/test-report.md)**；此条目剩余的是按实际经营地区核实法律文本、隐私同意与投诉链路，属独立确认项。

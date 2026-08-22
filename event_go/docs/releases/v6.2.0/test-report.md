@@ -684,3 +684,59 @@ G6 生产上线准备的「环境隔离与安全存储」切片，支撑 M2「�
 ## Go/No-Go
 
 Go（G6-R01 密钥安全存储）：代码侧实现与完整远端门禁通过，交付 G6-R01 中「配置和密钥由安全存储管理」的密钥文件挂载与 fail-closed 能力。G6-R01 的 staging/production 环境真实隔离、部署编排与 Secret 注入、G6-R04 的 HTTPS/域名仍未完成，G6 完成门槛的真实备份恢复/应用回滚/迁移失败/告警演练、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟与 Legal/隐私流程按实际经营地区确认仍缺真实 staging 证据；G6/M2 整体仍为 No-Go；在各项完成门槛满足前，不应启动支付开发或宣称正式生产就绪。
+
+---
+
+# G6 完成门槛：5 倍峰值压测与连接池尾延迟修复
+
+## 本切片范围
+
+闭合 G6 完成门槛中的「5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO」，并记录作为其前置的性能问题修复（SQLite 连接池单连接串行化导致的读路径 P95 超标），以及未来 schema 版本的 fail-closed 证据（readiness 报 `incompatible`、迁移拒绝未来版本）。
+
+## 背景与根因
+
+在 staging 配置实例（`APP_ENV=staging`，公开读路径 3 个 GET）上以 5 倍峰值（目标 500 iterations/s）压测 30 分钟，首轮复测失败：
+
+| 指标 | 首轮实况（单连接池） | 阈值 | 判定 |
+|---|---|---:|---|
+| 错误率 | 0.00150 | < 0.01 | PASS |
+| P95 | 520.1 ms | < 500 ms | **FAIL** |
+| P99 | 6710.4 ms | — | 尾延迟显著 |
+
+根因：`internal/store/store.go` 的 `prepareDB` 把 SQLite 连接池钉死为 `db.SetMaxOpenConns(1)`，将 WAL 模式下本可并发读的访问全部串行化；高负载下请求在单连接上排队，放大了尾延迟（P95/P99）并抑制吞吐。写路径本已在应用层由 `registrationMu`/`checkinMu`/`moderationMu`/`notificationMu` 互斥锁串行化，因此提升连接数不会破坏写正确性。
+
+## 修复
+
+- `internal/store/store.go`：新增运行时连接池上限 `dbMaxOpenConns = 16`；`buildDSN` 把需要「每连接生效」的 PRAGMA 经 DSN `_pragma` 注入（`busy_timeout(5000)`、运行时追加 `foreign_keys(1)`）；`prepareDB(dbPath, withFK)` 按阶段选择连接配置；`OpenStore` 对文件库采用两阶段连接（迁移连接 FK 关/单连接 → 运行时连接池 FK 开/多连接），`:memory:` 保持单连接并在迁移后启用外键；`Migrate` 保持一致，并在 `version > CurrentSchemaVersion` 时拒绝迁移（fail-closed）。
+- `internal/handler/handler.go`：readiness 探针在 `version > CurrentSchemaVersion` 时报 `schema=incompatible`（fail-closed，返回 503）。
+- 写正确性：写路径由应用层互斥锁串行化，提升连接数不破坏写正确性；并发写安全由 `internal/store` 的并发写测试（报名不超容量、票库存不为负、取消恰好恢复一次）覆盖。
+
+## 5 倍峰值压测实测（staging 配置实例，公开读路径）
+
+- 目标速率：500 iterations/s（5 倍峰值，每位 iteration 3 个公开读 GET）
+- 总时长：1800.0 s（30 分钟）
+- 完成 iterations：750,564
+- 实际请求数：2,251,692
+- 实际请求速率：1250.94 req/s
+- 错误请求数：0
+- 错误率：0.00000（阈值 < 0.01）→ PASS
+- 延迟(ms)：P50=0.4、P90=0.5、P95=**1.0**、P99=48.4
+- P95 判定：1.0 ms（阈值 < 500 ms）→ PASS
+- **整体判定：PASS（error_rate<0.01 且 P95<500ms）**
+
+复测对比：P95 由 520.1 ms → 1.0 ms（约 520 倍改善），P99 由 6710.4 ms → 48.4 ms，错误请求由 3283 → 0。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l .` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（含 store 并发写/迁移与 readiness fail-closed 用例） |
+
+## 说明与未包含项
+
+- 压测环境为 `APP_ENV=staging` 配置的本机进程（端口 8085，含 Secret 文件挂载与 WAL 配置），满足本项 SLO 验证；「staging 连续运行 ≥7 天」、真实部署/HTTPS 与真实告警送达仍待真实基础设施交付。
+- 压测脚本沿用 [scripts/loadtest.js](../../../scripts/loadtest.js) 的 constant-arrival-rate 与公开读 3 个 GET（`ENABLE_WRITE=0`），阈值对齐初始 SLO。
+- 本切片不宣称关闭 G6 全部门禁，仅闭合完成门槛中的「5 倍峰值压测 30 分钟」与前置尾延迟修复，并记录未来 schema 版本 fail-closed 证据；在备份恢复/应用回滚/迁移失败/告警真实演练、staging 连续 ≥7 天与 Legal/隐私流程按实际经营地区确认前，不应启动支付开发或宣称正式生产就绪。

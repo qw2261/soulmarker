@@ -1071,6 +1071,38 @@ func TestSchemaVersionAfterCloseReturnsError(t *testing.T) {
 	}
 }
 
+func TestMigrateRejectsFutureSchemaVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "future.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (
+		version INTEGER PRIMARY KEY,
+		name TEXT NOT NULL,
+		applied_at TEXT NOT NULL
+	)`); err != nil {
+		t.Fatalf("create schema_migrations: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, 'future_incompatible', '2026-01-01T00:00:00Z')`,
+		CurrentSchemaVersion+1,
+	); err != nil {
+		t.Fatalf("insert future migration: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	version, err := Migrate(path)
+	if err == nil {
+		t.Fatalf("expected error for future schema, got version %d", version)
+	}
+	if !strings.Contains(err.Error(), "高于当前应用支持") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func assertNullableColumn(t *testing.T, db *sql.DB, table, column string) {
 	t.Helper()
 	notNull, found := columnNotNull(t, db, table, column)

@@ -74,22 +74,66 @@ func (s *Store) Backup(destPath string) (int64, error) {
 	return info.Size(), nil
 }
 
+// dbMaxOpenConns 控制文件型 SQLite 数据库在运行时的连接池上限。
+// WAL（journal_mode=WAL）模式下允许多个连接并发读；若把连接数钉死在 1，所有
+// 读写请求都会在单一连接上排队，高负载下会放大尾延迟（P95）并打击吞吐。
+// 写路径在应用层已用 registrationMu / checkinMu 等互斥锁串行化，因此提升连接数
+// 不会破坏写正确性;每个连接通过 DSN 的 _pragma 注入 busy_timeout 与 foreign_keys。
+const dbMaxOpenConns = 16
+
+// isMemoryDB 判断是否为一个内存库。file::memory: 与 :memory: 都是内存库，
+// 其每个连接都是相互独立的私有内存库，只能保持单连接。
+func isMemoryDB(dbPath string) bool {
+	return dbPath == ":memory:" || dbPath == "file::memory:"
+}
+
+// buildDSN 构造 modernc.org/sqlite 的连接串，并把需要"每连接生效"的 PRAGMA
+// 通过 _pragma 注入，确保连接池中每个新连接都生效，而不是只作用于建立连接池时的
+// 首个连接。返回连接串与允许的最大连接数。
+//   - withFK 为 true 时注入 foreign_keys(1)（运行时连接池），并允许并发连接。
+//   - withFK 为 false 时仅注入 busy_timeout（迁移阶段）。迁移必须在外键关闭时执行：
+//     历史迁移（v12）用 ALTER TABLE ADD COLUMN ... REFERENCES ... <非空默认值>，
+//     SQLite 在外键开启时会拒绝该 ADD COLUMN。迁移为串行执行，单连接即可。
+//   - :memory: 库每个连接是独立内存库，必须单连接。
+//   - file:... 已是 DSN，直接追加查询参数；否则把裸路径包装为 file: 前缀。
+func buildDSN(dbPath string, withFK bool) (dsn string, maxConns int) {
+	if isMemoryDB(dbPath) {
+		return dbPath, 1
+	}
+	pragmas := "_pragma=busy_timeout(5000)"
+	if withFK {
+		pragmas += "&_pragma=foreign_keys(1)"
+		maxConns = dbMaxOpenConns
+	} else {
+		maxConns = 1
+	}
+	if strings.HasPrefix(dbPath, "file:") {
+		sep := "?"
+		if strings.Contains(dbPath, "?") {
+			sep = "&"
+		}
+		return dbPath + sep + pragmas, maxConns
+	}
+	return "file:" + dbPath + "?" + pragmas, maxConns
+}
+
 // prepareDB 打开 SQLite 数据库并应用连接级基础配置（WAL / busy_timeout）。
 // 供 OpenStore 与独立迁移入口 Migrate 共用，保证两者对库的初始化一致。
-func prepareDB(dbPath string) (*sql.DB, error) {
-	if dbPath != ":memory:" && !strings.HasPrefix(dbPath, "file:") {
+func prepareDB(dbPath string, withFK bool) (*sql.DB, error) {
+	if !isMemoryDB(dbPath) && !strings.HasPrefix(dbPath, "file:") {
 		dir := filepath.Dir(dbPath)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("创建数据库目录失败: %w", err)
 		}
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	dsn, maxConns := buildDSN(dbPath, withFK)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库失败: %w", err)
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(maxConns)
+	db.SetMaxIdleConns(maxConns)
 
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
@@ -99,33 +143,55 @@ func prepareDB(dbPath string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("设置 WAL 模式失败: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("设置 busy_timeout 失败: %w", err)
-	}
 	return db, nil
 }
 
 // OpenStore 打开数据库并执行版本化迁移，任何初始化失败都会返回给调用方。
 func OpenStore(dbPath string) (*Store, error) {
-	db, err := prepareDB(dbPath)
+	if isMemoryDB(dbPath) {
+		// 内存库每个连接都是相互独立的私有内存库，必须保持单连接：
+		// 迁移(FK 关) 与运行时(FK 开) 复用同一个连接。
+		db, err := prepareDB(dbPath, false)
+		if err != nil {
+			return nil, err
+		}
+		closeOnError := func(err error) (*Store, error) {
+			_ = db.Close()
+			return nil, err
+		}
+		if err := migrate(db); err != nil {
+			return closeOnError(fmt.Errorf("数据库迁移失败: %w", err))
+		}
+		if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+			return closeOnError(fmt.Errorf("启用外键失败: %w", err))
+		}
+		if err := validateForeignKeys(db); err != nil {
+			return closeOnError(err)
+		}
+		return &Store{db: db}, nil
+	}
+
+	// 文件库采用两阶段连接：先以迁移连接(FK 关、单连接)执行迁移，再改用
+	// 运行时连接池(FK 开、多连接)。迁移 v12 的 ALTER TABLE ... REFERENCES <非空默认值>
+	// 必须在外键关闭时执行，而运行时访问需要每个连接都开启外键。
+	migDB, err := prepareDB(dbPath, false)
 	if err != nil {
 		return nil, err
 	}
-	closeOnError := func(err error) (*Store, error) {
+	if migErr := migrate(migDB); migErr != nil {
+		_ = migDB.Close()
+		return nil, fmt.Errorf("数据库迁移失败: %w", migErr)
+	}
+	_ = migDB.Close()
+
+	db, err := prepareDB(dbPath, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateForeignKeys(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-	if err := migrate(db); err != nil {
-		return closeOnError(fmt.Errorf("数据库迁移失败: %w", err))
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		return closeOnError(fmt.Errorf("启用外键失败: %w", err))
-	}
-	if err := validateForeignKeys(db); err != nil {
-		return closeOnError(err)
-	}
-
 	return &Store{db: db}, nil
 }
 
@@ -134,7 +200,7 @@ func OpenStore(dbPath string) (*Store, error) {
 // 将库推进到当前 Schema（CurrentSchemaVersion）并完成外键一致性校验，随后关闭数据库。
 // 幂等：已应用过的迁移不会重复执行；返回最终 Schema 版本。
 func Migrate(dbPath string) (int, error) {
-	db, err := prepareDB(dbPath)
+	db, err := prepareDB(dbPath, false)
 	if err != nil {
 		return 0, err
 	}
@@ -151,6 +217,12 @@ func Migrate(dbPath string) (int, error) {
 	var version int
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
 		return 0, fmt.Errorf("读取迁移版本失败: %w", err)
+	}
+	if version > CurrentSchemaVersion {
+		return 0, fmt.Errorf(
+			"数据库 schema 版本 %d 高于当前应用支持的 %d（库由更新版本应用生成），拒绝迁移以避免不兼容",
+			version, CurrentSchemaVersion,
+		)
 	}
 	return version, nil
 }

@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.1 多租户迭代与 v6.2 生产准备并行推进** — G5.1–G5.5（Schema v12 基础、授权内核、资源 tenant scope、自助运营、审计/PII 最小授权/所有权转移）均已通过远端门禁（G5.5 由 Commit `6938149` / Run `32515720494` 绑定，三组织试点通过）；G6 生产基线代码侧（制品 provenance、Docker 非 root/Healthcheck、限流、依赖与 Secret 扫描、独立迁移入口与 N/N-1 兼容、指标、错误追踪与告警、readiness 依赖探测完善、密钥文件挂载（安全存储）、备份、审计/隐私/注销，以及运维 Runbook）均已提交并通过完整远端门禁，证据见 [goal.md](docs/goal.md) 与 [v6.2 测试报告](docs/releases/v6.2.0/test-report.md)。G4 仍待真实 staging SMTP 与两场受控活动，G6 完成门槛（staging 连续稳定运行 ≥7 天、5 倍峰值压测、备份恢复/回滚/迁移失败/告警实演、发布制品归档、法律/隐私落地确认）仍需真实 staging 证据，因此 M1/M2 不提前标记完成，也不宣称正式生产就绪。
+**v6.1 多租户迭代与 v6.2 生产准备并行推进** — G5.1–G5.5（Schema v12 基础、授权内核、资源 tenant scope、自助运营、审计/PII 最小授权/所有权转移）均已通过远端门禁（G5.5 由 Commit `6938149` / Run `32515720494` 绑定，三组织试点通过）；G6 生产基线代码侧（制品 provenance、Docker 非 root/Healthcheck、限流、依赖与 Secret 扫描、独立迁移入口与 N/N-1 兼容、指标、错误追踪与告警、readiness 依赖探测完善、密钥文件挂载（安全存储）、备份、审计/隐私/注销，以及运维 Runbook）均已提交并通过完整远端门禁，证据见 [goal.md](docs/goal.md) 与 [v6.2 测试报告](docs/releases/v6.2.0/test-report.md)。G4 仍待真实 staging SMTP 与两场受控活动，G6 完成门槛（staging 连续稳定运行 ≥7 天、5 倍峰值压测、备份恢复/回滚/迁移失败/告警实演、发布制品归档、法律/隐私落地确认）仍需真实 staging 证据。其中**5 倍预测峰值压测已闭合**（staging 配置实例公开读路径 1800s：1250.94 req/s、错误率 0.00000、P95=1.0ms，判定 PASS，修复说明见 [v6.2 测试报告](docs/releases/v6.2.0/test-report.md)），连接池尾延迟修复与未来 schema 版本 fail-closed 一并合入；其余门槛（≥7 天连续运行、备份恢复/回滚/迁移失败/告警实演、发布制品归档、Legal/隐私确认）仍待真实 staging，因此 M1/M2 不提前标记完成，也不宣称正式生产就绪。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
