@@ -1041,6 +1041,36 @@ func assertSchemaVersion(t *testing.T, db *sql.DB, want int) {
 	}
 }
 
+func TestSchemaVersionReturnsCurrentVersion(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer s.Close()
+
+	version, err := s.SchemaVersion()
+	if err != nil {
+		t.Fatalf("SchemaVersion: %v", err)
+	}
+	if version != CurrentSchemaVersion {
+		t.Fatalf("expected schema version %d, got %d", CurrentSchemaVersion, version)
+	}
+}
+
+func TestSchemaVersionAfterCloseReturnsError(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	if _, err := s.SchemaVersion(); err == nil {
+		t.Fatal("expected error after closing database")
+	}
+}
+
 func assertNullableColumn(t *testing.T, db *sql.DB, table, column string) {
 	t.Helper()
 	notNull, found := columnNotNull(t, db, table, column)

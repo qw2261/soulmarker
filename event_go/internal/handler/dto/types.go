@@ -482,9 +482,11 @@ type LivenessResponse struct {
 	Version string `json:"version"`
 }
 
-// ReadinessResponse 是 readiness 探针的响应，反映依赖（数据库）是否就绪。
+// ReadinessResponse 是 readiness 探针的响应，反映依赖（数据库、Schema 迁移版本）是否就绪。
 type ReadinessResponse struct {
-	Status  string `json:"status"`
-	Version string `json:"version"`
-	DB      string `json:"db"`
+	Status        string `json:"status"`
+	Version       string `json:"version"`
+	DB            string `json:"db"`
+	Schema        string `json:"schema"`
+	SchemaVersion int    `json:"schema_version"`
 }

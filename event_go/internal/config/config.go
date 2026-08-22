@@ -42,6 +42,7 @@ type Config struct {
 	BackupRetain                   int
 	BackupDrillIntervalSec         int
 	RateLimitPerMinute             int
+	AlertWebhookURL                string
 	organizationAuthFlagInvalid    bool
 }
 
@@ -77,6 +78,7 @@ func Load() *Config {
 		BackupRetain:                   getEnvIntStrict("BACKUP_RETAIN", 7),
 		BackupDrillIntervalSec:         getEnvInt("BACKUP_DRILL_INTERVAL_SECONDS", 0),
 		RateLimitPerMinute:             getEnvIntStrict("RATE_LIMIT_REQUESTS_PER_MINUTE", 0),
+		AlertWebhookURL:                getEnv("ALERT_WEBHOOK_URL", ""),
 		organizationAuthFlagInvalid:    organizationAuthFlagInvalid,
 	}
 }
@@ -111,6 +113,12 @@ func (c *Config) Validate() error {
 	}
 	if c.RateLimitPerMinute < 0 {
 		return fmt.Errorf("RATE_LIMIT_REQUESTS_PER_MINUTE 不能为负数")
+	}
+	if c.AlertWebhookURL != "" {
+		alertURL, err := url.Parse(c.AlertWebhookURL)
+		if err != nil || alertURL.Scheme != "https" || alertURL.Host == "" {
+			return fmt.Errorf("ALERT_WEBHOOK_URL 必须是有效的 HTTPS URL")
+		}
 	}
 	env := strings.ToLower(strings.TrimSpace(c.Environment))
 	switch env {

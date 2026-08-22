@@ -226,3 +226,39 @@ func TestLoadRejectsNegativeRateLimit(t *testing.T) {
 		t.Fatal("negative RATE_LIMIT_REQUESTS_PER_MINUTE must fail validation")
 	}
 }
+
+func TestValidateAlertWebhookURL(t *testing.T) {
+	valid := Load()
+	valid.Environment = "development"
+	valid.AlertWebhookURL = "https://hooks.example.com/alerts"
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid HTTPS alert webhook rejected: %v", err)
+	}
+
+	invalid := []struct {
+		name string
+		url  string
+	}{
+		{"http scheme", "http://hooks.example.com/alerts"},
+		{"missing host", "https://"},
+		{"not a url", "hooks.example.com/alerts"},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Load()
+			cfg.Environment = "development"
+			cfg.AlertWebhookURL = tt.url
+			if err := cfg.Validate(); err == nil {
+				t.Fatalf("invalid alert webhook %q must fail validation", tt.url)
+			}
+		})
+	}
+}
+
+func TestLoadReadsAlertWebhookURL(t *testing.T) {
+	t.Setenv("ALERT_WEBHOOK_URL", "https://hooks.example.com/alerts")
+	cfg := Load()
+	if cfg.AlertWebhookURL != "https://hooks.example.com/alerts" {
+		t.Fatalf("expected ALERT_WEBHOOK_URL to be loaded, got %q", cfg.AlertWebhookURL)
+	}
+}

@@ -206,6 +206,9 @@ func NewRouter(h *Handler, fallback http.Handler) http.Handler {
 	mux.Handle("GET /metrics", registry.Handler())
 	mux.Handle("/", fallback)
 
-	chain := RequestIDMiddleware(LoggingMiddleware(SecurityHeaders(CORS(RateLimitMiddleware(UserAuth(mux, h.tokens), h.config.RateLimitPerMinute), h.config.CORSOrigin))))
+	chain := RequestIDMiddleware(LoggingMiddleware(RecoveryMiddleware(
+		SecurityHeaders(CORS(RateLimitMiddleware(UserAuth(mux, h.tokens), h.config.RateLimitPerMinute), h.config.CORSOrigin)),
+		panicReporterFor(h.config),
+	)))
 	return MetricsMiddleware(registry)(chain)
 }

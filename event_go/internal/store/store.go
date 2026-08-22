@@ -44,6 +44,19 @@ func (s *Store) Ping() error {
 	return s.db.Ping()
 }
 
+// SchemaVersion 返回数据库当前已应用的 schema_migrations 最高版本。
+// 供 readiness 探针校验数据库是否已迁移到应用期望的 CurrentSchemaVersion。
+func (s *Store) SchemaVersion() (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("数据库未初始化")
+	}
+	var version int
+	if err := s.db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("读取迁移版本失败: %w", err)
+	}
+	return version, nil
+}
+
 // Backup 将当前数据库的一致性快照写入 destPath，返回写入的文件大小。
 // 使用 VACUUM INTO，目标文件将被完整重建并生成一份经过 checkpoint 的紧凑快照，
 // 可在应用运行期间安全执行，且不会写入任何业务状态。

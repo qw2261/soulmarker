@@ -316,7 +316,7 @@ func (h *Handler) LivenessHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Response{Code: 200, Message: "ok", Data: data})
 }
 
-// ReadinessHandler 是 readiness 探针，依赖（数据库）就绪返回 200，否则返回 503。
+// ReadinessHandler 是 readiness 探针，依赖（数据库、Schema 迁移版本）就绪返回 200，否则返回 503。
 func (h *Handler) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	dbStatus := "connected"
 	if err := h.store.Ping(); err != nil {
@@ -324,18 +324,37 @@ func (h *Handler) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Error("readiness check database failure", "error", err)
 	}
 
+	schemaStatus := "current"
+	schemaVersion := 0
+	version, err := h.store.SchemaVersion()
+	if err != nil {
+		schemaStatus = "unknown"
+		slog.Error("readiness check schema version failure", "error", err)
+	} else {
+		schemaVersion = version
+		if version < store.CurrentSchemaVersion {
+			schemaStatus = "pending_migration"
+		}
+	}
+
 	status := "ok"
 	httpStatus := http.StatusOK
 	code := 200
 	var errorCode string
-	if dbStatus == "disconnected" {
+	if dbStatus == "disconnected" || schemaStatus != "current" {
 		status = "not_ready"
 		httpStatus = http.StatusServiceUnavailable
 		code = 503
 		errorCode = string(api.CodeServiceUnavailable)
 	}
 
-	data := dto.ReadinessResponse{Status: status, Version: h.version, DB: dbStatus}
+	data := dto.ReadinessResponse{
+		Status:        status,
+		Version:       h.version,
+		DB:            dbStatus,
+		Schema:        schemaStatus,
+		SchemaVersion: schemaVersion,
+	}
 	writeJSON(w, httpStatus, dto.Response{Code: code, Message: status, Data: data, ErrorCode: errorCode})
 }
 

@@ -1501,6 +1501,12 @@ func TestReadinessHandlerHealthy(t *testing.T) {
 	if data["version"] != "dev" {
 		t.Errorf("expected version dev, got %v", data["version"])
 	}
+	if data["schema"] != "current" {
+		t.Errorf("expected schema current, got %v", data["schema"])
+	}
+	if schemaVersion, ok := data["schema_version"].(float64); !ok || int(schemaVersion) != store.CurrentSchemaVersion {
+		t.Errorf("expected schema_version %d, got %v", store.CurrentSchemaVersion, data["schema_version"])
+	}
 }
 
 func TestReadinessHandlerUnhealthy(t *testing.T) {
@@ -1540,6 +1546,13 @@ func TestReadinessHandlerUnhealthy(t *testing.T) {
 	}
 	if data["db"] != "disconnected" {
 		t.Errorf("expected db disconnected, got %v", data["db"])
+	}
+	// 数据库关闭后，迁移版本探测同样失败，readiness 应报告 schema 未知且不可就绪。
+	if data["schema"] != "unknown" {
+		t.Errorf("expected schema unknown, got %v", data["schema"])
+	}
+	if schemaVersion, ok := data["schema_version"].(float64); !ok || int(schemaVersion) != 0 {
+		t.Errorf("expected schema_version 0, got %v", data["schema_version"])
 	}
 }
 
