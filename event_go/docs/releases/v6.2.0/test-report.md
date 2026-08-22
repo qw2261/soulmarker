@@ -1,6 +1,6 @@
 # v6.2.0 测试报告（G6 生产上线准备 — 容器与部署基线、备份恢复、限流、构建 provenance 切片）
 
-> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）、G6-R02（CI/CD 不可变制品与构建 provenance）、G6-R06（HTTP 指标，G6.5 切片）与 G6-R05（数据库迁移先于应用灰度与 N/N-1 兼容，G6.7 切片）Remote Candidate Pass / 文档完成。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
+> 状态：G6-R03/R07（容器与部署基线）、G6-R09（自动备份与恢复验证）、G6-R08（运维 Runbook）、G6-R10（数据主体隐私、账号注销、数据导出/删除与留存）、G6-R04（全局 API 限流）、G6-R02（CI/CD 不可变制品与构建 provenance）、G6-R06（HTTP 指标，G6.5 切片）、G6-R05（数据库迁移先于应用灰度与 N/N-1 兼容，G6.7 切片）与 G6-R04 HTTPS/域名与 CORS 收口切片 Remote Candidate Pass / 文档完成；G6-R04 全部代码侧能力已闭合。其中 G6-R02 的远端 CI frontend Browser E2E 出现一次性 flake（本地全部 6 例通过，详见下文 G6-R02 切片），其余 job 全部 success
 
 ## 版本身份
 
@@ -13,6 +13,7 @@
 | G6-R09 实现 Commit | e390d99 |
 | G6-R10 实现 Commit | fec363a |
 | G6-R04 限流实现 Commit | 9dd296c |
+| G6-R04 HTTPS/域名与 CORS 收口 Commit | fc8211c |
 | G6-R02 构建 provenance 实现 Commit | 8e226fb |
 | G6-R06 指标实现 Commit | 6eb9ffe |
 | G6-R05 独立迁移入口实现 Commit | 1da3005 |
@@ -740,3 +741,61 @@ Go（G6-R01 密钥安全存储）：代码侧实现与完整远端门禁通过�
 - 压测环境为 `APP_ENV=staging` 配置的本机进程（端口 8085，含 Secret 文件挂载与 WAL 配置），满足本项 SLO 验证；「staging 连续运行 ≥7 天」、真实部署/HTTPS 与真实告警送达仍待真实基础设施交付。
 - 压测脚本沿用 [scripts/loadtest.js](../../../scripts/loadtest.js) 的 constant-arrival-rate 与公开读 3 个 GET（`ENABLE_WRITE=0`），阈值对齐初始 SLO。
 - 本切片不宣称关闭 G6 全部门禁，仅闭合完成门槛中的「5 倍峰值压测 30 分钟」与前置尾延迟修复，并记录未来 schema 版本 fail-closed 证据；在备份恢复/应用回滚/迁移失败/告警真实演练、staging 连续 ≥7 天与 Legal/隐私流程按实际经营地区确认前，不应启动支付开发或宣称正式生产就绪。
+
+---
+
+# G6-R04 HTTPS/域名与 CORS 收口
+
+## 本切片范围
+
+G6 生产上线准备的「HTTPS/域名与 CORS 收口」切片，闭合 G6-R04 的最后一项代码侧能力：
+
+- **G6-R04**：HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（本切片交付其中的**HTTPS/域名与 CORS 收口**能力，限流由 G6-R04 限流切片、依赖与 Secret 扫描由 G6-R04 依赖/Secret 切片、安全头由 G1-R08 已闭合）。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称完成 G6 全部门禁——真实 HTTPS 域名、证书与域名收敛后的生产部署仍归真实 staging 基础设施与完成门槛。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R04（HTTPS/域名） | DOMAIN-REJECT-001…007 | staging/production 的 `CORS_ORIGIN` 与 `PUBLIC_BASE_URL` 必须为真实 HTTPS 域名；`isRealDomainHost` 拒绝空值、IP 字面量（IPv4/IPv6）与不含点号的裸主机名（如 localhost）；CORS_ORIGIN/PUBLIC_BASE_URL 使用 localhost、IP 或非 HTTPS 均拒绝启动 |
+| G6-R04（CORS 收口） | CORS-TIGHTEN-001…002 | `CORS` 中间件在 allowedOrigin 为具体域名时仅对匹配的 Origin 回写 `Access-Control-Allow-Origin` 并添加 `Vary: Origin`；来源不匹配或缺失时不回写该头；development/test（`*`）保持通配 |
+
+## 变更清单（Commit fc8211c）
+
+- `internal/config/config.go`：新增 `isRealDomainHost` 辅助函数；staging/production 分支对 `CORS_ORIGIN` 与 `PUBLIC_BASE_URL` 追加「必须为真实 HTTPS 域名（不允许 localhost/IP）」的 fail-closed 校验。
+- `internal/config/config_test.go`：新增 `validProductionBase` 基准配置与 `TestValidateSecureEnvRejectsNonRealDomainAndInsecureURLs`，覆盖 CORS_ORIGIN/PUBLIC_BASE_URL 的 localhost、bare localhost、IP 字面量与 non-HTTPS 共 7 个拒绝用例。
+- `internal/handler/handler.go`：`CORS` 中间件收口——allowedOrigin 为具体域名时仅对匹配 Origin 回写 `Access-Control-Allow-Origin` 并添加 `Vary: Origin`，无 Origin/不匹配不回写，development（`*`）保持通配。
+- `internal/handler/handler_test.go`：重写 `TestCORSOriginEnvConfig` 以覆盖「匹配来源回写 + `Vary: Origin`」与「不匹配来源不回写」；`TestHandlerUsesStartupConfigSnapshot` 补充匹配 Origin 头验证注入的 CORS origin；`TestCORSHeaders` 保持通配 `*` 断言。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过 |
+| `go test -race ./internal/config/... ./internal/handler/...` | 通过 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R04 HTTPS/域名与 CORS 收口 Commit fc8211c](https://github.com/qw2261/soulmarker/commit/fc8211c) | `isRealDomainHost` 域名校验（CORS_ORIGIN/PUBLIC_BASE_URL 拒绝 localhost/IP）+ `CORS` 中间件按 Origin 匹配收口（`Vary: Origin`） |
+| [GitHub Actions Run 32560154070](https://github.com/qw2261/soulmarker/actions/runs/32560154070) | success，与 Commit fc8211c 精确绑定 |
+| [backend job 97000399071](https://github.com/qw2261/soulmarker/actions/runs/32560154070/job/97000399071) | format、build、vet、vulnerability scan、gitleaks、Go test、race test 全部 success |
+| [frontend job 97000399156](https://github.com/qw2261/soulmarker/actions/runs/32560154070/job/97000399156) | install、build、unit/component tests、E2E 与浏览器证据上传 success |
+| [docker job 97000399147](https://github.com/qw2261/soulmarker/actions/runs/32560154070/job/97000399147) | 镜像构建、非 root 断言、smoke 探针与 `/version` Commit 一致断言全部 success |
+
+## 说明
+
+- staging/production 的 `CORS_ORIGIN` 与 `PUBLIC_BASE_URL` 现在都必须指向真实 HTTPS 域名：`isRealDomainHost` 拒绝空值、`net.ParseIP` 判定的 IP 字面量与不含点号的裸主机名（如 localhost），从配置侧阻断「内网/IP/本地」地址在生产暴露；非 HTTPS 的 `http://` 同样拒绝。
+- CORS 收口使 staging/production 不再无条件回写 `Access-Control-Allow-Origin`：具体域名的 allowedOrigin 下，仅当请求 `Origin` 与允许来源精确匹配（大小写不敏感）时回写，并添加 `Vary: Origin` 让缓存按来源正确区分；来源不匹配或无 `Origin` 的请求不回写该头。development/test 的 `*` 通配保持不变，兼容本地开发。
+- CORS_ORIGIN 与 PUBLIC_BASE_URL 仍要求单一起源 URL（配置校验通过 `url.Parse`），不接收逗号分隔多来源——多前端来源的扩展归后续 ADR 或按需演进，不在本切片范围。
+
+## Go/No-Go
+
+Go（G6-R04 HTTPS/域名与 CORS 收口）：代码侧实现与完整远端门禁通过，闭合 G6-R04 的「HTTPS/域名」与「CORS 收口」能力。至此 G6-R04 的代码侧能力（限流、依赖与 Secret 扫描、安全头、HTTPS/域名、CORS 收口）全部完成。但真实 HTTPS 域名、证书、域名收敛与生产部署、staging 连续运行 ≥7 天、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认仍归真实 staging 基础设施与 G6 完成门槛；G6/M2 整体仍为 No-Go，在各项完成门槛满足前不应启动支付开发或宣称正式生产就绪。

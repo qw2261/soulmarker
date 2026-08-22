@@ -77,6 +77,7 @@
 - platform 兼容管理路由与 tenant 路由复用同一 scoped Service；无作用域 Store 写方法解析现有 tenant 后再进入 scoped SQL。
 - 登录用户导航新增组织工作台；组织页面按实时 capability 展示活动、票种、成员、报名、导出和核销能力。
 - 登录/注册保留经过同源校验的邀请 redirect，未注册收件人完成注册后自动返回邀请接受页。
+- G6-R04 HTTPS/域名与 CORS 收口：staging/production 的 `CORS_ORIGIN` 与 `PUBLIC_BASE_URL` 必须为真实 HTTPS 域名（`isRealDomainHost` 拒绝空值、IP 字面量与不含点号的裸主机名如 localhost）；`CORS` 中间件在 allowedOrigin 为具体域名时仅对匹配的请求 `Origin` 回写 `Access-Control-Allow-Origin` 并添加 `Vary: Origin`，无 Origin/来源不匹配不回写，development（`*`）保持通配。
 
 ### Fixed
 

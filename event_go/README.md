@@ -694,9 +694,9 @@ event_go/
 | `DATABASE_PATH` | `data/event_go.db` | SQLite 数据库路径 |
 | `JWT_SECRET` | 内置 dev key | JWT 签名密钥（**生产务必修改**） |
 | `JWT_EXPIRE_HOURS` | `168`（7 天） | JWT 有效期 |
-| `CORS_ORIGIN` | `*` | 允许的跨域来源 |
+| `CORS_ORIGIN` | `*` | 允许的跨域来源；staging/production 必须为真实 HTTPS 域名（拒绝 localhost/IP） |
 | `CANCEL_DEADLINE_HOURS` | `24` | 取消报名截止小时数 |
-| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置与恢复邮箱验证链接的公开站点地址；生产必须为 HTTPS |
+| `PUBLIC_BASE_URL` | `http://localhost:<PORT>` | 密码重置与恢复邮箱验证链接的公开站点地址；生产必须为真实 HTTPS 域名（拒绝 localhost/IP） |
 | `PASSWORD_RESET_TTL_MINUTES` | `30` | 密码重置 Token 有效分钟数，允许 1–1440 |
 | `RECOVERY_EMAIL_TTL_MINUTES` | `30` | 恢复邮箱验证 Token 有效分钟数，允许 1–1440 |
 | `NOTIFICATION_REMINDER_HOURS` | `24` | published 活动临近提醒窗口，允许 1–168 小时 |
@@ -709,7 +709,7 @@ event_go/
 | `ALERT_WEBHOOK_URL` | 空 | panic 恢复告警 webhook；必须为有效 HTTPS URL，未配置时退化为结构化日志追踪 |
 | `RATE_LIMIT_REQUESTS_PER_MINUTE` | 空 | per-minute 固定窗口限流；staging/production 必须为正数（fail-closed），非正数在 development 表示不限制 |
 
-staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、组织邀请 TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置、邮箱验证和组织邀请链接写入服务日志，不发送邮件；普通业务通知不依赖 SMTP。
+staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、真实 HTTPS 域名的 `CORS_ORIGIN`、真实 HTTPS 域名的 `PUBLIC_BASE_URL`（localhost/IP 与非 HTTPS 均拒绝）和完整合法的 SMTP 配置；非法 Token TTL、组织邀请 TTL、通知提醒窗口或扫描间隔会拒绝启动。CORS 在具体域名的 `CORS_ORIGIN` 下收口：仅对匹配的请求 `Origin` 回写 `Access-Control-Allow-Origin` 并添加 `Vary: Origin`，来源不匹配或缺失时不回写。development 未配置 SMTP 时只把密码重置、邮箱验证和组织邀请链接写入服务日志，不发送邮件；普通业务通知不依赖 SMTP。
 
 密钥（`ADMIN_TOKEN`、`JWT_SECRET`、`SMTP_PASSWORD`）除环境变量外，还支持由安全存储以文件方式挂载（Docker/K8s Secret 常以文件挂载，如 `/run/secrets/<name>`）：设置 `<KEY>_FILE` 指向文件路径即可从文件读取密钥正文（自动去除尾部 CRLF）。读取优先级为「环境变量 `<KEY>` > 文件 `<KEY>_FILE` > 默认值」；文件读取失败会使得 `Validate()` 拒绝启动，保证 fail-closed。
 
