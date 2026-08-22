@@ -517,3 +517,116 @@ G6 生产上线准备的「数据库迁移」切片，支撑 M2「可上线」�
 ## Go/No-Go
 
 Go（G6-R05 代码侧）：独立迁移入口实现与完整远端门禁通过，关闭 G6-R05 的代码侧能力（`event-go migrate` 可执行预迁移、N/N-1 兼容由 Expand-only 策略与测试覆盖）。G6-R05 的「迁移先于应用灰度」作为真实部署编排（staging 预迁移演练）仍归 G6-R01 与 G6 完成门槛；G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R06 错误追踪与告警
+
+## 本切片范围
+
+G6 生产上线准备的可观测性切片，补齐 G6-R06 中「错误追踪与告警」能力（request_id 与结构化日志在 G3 已具备，指标由 G6.5 切片实现并闭合）：
+
+- **G6-R06**：request_id、结构化日志、指标、错误追踪和告警（本切片交付其中的**错误追踪与告警**）。当某个请求触发 panic 时，`RecoveryMiddleware` 捕获后把请求上下文（request_id、method、path、panic 值、调用栈、UTC 时间）交给 `PanicReporter`，并返回 500 `INTERNAL_ERROR`；`ALERT_WEBHOOK_URL` 配置为有效 HTTPS 地址时通过 `WebhookPanicReporter` 推送告警，否则退化为 `LogPanicReporter` 结构化日志追踪。单个请求的 panic 不会拖垮进程。
+
+本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R06 的全部能力或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R06（错误追踪与告警） | RECOVERY-500-001、RECOVERY-PASSTHROUGH-001、RECOVERY-REPORTS-001、WEBHOOK-POST-001、WEBHOOK-TOLERATE-001、REPORTER-SELECT-001 | `RecoveryMiddleware` 在下游 panic 时返回 500 与 `INTERNAL_ERROR`（稳定错误码），不阻断进程，并把含 request_id/method/path/panic 值/调用栈的 `PanicRecord` 交给 reporter；健康 handler 正常透传（204）；`WebhookPanicReporter` POST JSON 载荷到 endpoint，endpoint 失败/超时仅记录日志不阻塞；`panicReporterFor` 依据 `ALERT_WEBHOOK_URL` 选择 webhook 或日志追踪；`config.Validate` 拒绝非 HTTPS/invalid 告警地址 |
+
+## 变更清单（Commit 14b25af）
+
+- `internal/handler/recovery.go`（新增）：`PanicRecord` 追踪载荷、`PanicReporter` 接口、`LogPanicReporter`（结构化日志）、`WebhookPanicReporter`（带超时 POST）、`RecoveryMiddleware`、`panicReporterFor` 工厂。
+- `internal/handler/recovery_test.go`（新增）：6 个测试覆盖 500 降级、健康透传、panic 记录、webhook 投递、端点失败容忍与 reporter 选择。
+- `internal/handler/router.go`：中间件链插入 `RecoveryMiddleware`（位于 `LoggingMiddleware` 与 `SecurityHeaders` 之间），以 `panicReporterFor(h.config)` 注入 reporter。
+- `internal/config/config.go`：`Config` 新增 `AlertWebhookURL`，`Load()` 读取 `ALERT_WEBHOOK_URL`（默认空），`Validate()` 拒绝非 HTTPS/无效告警地址。
+- `internal/config/config_test.go`：新增 `TestValidateAlertWebhookURL`、`TestLoadReadsAlertWebhookURL`。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（387 个顶层测试） |
+| `git diff --check` | 通过 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R06 错误追踪与告警实现 Commit 14b25af](https://github.com/qw2261/soulmarker/commit/14b25af) | `RecoveryMiddleware` + `PanicReporter`（webhook/日志）+ `ALERT_WEBHOOK_URL` 配置校验 + router 中间件链接入 |
+| [GitHub Actions Run 32539068059](https://github.com/qw2261/soulmarker/actions/runs/32539068059) | success，与 Commit 14b25af 精确绑定 |
+| [backend job 96945276432](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276432) | format、build、vet、vulnerability scan、gitleaks、Go test（含新增 recovery/config 用例）、race test 全部 success |
+| [frontend job 96945276196](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276196) | install、build、unit/component tests、Browser E2E 与浏览器证据上传 success |
+| [docker job 96945276347](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276347) | 镜像构建、非 root 断言、smoke 探针与 `/version` Commit 一致断言全部 success |
+
+## 说明与未包含项
+
+- 请求恢复遵循 fail-closed：panic 时返回稳定 `INTERNAL_ERROR`（不泄漏调用栈给客户端），调用栈仅进入 `PanicRecord` 供错误追踪/告警消费。
+- 告警为旁路投递：webhook 失败或超时只记录结构化日志，不返回 5xx 也不阻断请求；默认超时 5 秒，避免告警依赖拖垮服务。
+- `ALERT_WEBHOOK_URL` 仅在配置为有效 HTTPS 地址时启用告警；未配置时自动退化为 `LogPanicReporter`，保证开箱即用且仍可追踪。
+- 本切片关闭 G6-R06 中「错误追踪与告警」的代码侧能力。G6-R06 的指标已由 G6.5 切片闭合；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R07 readiness 依赖探测完善仍未完成，且 G6 完成门槛的真实告警演练（故障注入 + 实际触达）仍需真实 staging 证据，不能据此宣称 G6-R06 与 G6/M2 整体完成。
+
+## Go/No-Go
+
+Go（G6-R06 错误追踪与告警）：代码侧实现与完整远端门禁通过，关闭 G6-R06 中「错误追踪与告警」能力（错误追踪由 `RecoveryMiddleware` + `PanicReporter` 提供，告警由 `ALERT_WEBHOOK_URL` webhook 或结构化日志降级承载）。G6-R06 的指标已由 G6.5 闭合；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R07 readiness 依赖探测完善仍未完成，G6 完成门槛的真实告警演练仍缺 staging 证据；G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R07 readiness 依赖探测完善
+
+## 本切片范围
+
+G6 生产上线准备的可观测性切片，完善 `readyz` 探针，使依赖异常时返回可操作状态：
+
+- **G6-R07**：liveness 与 readiness 分离，依赖异常时返回可操作状态（liveness/readiness 分离基础已由 G6.1 切片实现，本切片把 readiness 扩展为同时探测数据库连接与 Schema 迁移版本）。
+
+本切片不涉及前端功能调整（Schema 保持 v15），交付 readiness 的 schema 版本探测；「staging 连续稳定运行」与真实的依赖故障响应演练仍归 G6 完成门槛，本切片不宣称关闭 G6-R07 的全部操作层面或完成 G6 全部门禁。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R07 | READINESS-SCHEMA-001、READINESS-SCHEMA-002、SCHVERSION-CURRENT-001、SCHVERSION-CLOSED-001 | `Store.SchemaVersion()` 读取 `schema_migrations` 的 `MAX(version)`（空库回退 0，关闭后返回错误）；`ReadinessHandler` 在数据库连通且 Schema 为当前版本（`current`）时返回 200 与 `schema_version`，在数据库断开（`disconnected`）或 Schema 落后（`pending_migration`）/不可知（`unknown`）时返回 503 `SERVICE_UNAVAILABLE`，并在响应中保留可操作 `Data`（db、schema、schema_version） |
+
+## 变更清单（Commit 14b25af）
+
+- `internal/store/store.go`：新增 `SchemaVersion() (int, error)`——`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`，库未初始化/查询失败返回错误。
+- `internal/store/migration_test.go`：新增 `TestSchemaVersionReturnsCurrentVersion`、`TestSchemaVersionAfterCloseReturnsError`。
+- `internal/handler/handler.go`：`ReadinessHandler` 扩展——探测 `SchemaVersion`，`schemaStatus` 可为 `current`/`pending_migration`/`unknown`；`dbStatus == "disconnected" || schemaStatus != "current"` 时返回 503 + `CodeServiceUnavailable`。
+- `internal/handler/dto/types.go`：`ReadinessResponse` 增加 `schema`、`schema_version` 字段。
+- `internal/handler/handler_test.go`：`TestReadinessHandlerHealthy` 新增 `schema=schema_version` 断言；`TestReadinessHandlerUnhealthy` 新增 `schema=unknown`、`schema_version=0` 断言。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l ./cmd ./internal` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（387 个顶层测试） |
+| `git diff --check` | 通过 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R07 readiness 依赖探测实现 Commit 14b25af](https://github.com/qw2261/soulmarker/commit/14b25af) | `Store.SchemaVersion` + `ReadinessHandler` schema 状态探测 + `ReadinessResponse` schema/schema_version 字段 |
+| [GitHub Actions Run 32539068059](https://github.com/qw2261/soulmarker/actions/runs/32539068059) | success，与 Commit 14b25af 精确绑定 |
+| [backend job 96945276432](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276432) | format、build、vet、vulnerability scan、gitleaks、Go test（含新增 store/handler 用例）、race test 全部 success |
+| [frontend job 96945276196](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276196) | install、build、unit/component tests、Browser E2E 与浏览器证据上传 success |
+| [docker job 96945276347](https://github.com/qw2261/soulmarker/actions/runs/32539068059/job/96945276347) | 镜像构建、非 root 断言、smoke 探针与 `/version` Commit 一致断言全部 success |
+
+## 说明
+
+- `SchemaVersion()` 对空库回退 0，使 readiness 在未迁移库上呈现 `pending_migration`/`unknown` 而非 panic；关闭后的库返回错误，readiness 据此报 `schema=unknown` 并不可就绪。
+- readiness 以「数据库连通 + Schema 为当前版本」双条件判定，避免应用在迁移未完成的实例上提前接收流量；响应保留 db/schema/schema_version 供运维定位具体依赖。
+- `GET /healthz` 仅反映进程存活，`GET /readyz` 反映依赖就绪——两者保持分离，readiness 探测在上游依赖异常时返回 503 + 可操作 `Data`，符合 `ErrorCode=SERVICE_UNAVAILABLE` 约定。
+
+## Go/No-Go
+
+Go（G6-R07 readiness 依赖探测完善）：代码侧实现与完整远端门禁通过，关闭 G6-R07 中「依赖异常时返回可操作状态」的能力（readiness 现已同时探测数据库连接与 Schema 迁移版本）。G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名仍未完成，G6 完成门槛的「staging 连续稳定运行 ≥7 天」与真实依赖故障响应演练仍缺 staging 证据；G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。

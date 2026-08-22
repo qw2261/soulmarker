@@ -466,8 +466,8 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 
 ### 可观测性与运维
 
-- [ ] **G6-R06** request_id、结构化日志、指标、错误追踪和告警（request_id 与结构化日志在 G3 已具备；指标由 G6.5 切片实现并闭合，错误追踪与告警仍待补）。
-- [ ] **G6-R07** liveness 与 readiness 分离，依赖异常时返回可操作状态。
+- [x] **G6-R06** request_id、结构化日志、指标、错误追踪和告警（request_id 与结构化日志在 G3 已具备；指标由 G6.5 切片实现并闭合，错误追踪与告警由 G6.8 切片实现并闭合，Commit `14b25af` / Run `32539068059` 通过完整远端门禁；「真实告警演练」作为 G6 完成门槛仍待真实 staging 证据）。
+- [x] **G6-R07** liveness 与 readiness 分离，依赖异常时返回可操作状态（liveness/readiness 分离基础由 G6.1 切片实现；readiness 依赖探测完善由 G6.8 切片实现并闭合，Commit `14b25af` / Run `32539068059` 通过完整远端门禁；「staging 连续稳定运行 ≥7 天」与真实依赖故障响应演练作为 G6 完成门槛仍待真实 staging 证据）。
 - [x] **G6-R08** 部署、迁移、备份恢复、回滚、支付关闭、故障响应 Runbook；文档见 [runbooks/operations.md](runbooks/operations.md)。「回滚」策略为 Expand-only 迁移不删列/表/触发器、应用整体前后端同制品回滚、完全撤销仅恢复升级前备份；「支付关闭」当前不适用（属 G7），已记录未来一键停新单设计原则。完成门槛中的实际演练（备份恢复/应用回滚/迁移失败/告警）仍需真实 staging 证据。
 - [x] **G6-R09** 自动备份、保留策略、恢复验证和定期演练；Commit `e390d99` / Run `32524900392` 远端通过（backend/frontend/docker 全部 success）。`Store.Backup` 基于 `VACUUM INTO` 生成一致快照，备份管理器以只读校验 `integrity_check`/schema/表数量，按 UTC 时间戳保留最近 N 份，定期恢复演练复制最新备份到临时位置校验后清理。备份恢复仍以真实 staging 持续运行与 SLO 实测验证为准。
 - [x] **G6-R10** 审计、隐私请求、账号注销、数据导出/删除和留存流程；Commit `fec363a` / Run `32527562084` 远端通过（backend/frontend/docker 全部 success）。
@@ -564,6 +564,19 @@ G6-SC01–SC05 关闭 G6-R04 中的「依赖与 Secret 扫描」能力。G6-R04 
 - [x] **G6-MG06** 功能候选 Commit `1da3005` 与远端 CI Run `32535000449` 绑定；backend `96934123793`、frontend `96934123654`、docker `96934123778` 全部 success（backend Go test 包含新增迁移用例）。证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)，G6.7 独立迁移入口切片关闭。
 
 G6-MG01–MG06 关闭 G6-R05 的代码侧能力（`event-go migrate` 独立预迁移 + Expand-only N/N-1 兼容），为「数据库迁移先于应用灰度」提供可执行的独立入口与自动兼容验证。G6-R05 的「迁移先于应用灰度」作为真实部署编排（staging 预迁移演练）仍归 G6-R01 与 G6 完成门槛；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名、G6-R06 的错误追踪与告警、G6-R07 的 readiness 依赖探测完善仍未完成，不能据此宣称 G6/M2 整体完成。
+
+### G6.8 当前错误追踪与告警、readiness 依赖探测完善切片验收
+
+- [x] **G6-ET01** 新增 `internal/handler/recovery.go`：`PanicRecord` 追踪载荷（request_id/method/path/panic 值/调用栈/UTC 时间），`PanicReporter` 接口与 `LogPanicReporter`（结构化日志）、`WebhookPanicReporter`（带超时 POST，默认 5s，失败仅记录日志不阻断）；`RecoveryMiddleware` 捕获下游 panic 后返回 500 `INTERNAL_ERROR`（fail-closed，不向客户端泄漏调用栈），单请求 panic 不拖垮进程。
+- [x] **G6-ET02** `NewRouter` 中间件链插入 `RecoveryMiddleware`（位于 `LoggingMiddleware` 与 `SecurityHeaders` 之间），以 `panicReporterFor(h.config)` 选择 reporter；`ALERT_WEBHOOK_URL` 未配置时退化为日志追踪，配置为有效 HTTPS 地址时启用 webhook 告警。
+- [x] **G6-ET03** `internal/config/config.go` 新增 `AlertWebhookURL` 字段与 `ALERT_WEBHOOK_URL` 读取，`Validate()` 拒绝非 HTTPS/无效告警地址；`config_test.go` 新增 `TestValidateAlertWebhookURL`、`TestLoadReadsAlertWebhookURL`。
+- [x] **G6-ET04** 新增 `recovery_test.go` 6 个用例（500 降级、健康透传、panic 记录、webhook 投递、端点失败容忍、reporter 选择）；本地门禁 `gofmt`/`go build`/`go vet`/`go test -count=1 ./...`（387 个顶层测试）全绿。
+- [x] **G6-RD01** `internal/store/store.go` 新增 `SchemaVersion() (int, error)`：`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`，空库回退 0、关闭/查询失败返回错误。
+- [x] **G6-RD02** `ReadinessHandler` 扩展为同时探测数据库连接与 Schema 迁移版本：`schemaStatus` 可为 `current`/`pending_migration`/`unknown`；`dbStatus == "disconnected" || schemaStatus != "current"` 时返回 503 `SERVICE_UNAVAILABLE` 并保留可操作 `Data`（db/schema/schema_version）；`ReadinessResponse` 增加 `schema`、`schema_version` 字段。
+- [x] **G6-RD03** `migration_test.go` 新增 `TestSchemaVersionReturnsCurrentVersion`、`TestSchemaVersionAfterCloseReturnsError`；`handler_test.go` 的 `TestReadinessHandlerHealthy` 新增 `schema`/`schema_version` 断言、`TestReadinessHandlerUnhealthy` 新增 `schema=unknown`/`schema_version=0` 断言。
+- [x] **G6-ET05 / G6-RD04** 功能候选 Commit `14b25af` 与远端 CI Run `32539068059` 绑定；backend `96945276432`、frontend `96945276196`、docker `96945276347` 三个 job 全部 success；证据已回填 [v6.2 测试报告](releases/v6.2.0/test-report.md)。
+
+G6-ET01–ET05 与 G6-RD01–RD04 分别关闭 G6-R06 中「错误追踪与告警」和 G6-R07 中「依赖异常时返回可操作状态」的代码侧能力（指标已由 G6.5 闭合、readiness 分离基础已由 G6.1 闭合）。G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名仍待补，G6 完成门槛的真实告警演练、staging 连续运行 ≥7 天与真实依赖故障响应演练仍需真实 staging 证据，不能据此宣称 G6-R06/R07 全部操作层面或 G6/M2 整体完成。
 
 ### 完成门槛
 
@@ -885,7 +898,7 @@ CI 原始产物由 CI 或 Release 保存，test-report.md 记录不可变 Run UR
 | G3 | Verification | v5.5 | [v5.5 测试报告](releases/v5.5.0/test-report.md) | R01–R08 与候选 48f91a3 已通过本地及远端门禁；等待 v5.5.0 Tag 与最终发布证据 |
 | G4 | In Progress | v6.0 | [v6.0 测试报告](releases/v6.0.0/test-report.md) | R01、R02、R04、R05、R06、R07、R08、R09 与 P0/P1 清零审计已通过远端门禁；R03 仅待真实 SMTP，两场受控活动继续推进 |
 | G5 | In Progress | v6.1 | [v6.1 测试报告](releases/v6.1.0/test-report.md) | G5.1–G5.5 代码已通过远端门禁，R01–R08 关闭，三组织试点通过；待 e2e/浏览器矩阵与发布归档证据 |
-| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084），G6-R04 限流切片通过（Run 32529278311），G6-R02 构建 provenance 切片通过（Run 32530864989），G6-R06 指标切片通过（Run 32532723517）；M2 仍待真实备份恢复/回滚/压测演练、发布归档与 Legal/隐私流程按实际经营地区确认 |
+| G6 | In Progress | v6.2 | [v6.2 测试报告](releases/v6.2.0/test-report.md) | G6-R03/R07 容器与部署基线切片通过（Run 32523778826），G6-R09 备份恢复切片通过（Run 32524900392），G6-R08 Runbook 已建立，G6-R10 数据主体隐私切片通过（Run 32527562084），G6-R04 限流切片通过（Run 32529278311），G6-R02 构建 provenance 切片通过（Run 32530864989），G6-R06 指标切片通过（Run 32532723517），G6.7 独立迁移入口 / G6-R05 代码侧切片通过（Run 32535000449），G6-R04 依赖与 Secret 扫描切片通过（Run 32533839331），G6-R06 错误追踪与告警、G6-R07 readiness 依赖探测完善切片通过（Run 32539068059）；G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名仍待补，M2 仍待真实备份恢复/回滚/压测/告警演练、staging 连续运行 ≥7 天、发布归档与 Legal/隐私流程按实际经营地区确认 |
 | G7 | Planned | v7.0 | — | 依赖租户隔离与生产基线 |
 | G8 | Planned | v7.x | — | M3，需真实经营数据 |
 
