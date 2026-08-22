@@ -630,3 +630,56 @@ G6 生产上线准备的可观测性切片，完善 `readyz` 探针，使依赖�
 ## Go/No-Go
 
 Go（G6-R07 readiness 依赖探测完善）：代码侧实现与完整远端门禁通过，关闭 G6-R07 中「依赖异常时返回可操作状态」的能力（readiness 现已同时探测数据库连接与 Schema 迁移版本）。G6-R01 环境隔离/安全存储、G6-R04 的 HTTPS/域名仍未完成，G6 完成门槛的「staging 连续稳定运行 ≥7 天」与真实依赖故障响应演练仍缺 staging 证据；G6/M2 整体仍为 No-Go；在无 Critical/High 漏洞、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟、真实备份恢复/应用回滚/迁移失败/告警演练与 Legal/隐私流程按实际经营地区确认完成前，不应启动支付开发或宣称正式生产就绪。
+
+# G6-R01 环境隔离与安全存储管理（密钥文件挂载）
+
+## 本切片范围
+
+G6 生产上线准备的「环境隔离与安全存储」切片，支撑 M2「可上线」的 staging/production 环境隔离与配置/密钥由安全存储管理：
+
+- **G6-R01**：staging、production 环境隔离，配置和密钥由安全存储管理。
+
+本切片交付其中的**密钥安全存储代码侧能力**：除环境变量外，支持从安全存储以文件方式挂载读取密钥（Docker/K8s Secret 常以文件挂载，如 `/run/secrets/<name>`），并保持 fail-closed（文件读取失败则拒绝启动）。本切片不涉及数据库结构变更（Schema 保持 v15）、不涉及前端功能调整，也不宣称关闭 G6-R01 的全部操作层面或完成 G6 全部门禁——staging/production 真实隔离环境、部署编排与安全存储（Secret 注入）仍归真实基础设施交付与完成门槛。
+
+## 需求追溯
+
+| Requirement | Test ID | 自动化验收 |
+|---|---|---|
+| G6-R01（密钥安全存储） | SECRET-FILE-001…004 | `ADMIN_TOKEN`/`JWT_SECRET`/`SMTP_PASSWORD` 支持以 `<KEY>_FILE` 指向的文件读取密钥内容（优先于默认值），并去除尾部 CRLF；环境变量 `<KEY>` 优先于 `<KEY>_FILE`；文件读取失败记录到 `fileReadErrors`，`Validate()` 检测到任何读取错误即返回含对应 `<KEY>_FILE` 的错误并拒绝启动（fail-closed） |
+
+## 变更清单（Commit 1ad0984）
+
+- `internal/config/config.go`：`Config` 新增 `fileReadErrors []string`；`Load()` 中 `AdminToken`/`JWTSecret`/`SMTPPassword` 三密钥改用 `getSecret()` 读取；`Validate()` 起始新增文件读取错误即拒绝启动；新增 `getSecret()` —— 优先级「环境变量 `<KEY>` > 文件 `<KEY>_FILE` > 默认值」，文件读取失败记入 `fileReadErrors`，读取内容用 `strings.TrimRight(data, "\r\n")` 去除尾部 CRLF。
+- `internal/config/config_test.go`：新增 4 个测试——`TestLoadReadsSecretFromFile`（JWT 文件读取去掉末尾 `\n`）、`TestLoadSecretFileSupportsAdminAndSMTP`（ADMIN_TOKEN 与带 `\r\n` 的 SMTP_PASSWORD 文件读取，验证 `\r\n` 均去除）、`TestLoadSecretFileEnvVarPrecedence`（环境变量优先于文件）、`TestLoadRejectsUnreadableSecretFile`（不存在的文件使 `Validate()` 失败并含 `ADMIN_TOKEN_FILE`）。
+
+## 本地门禁
+
+| 门禁 | 结果 |
+|---|---|
+| `gofmt -l .` | 通过，无待格式文件 |
+| `go build ./...` | 通过 |
+| `go vet ./...` | 通过 |
+| `go test -count=1 ./...` | 通过（391 个顶层测试，含 `internal/config` 新增 4 例） |
+| `git diff --check` | 通过 |
+
+本阶段不使用 covdata，也不以覆盖率数字替代需求追溯、迁移测试和安全门禁。
+
+## 远端 CI
+
+| 证据 | 结果 |
+|---|---|
+| [G6-R01 密钥文件挂载实现 Commit 1ad0984](https://github.com/qw2261/soulmarker/commit/1ad0984) | `getSecret` 优先环境变量、其次 `<KEY>_FILE` 文件挂载、最后默认值；文件读取失败 fail-closed；`\r\n` 去除修正 |
+| [GitHub Actions Run 32540823076](https://github.com/qw2261/soulmarker/actions/runs/32540823076) | success，与 Commit 1ad0984 精确绑定 |
+| [backend job 96950363363](https://github.com/qw2261/soulmarker/actions/runs/32540823076/job/96950363363) | format、build、vet、vulnerability scan、gitleaks、Go test（含新增 config 用例）、race test 全部 success |
+| [frontend job 96950363272](https://github.com/qw2261/soulmarker/actions/runs/32540823076/job/96950363272) | install、build、unit/component tests、Browser E2E 与浏览器证据上传 success |
+| [docker job 96950363208](https://github.com/qw2261/soulmarker/actions/runs/32540823076/job/96950363208) | 镜像构建、非 root 断言、smoke 探针与 `/version` Commit 一致断言全部 success |
+
+## 说明与未包含项
+
+- `getSecret` 的三类密钥（`ADMIN_TOKEN`/`JWT_SECRET`/`SMTP_PASSWORD`）统一读取路径，使 Docker/K8s Secret 可以文件方式挂载并由应用读取，密钥正文不进入环境变量/镜像层；`Validate()` 在任何密钥文件读取失败时拒绝启动，实现 fail-closed。
+- 读取顺序与安全语义：环境变量 `<KEY>` 仍最优先，满足显式注入与向后兼容；`<KEY>_FILE` 提供文件挂载通道；两者均未提供时才回退默认值（development 的 `DefaultJWTSecret`）。
+- 本切片只交付「密钥可由安全存储文件挂载读取 + fail-closed」的代码侧能力。G6-R01 的 staging/production 真实隔离环境、部署编排、安全存储 Secret 实际注入、HTTPS/域名与部署归档仍归真实基础设施交付、G6-R04 的 HTTPS/域名与 G6 完成门槛，不能据此宣称 G6-R01 或 G6/M2 整体完成。
+
+## Go/No-Go
+
+Go（G6-R01 密钥安全存储）：代码侧实现与完整远端门禁通过，交付 G6-R01 中「配置和密钥由安全存储管理」的密钥文件挂载与 fail-closed 能力。G6-R01 的 staging/production 环境真实隔离、部署编排与 Secret 注入、G6-R04 的 HTTPS/域名仍未完成，G6 完成门槛的真实备份恢复/应用回滚/迁移失败/告警演练、staging 连续运行 ≥7 天、5 倍峰值压测 30 分钟与 Legal/隐私流程按实际经营地区确认仍缺真实 staging 证据；G6/M2 整体仍为 No-Go；在各项完成门槛满足前，不应启动支付开发或宣称正式生产就绪。

@@ -192,7 +192,7 @@ Registration、Admission、Checkin 保持独立，取消报名会吊销未核销
 
 ## 当前进度
 
-**v6.1 多租户迭代与 v6.2 生产准备并行推进** — G5.1–G5.5（Schema v12 基础、授权内核、资源 tenant scope、自助运营、审计/PII 最小授权/所有权转移）均已通过远端门禁（G5.5 由 Commit `6938149` / Run `32515720494` 绑定，三组织试点通过）；G6 生产基线代码侧（制品 provenance、Docker 非 root/Healthcheck、限流、依赖与 Secret 扫描、独立迁移入口与 N/N-1 兼容、指标、错误追踪与告警、readiness 依赖探测完善、备份、审计/隐私/注销，以及运维 Runbook）均已提交并通过完整远端门禁，证据见 [goal.md](docs/goal.md) 与 [v6.2 测试报告](docs/releases/v6.2.0/test-report.md)。G4 仍待真实 staging SMTP 与两场受控活动，G6 完成门槛（staging 连续稳定运行 ≥7 天、5 倍峰值压测、备份恢复/回滚/迁移失败/告警实演、发布制品归档、法律/隐私落地确认）仍需真实 staging 证据，因此 M1/M2 不提前标记完成，也不宣称正式生产就绪。
+**v6.1 多租户迭代与 v6.2 生产准备并行推进** — G5.1–G5.5（Schema v12 基础、授权内核、资源 tenant scope、自助运营、审计/PII 最小授权/所有权转移）均已通过远端门禁（G5.5 由 Commit `6938149` / Run `32515720494` 绑定，三组织试点通过）；G6 生产基线代码侧（制品 provenance、Docker 非 root/Healthcheck、限流、依赖与 Secret 扫描、独立迁移入口与 N/N-1 兼容、指标、错误追踪与告警、readiness 依赖探测完善、密钥文件挂载（安全存储）、备份、审计/隐私/注销，以及运维 Runbook）均已提交并通过完整远端门禁，证据见 [goal.md](docs/goal.md) 与 [v6.2 测试报告](docs/releases/v6.2.0/test-report.md)。G4 仍待真实 staging SMTP 与两场受控活动，G6 完成门槛（staging 连续稳定运行 ≥7 天、5 倍峰值压测、备份恢复/回滚/迁移失败/告警实演、发布制品归档、法律/隐私落地确认）仍需真实 staging 证据，因此 M1/M2 不提前标记完成，也不宣称正式生产就绪。
 
 机器可读规范：[`GET /api/v1/openapi.json`](http://localhost:8080/api/v1/openapi.json)，源文件位于 [`internal/openapi/v1.json`](internal/openapi/v1.json)。
 
@@ -710,6 +710,8 @@ event_go/
 | `RATE_LIMIT_REQUESTS_PER_MINUTE` | 空 | per-minute 固定窗口限流；staging/production 必须为正数（fail-closed），非正数在 development 表示不限制 |
 
 staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、组织邀请 TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置、邮箱验证和组织邀请链接写入服务日志，不发送邮件；普通业务通知不依赖 SMTP。
+
+密钥（`ADMIN_TOKEN`、`JWT_SECRET`、`SMTP_PASSWORD`）除环境变量外，还支持由安全存储以文件方式挂载（Docker/K8s Secret 常以文件挂载，如 `/run/secrets/<name>`）：设置 `<KEY>_FILE` 指向文件路径即可从文件读取密钥正文（自动去除尾部 CRLF）。读取优先级为「环境变量 `<KEY>` > 文件 `<KEY>_FILE` > 默认值」；文件读取失败会使得 `Validate()` 拒绝启动，保证 fail-closed。
 
 ### 环境准备
 

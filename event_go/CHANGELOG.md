@@ -42,6 +42,7 @@
 - panic 恢复中间件（`RecoveryMiddleware`）捕获下游 panic 返回 500 `INTERNAL_ERROR`（fail-closed，不向客户端泄漏调用栈），请求按 `request_id` 追踪并携带调用栈，单请求 panic 不拖垮进程。
 - panic 告警 webhook：`ALERT_WEBHOOK_URL` 配置为有效 HTTPS 地址时投递 `PanicRecord`，未配置时退化为结构化日志追踪；`config.Validate()` 拒绝非 HTTPS/无效告警地址。
 - readiness 依赖探测完善：`/readyz` 同时探测数据库连接与 Schema 迁移版本（`current`/`pending_migration`/`unknown`），依赖异常返回 503 `SERVICE_UNAVAILABLE` 并保留可操作 `Data`（`db`/`schema`/`schema_version`）；`Store.SchemaVersion()` 读取 `schema_migrations` 当前版本。
+- 密钥文件挂载：`ADMIN_TOKEN`/`JWT_SECRET`/`SMTP_PASSWORD` 支持通过 `<KEY>_FILE` 指向的文件读取密钥正文（Docker/K8s Secret 常以文件挂载），自动去除尾部 CRLF；读取优先级为「环境变量 `<KEY>` > 文件 `<KEY>_FILE` > 默认值」，文件读取失败使 `Validate()` 拒绝启动（fail-closed）。
 
 ### Changed
 
