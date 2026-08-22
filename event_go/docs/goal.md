@@ -591,7 +591,7 @@ G6-SEC01–SEC04 关闭 G6-R01 中「配置和密钥由安全存储管理」的�
 
 - [ ] 无 Critical/High 安全漏洞。
 - [ ] staging 连续稳定运行至少 7 天。
-- [ ] 5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO。
+- [ ] 5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO。**压测剧本已就绪**：[scripts/loadtest.js](../scripts/loadtest.js) 采用 k6 `constant-arrival-rate` 按 `TARGET_RPS` 注入，阈值对齐初始 SLO（`error_rate<0.01`、读 `P95<500ms`、核销 `P95<800ms`）；待真实 staging 执行并回填基线 + 5 倍峰值实测。
 - [ ] 备份恢复、应用回滚、迁移失败和告警演练通过。
 - [ ] 发布制品、Tag、Commit、测试报告和部署记录能够互相追溯。
 - [ ] 法律文本、隐私同意、投诉和数据主体请求流程已按实际经营地区确认。
