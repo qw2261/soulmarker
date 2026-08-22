@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/qw2261/soulmarker/event_go/internal/api"
@@ -361,13 +362,24 @@ func (h *Handler) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, httpStatus, dto.Response{Code: code, Message: status, Data: data, ErrorCode: errorCode})
 }
 
-// CORS 中间件使用启动时注入的允许来源处理跨域请求。
+// CORS 中间件按启动时注入的允许来源处理跨域请求。
+// development/test（allowedOrigin 为空或 *）保持通配：回写 Access-Control-Allow-Origin: *。
+// staging/production（allowedOrigin 为具体 HTTPS 域名）实现 CORS 收口：仅当请求的
+// Origin 与允许来源匹配时才回写 Access-Control-Allow-Origin，并添加 Vary: Origin 以便
+// 各级缓存正确区分来源；无 Origin 或来源不匹配的请求不回写该头。
 func CORS(next http.Handler, allowedOrigin string) http.Handler {
-	if allowedOrigin == "" {
-		allowedOrigin = "*"
-	}
+	allowedOrigin = strings.TrimSpace(allowedOrigin)
+	allowAll := allowedOrigin == "" || allowedOrigin == "*"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		origin := r.Header.Get("Origin")
+		if allowAll {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" && strings.EqualFold(origin, allowedOrigin) {
+			w.Header().Add("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		} else {
+			w.Header().Add("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token, X-Request-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")

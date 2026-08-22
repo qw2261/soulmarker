@@ -1631,6 +1631,7 @@ func TestHandlerUsesStartupConfigSnapshot(t *testing.T) {
 	t.Setenv("CORS_ORIGIN", "https://changed.example.com")
 
 	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthReq.Header.Set("Origin", "https://startup.example.com")
 	healthResp := httptest.NewRecorder()
 	router.ServeHTTP(healthResp, healthReq)
 	var apiResp model.APIResp
@@ -2007,14 +2008,40 @@ func TestCORSOriginEnvConfig(t *testing.T) {
 	server := httptest.NewServer(CORS(mux, "https://example.com"))
 	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/test")
+	// 匹配来源：回写 Access-Control-Allow-Origin 并带 Vary: Origin。
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+	if err != nil {
+		t.Fatalf("create request failed: %v", err)
+	}
+	req.Header.Set("Origin", "https://example.com")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+		t.Errorf("expected CORS origin https://example.com, got %q", got)
+	}
+	if got := resp.Header.Get("Vary"); !strings.Contains(got, "Origin") {
+		t.Errorf("expected Vary header to include Origin, got %q", got)
+	}
 
-	if resp.Header.Get("Access-Control-Allow-Origin") != "https://example.com" {
-		t.Errorf("expected CORS origin https://example.com, got %q", resp.Header.Get("Access-Control-Allow-Origin"))
+	// 不匹配来源：CORS 收口，不再回写 Access-Control-Allow-Origin。
+	reqMismatch, err := http.NewRequest(http.MethodGet, server.URL+"/test", nil)
+	if err != nil {
+		t.Fatalf("create request failed: %v", err)
+	}
+	reqMismatch.Header.Set("Origin", "https://evil.example.com")
+	respMismatch, err := http.DefaultClient.Do(reqMismatch)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer respMismatch.Body.Close()
+	if got := respMismatch.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("expected no CORS origin for mismatch, got %q", got)
+	}
+	if got := respMismatch.Header.Get("Vary"); !strings.Contains(got, "Origin") {
+		t.Errorf("expected Vary header to include Origin for mismatch, got %q", got)
 	}
 }
 

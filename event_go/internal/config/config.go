@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/mail"
 	"net/url"
 	"os"
@@ -143,9 +144,15 @@ func (c *Config) Validate() error {
 		if strings.TrimSpace(c.CORSOrigin) == "" || c.CORSOrigin == "*" {
 			return fmt.Errorf("%s 环境必须设置明确的 CORS_ORIGIN", env)
 		}
+		if corsURL, err := url.Parse(c.CORSOrigin); err != nil || corsURL.Scheme != "https" || !isRealDomainHost(corsURL.Hostname()) {
+			return fmt.Errorf("%s 环境 CORS_ORIGIN 必须使用真实 HTTPS 域名（不允许 localhost/IP）", env)
+		}
 		baseURL, err := url.Parse(c.PublicBaseURL)
 		if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" {
 			return fmt.Errorf("%s 环境必须设置有效的 HTTPS PUBLIC_BASE_URL", env)
+		}
+		if !isRealDomainHost(baseURL.Hostname()) {
+			return fmt.Errorf("%s 环境 PUBLIC_BASE_URL 必须使用真实 HTTPS 域名（不允许 localhost/IP）", env)
 		}
 		if strings.TrimSpace(c.SMTPHost) == "" || strings.TrimSpace(c.SMTPPort) == "" ||
 			strings.TrimSpace(c.SMTPUsername) == "" || strings.TrimSpace(c.SMTPPassword) == "" ||
@@ -163,6 +170,16 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("无效的 APP_ENV: %s", c.Environment)
 	}
+}
+
+// isRealDomainHost 校验 host 是否为可部署的真实域名：
+// 拒绝空值、IP 字面量（IPv4/IPv6）与不含点号的裸主机名（如 localhost）。
+func isRealDomainHost(host string) bool {
+	h := strings.TrimSuffix(strings.TrimSpace(host), ".")
+	if h == "" || net.ParseIP(h) != nil {
+		return false
+	}
+	return strings.Contains(h, ".")
 }
 
 func getEnv(key, defaultValue string) string {

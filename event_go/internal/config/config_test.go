@@ -130,6 +130,45 @@ func TestValidateProductionRejectsInsecureResetURLAndSMTPPort(t *testing.T) {
 	}
 }
 
+// validProductionBase 返回一份可通过 staging/production 校验的基准配置，
+// 供各用例通过覆盖单个字段验证 fail-closed 行为。
+func validProductionBase() Config {
+	return Config{
+		Environment: "staging", AdminToken: "admin-token",
+		JWTSecret: "12345678901234567890123456789012", JWTExpireHours: 168,
+		CORSOrigin: "https://events.example.com", PublicBaseURL: "https://events.example.com",
+		PasswordResetTTLMin: 30, RecoveryEmailTTLMin: 30,
+		NotificationReminderHours: 24, NotificationScanIntervalSec: 60,
+		OrganizationInvitationTTLHours: 72, RateLimitPerMinute: 600,
+		SMTPHost: "smtp.example.com", SMTPPort: "587",
+		SMTPUsername: "mailer", SMTPPassword: "secret", SMTPFrom: "no-reply@example.com",
+	}
+}
+
+func TestValidateSecureEnvRejectsNonRealDomainAndInsecureURLs(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"CORS_ORIGIN localhost", func(c *Config) { c.CORSOrigin = "https://localhost:8080" }},
+		{"CORS_ORIGIN bare localhost", func(c *Config) { c.CORSOrigin = "http://localhost" }},
+		{"CORS_ORIGIN IP literal", func(c *Config) { c.CORSOrigin = "https://127.0.0.1" }},
+		{"CORS_ORIGIN non-HTTPS", func(c *Config) { c.CORSOrigin = "http://events.example.com" }},
+		{"PUBLIC_BASE_URL localhost", func(c *Config) { c.PublicBaseURL = "https://localhost" }},
+		{"PUBLIC_BASE_URL IP literal", func(c *Config) { c.PublicBaseURL = "https://192.168.1.1" }},
+		{"PUBLIC_BASE_URL non-HTTPS", func(c *Config) { c.PublicBaseURL = "http://events.example.com" }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validProductionBase()
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("expected validation error for non-real-domain/insecure URL")
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidPasswordResetTTL(t *testing.T) {
 	t.Setenv("PASSWORD_RESET_TTL_MINUTES", "not-a-number")
 	cfg := Load()
