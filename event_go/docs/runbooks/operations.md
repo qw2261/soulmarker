@@ -20,7 +20,8 @@
   - `BACKUP_RETAIN`（默认 `7`；`<=0` 表示保留全部）
   - `BACKUP_DRILL_INTERVAL_SECONDS`（默认 `0`=禁用）
   - `ORGANIZATION_AUTH_ENABLED`（默认 `true`；`false` 关闭所有 `/organizations/...` 租户入口）
-- 探针：`GET /healthz`（进程存活，不探测依赖）、`GET /readyz`（依赖就绪，否则 503，`ErrorCode=SERVICE_UNAVAILABLE`）。
+  - `ALERT_WEBHOOK_URL`（默认空；配置为有效 HTTPS 地址时启用 panic 告警 webhook，未配置退化为结构化日志追踪）
+- 探针：`GET /healthz`（进程存活，不探测依赖）、`GET /readyz`（依赖就绪，否则 503，`ErrorCode=SERVICE_UNAVAILABLE`）、`GET /metrics`（Prometheus 指标，与探针一同豁免限流）。
 - 支付：**尚未实现**（属 G7），本文第 5 节给出计划原则与未来的开关位置，当前不适用。
 
 ---
@@ -203,9 +204,14 @@ cp /app/data/event_go.db /app/data/backups/manual-$(date -u +%Y%m%dT%H%M%S).db
 | 迁移失败 | 迁移不适用当前库 | 前向修复新迁移；必要时恢复升级前备份 |
 | 租户隔离异常 | 授权策略缺陷 | 设 `ORGANIZATION_AUTH_ENABLED=false` 关闭租户入口，仅保留 platform 应急运营，再修复 |
 
-### 6.4 告警与指标
+### 6.4 指标、错误追踪与告警
 
-当前**尚未实现** metrics/错误追踪/告警（G6-R06 未完成）。本手册的故障响应以手动探针 + 日志为主；G6-R06 完成后补充告警规则与阈值，并回填到「未完成项」。
+- **指标**（G6.5 闭合）：`GET /metrics` 输出 OpenMetrics/Prometheus 文本，按 `method`/`status` 聚合请求总数、in-flight、进程运行时长与构建 provenance；延迟直方图使用固定上界桶。抓取端点与 `/healthz`、`/readyz`、`/version` 一同豁免限流。
+- **错误追踪**（G6.8 闭合）：`RecoveryMiddleware` 捕获下游 panic，把 `request_id`/`method`/`path`/panic 值/调用栈/UTC 时间交给 `PanicReporter`，并返回 500 `INTERNAL_ERROR`（不向客户端泄漏调用栈），单请求 panic 不拖垮进程。
+- **告警**（G6.8 闭合）：`ALERT_WEBHOOK_URL` 配置为有效 HTTPS 地址时经 `WebhookPanicReporter` POST 告警载荷；未配置时退化为 `LogPanicReporter` 结构化日志追踪。告警为旁路投递——webhook 失败或超时（默认 5 秒）仅记录日志，不阻断请求。
+- **告警演练**：在真实 staging 上通过一次触发（如注入 panic 或模拟依赖故障）验证 webhook 实际送达并记录执行人、时间、`request_id`、触发点与判定（见第 7 节）。
+
+> 上述能力代码侧已实现并取得远端证据（Commit `14b25af` / Run `32539068059` 与 G6.5 指标 Commit `6eb9ffe` / Run `32532723517`）。真实告警演练作为 G6 完成门槛仍待真实 staging 证据，完成后回填到「未完成项」。
 
 ---
 
@@ -213,7 +219,7 @@ cp /app/data/event_go.db /app/data/backups/manual-$(date -u +%Y%m%dT%H%M%S).db
 
 下列项属于 G6 完成门槛，需在**真实 staging** 上执行并有证据后方可宣称达到 M2：
 
-- [ ] 备份恢复、应用回滚、迁移失败、告警的**实际演练**通过并记录执行人、时间、备份路径与判定。
+- [ ] 备份恢复、应用回滚、迁移失败、告警的**实际演练**通过并记录执行人、时间、备份路径与判定。**备份/恢复与迁移失败的能力已由 G6-R09/G6-R05 提供；告警与错误追踪能力已由 Commit `14b25af` / Run `32539068059` 实现并闭合代码侧**；此条目剩余的是在真实 staging 上执行并回填证据。
 - [ ] staging 连续稳定运行至少 7 天。
 - [ ] 5 倍预测峰值压测 30 分钟，错误率满足阶段 SLO。
 - [ ] 无 Critical/High 安全漏洞。
