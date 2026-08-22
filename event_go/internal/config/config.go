@@ -44,14 +44,16 @@ type Config struct {
 	RateLimitPerMinute             int
 	AlertWebhookURL                string
 	organizationAuthFlagInvalid    bool
+	fileReadErrors                 []string
 }
 
 func Load() *Config {
 	port := getEnv("PORT", "8080")
 	organizationAuthEnabled, organizationAuthFlagInvalid := getEnvBoolStrict("ORGANIZATION_AUTH_ENABLED", true)
+	var fileReadErrors []string
 	return &Config{
 		Environment:                    getEnv("APP_ENV", "development"),
-		AdminToken:                     getEnv("ADMIN_TOKEN", ""),
+		AdminToken:                     getSecret("ADMIN_TOKEN", "", &fileReadErrors),
 		CORSOrigin:                     getEnv("CORS_ORIGIN", "*"),
 		LogFormat:                      getEnv("LOG_FORMAT", "json"),
 		LogLevel:                       getEnv("LOG_LEVEL", "info"),
@@ -59,7 +61,7 @@ func Load() *Config {
 		Port:                           port,
 		Version:                        getEnv("VERSION", buildinfo.DefaultVersion()),
 		CancelDeadlineHours:            getEnvInt("CANCEL_DEADLINE_HOURS", 24),
-		JWTSecret:                      getEnv("JWT_SECRET", DefaultJWTSecret),
+		JWTSecret:                      getSecret("JWT_SECRET", DefaultJWTSecret, &fileReadErrors),
 		JWTExpireHours:                 getEnvInt("JWT_EXPIRE_HOURS", 168),
 		PublicBaseURL:                  getEnv("PUBLIC_BASE_URL", "http://localhost:"+port),
 		PasswordResetTTLMin:            getEnvIntStrict("PASSWORD_RESET_TTL_MINUTES", 30),
@@ -71,7 +73,7 @@ func Load() *Config {
 		SMTPHost:                       getEnv("SMTP_HOST", ""),
 		SMTPPort:                       getEnv("SMTP_PORT", "587"),
 		SMTPUsername:                   getEnv("SMTP_USERNAME", ""),
-		SMTPPassword:                   getEnv("SMTP_PASSWORD", ""),
+		SMTPPassword:                   getSecret("SMTP_PASSWORD", "", &fileReadErrors),
 		SMTPFrom:                       getEnv("SMTP_FROM", ""),
 		BackupDir:                      getEnv("BACKUP_DIR", "data/backups"),
 		BackupIntervalSec:              getEnvInt("BACKUP_INTERVAL_SECONDS", 0),
@@ -80,10 +82,14 @@ func Load() *Config {
 		RateLimitPerMinute:             getEnvIntStrict("RATE_LIMIT_REQUESTS_PER_MINUTE", 0),
 		AlertWebhookURL:                getEnv("ALERT_WEBHOOK_URL", ""),
 		organizationAuthFlagInvalid:    organizationAuthFlagInvalid,
+		fileReadErrors:                 fileReadErrors,
 	}
 }
 
 func (c *Config) Validate() error {
+	if len(c.fileReadErrors) > 0 {
+		return fmt.Errorf("读取密钥文件失败: %s", strings.Join(c.fileReadErrors, "; "))
+	}
 	if c.organizationAuthFlagInvalid {
 		return fmt.Errorf("ORGANIZATION_AUTH_ENABLED 必须是 true 或 false")
 	}
@@ -162,6 +168,24 @@ func (c *Config) Validate() error {
 func getEnv(key, defaultValue string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return defaultValue
+}
+
+// getSecret 读取密钥：优先使用环境变量 KEY，其次读取以文件方式挂载的
+// KEY_FILE 内容（Docker/K8s Secret 常以文件挂载，如 /run/secrets/<name>），
+// 便于由安全存储管理密钥。文件读取失败时记录到 errors 以便 Validate 拒绝启动。
+func getSecret(key, defaultValue string, errors *[]string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	if file := os.Getenv(key + "_FILE"); file != "" {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			*errors = append(*errors, fmt.Sprintf("%s_FILE: %v", key, err))
+			return ""
+		}
+		return strings.TrimRight(string(data), "\r\n")
 	}
 	return defaultValue
 }

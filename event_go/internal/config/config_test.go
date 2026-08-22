@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -260,5 +262,62 @@ func TestLoadReadsAlertWebhookURL(t *testing.T) {
 	cfg := Load()
 	if cfg.AlertWebhookURL != "https://hooks.example.com/alerts" {
 		t.Fatalf("expected ALERT_WEBHOOK_URL to be loaded, got %q", cfg.AlertWebhookURL)
+	}
+}
+
+func TestLoadReadsSecretFromFile(t *testing.T) {
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "jwt_secret")
+	if err := os.WriteFile(secretPath, []byte("file-based-secret-value\n"), 0o600); err != nil {
+		t.Fatalf("failed to write secret file: %v", err)
+	}
+	t.Setenv("JWT_SECRET_FILE", secretPath)
+	cfg := Load()
+	if cfg.JWTSecret != "file-based-secret-value" {
+		t.Fatalf("expected JWT_SECRET to be read from file, got %q", cfg.JWTSecret)
+	}
+}
+
+func TestLoadSecretFileSupportsAdminAndSMTP(t *testing.T) {
+	dir := t.TempDir()
+	adminPath := filepath.Join(dir, "admin_token")
+	smtpPath := filepath.Join(dir, "smtp_password")
+	if err := os.WriteFile(adminPath, []byte("admin-token-from-file"), 0o600); err != nil {
+		t.Fatalf("failed to write admin secret file: %v", err)
+	}
+	if err := os.WriteFile(smtpPath, []byte("smtp-secret-from-file\r\n"), 0o600); err != nil {
+		t.Fatalf("failed to write smtp secret file: %v", err)
+	}
+	t.Setenv("ADMIN_TOKEN_FILE", adminPath)
+	t.Setenv("SMTP_PASSWORD_FILE", smtpPath)
+	cfg := Load()
+	if cfg.AdminToken != "admin-token-from-file" {
+		t.Fatalf("expected ADMIN_TOKEN from file, got %q", cfg.AdminToken)
+	}
+	if cfg.SMTPPassword != "smtp-secret-from-file" {
+		t.Fatalf("expected SMTP_PASSWORD from file, got %q", cfg.SMTPPassword)
+	}
+}
+
+func TestLoadSecretFileEnvVarPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "admin_token")
+	if err := os.WriteFile(secretPath, []byte("from-file"), 0o600); err != nil {
+		t.Fatalf("failed to write secret file: %v", err)
+	}
+	t.Setenv("ADMIN_TOKEN", "from-env")
+	t.Setenv("ADMIN_TOKEN_FILE", secretPath)
+	cfg := Load()
+	if cfg.AdminToken != "from-env" {
+		t.Fatalf("expected env var to take precedence over file, got %q", cfg.AdminToken)
+	}
+}
+
+func TestLoadRejectsUnreadableSecretFile(t *testing.T) {
+	t.Setenv("ADMIN_TOKEN_FILE", filepath.Join(t.TempDir(), "does-not-exist"))
+	cfg := Load()
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "ADMIN_TOKEN_FILE") {
+		t.Fatalf("unreadable secret file must fail closed, got: %v", err)
 	}
 }
