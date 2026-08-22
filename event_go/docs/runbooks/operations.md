@@ -1,7 +1,7 @@
 # G6 生产运维手册（Runbook）
 
 > **适用范围**：G6-R08 要求的部署、迁移、备份恢复、回滚、支付关闭与故障响应 Runbook。
-> **状态**：文档已建立；备份/恢复、应用回滚、迁移失败与告警的实际演练仍需在真实 staging 上执行并回填，见本文「未完成项」与 G6 完成门槛。
+> **状态**：文档已建立；密钥文件挂载（G6-R01）的 Secret 注入方案已落入第 1 节；备份/恢复、应用回滚、迁移失败与告警的实际演练仍需在真实 staging 上执行并回填，见本文「未完成项」与 G6 完成门槛。
 > **关联**：[goal.md](../goal.md) / [ADR-001](../adr/001-sqlite-foreign-key-and-deletion-semantics.md) / [ADR-004](../adr/004-organization-tenant-boundary-and-migration.md) / [ADR-006](../adr/006-stable-event-tenant-scope.md) / 各版本 [migration-rollback](../releases/)。
 
 ---
@@ -21,6 +21,11 @@
   - `BACKUP_DRILL_INTERVAL_SECONDS`（默认 `0`=禁用）
   - `ORGANIZATION_AUTH_ENABLED`（默认 `true`；`false` 关闭所有 `/organizations/...` 租户入口）
   - `ALERT_WEBHOOK_URL`（默认空；配置为有效 HTTPS 地址时启用 panic 告警 webhook，未配置退化为结构化日志追踪）
+  - 密钥双通道（G6-R01，`getSecret` 优先级：环境变量 `<KEY>` > `<KEY>_FILE` 文件 > 默认值）：
+    - `ADMIN_TOKEN` / `ADMIN_TOKEN_FILE`
+    - `JWT_SECRET` / `JWT_SECRET_FILE`（staging/prod 必须非默认 ≥32 字节）
+    - `SMTP_PASSWORD` / `SMTP_PASSWORD_FILE`
+  - 任一 `<KEY>_FILE` 指向文件不可读时 `Validate()` 记录到 `fileReadErrors` 并拒绝启动（fail-closed）。
 - 探针：`GET /healthz`（进程存活，不探测依赖）、`GET /readyz`（依赖就绪，否则 503，`ErrorCode=SERVICE_UNAVAILABLE`）、`GET /metrics`（Prometheus 指标，与探针一同豁免限流）。
 - 支付：**尚未实现**（属 G7），本文第 5 节给出计划原则与未来的开关位置，当前不适用。
 
@@ -41,6 +46,42 @@ docker build -t event-go:$(git rev-parse --short HEAD) .
 
 ### 1.2 启动容器（staging / production）
 
+staging/production 的**运行期密钥**必须由安全存储以**文件挂载**方式注入（G6-R01 / `KEY_FILE`），密钥正文不进入环境变量或镜像层。应用对 `ADMIN_TOKEN`/`JWT_SECRET`/`SMTP_PASSWORD` 统一支持两种读取通道：环境变量 `<KEY>` 最优、其次 `<KEY>_FILE` 指向的挂载文件、最后默认值（仅 development）。
+
+**推荐：Secret 文件挂载（K8s Secret / Docker 只读绑定挂载）**
+
+```sh
+# 把密钥写入只读挂载目录（K8s Secret 会自然挂到 /run/secrets/<name>）
+mkdir -p "$(pwd)/secrets"
+umask 077
+printf '%s' "$JWT_SECRET"   > "$(pwd)/secrets/jwt_secret"
+printf '%s' "$ADMIN_TOKEN"  > "$(pwd)/secrets/admin_token"
+printf '%s' "$SMTP_PASSWORD" > "$(pwd)/secrets/smtp_password"
+
+docker run -d --name event-go \
+  -p 8080:8080 \
+  -v "$(pwd)/data:/app/data" \
+  --read-only \
+  -v "$(pwd)/secrets:/run/secrets:ro" \
+  -e APP_ENV=staging \
+  -e DATABASE_PATH=/app/data/event_go.db \
+  -e ADMIN_TOKEN_FILE=/run/secrets/admin_token \
+  -e JWT_SECRET_FILE=/run/secrets/jwt_secret \
+  -e SMTP_PASSWORD_FILE=/run/secrets/smtp_password \
+  -e CORS_ORIGIN="$CORS_ORIGIN" \
+  -e PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
+  -e SMTP_HOST=... -e SMTP_PORT=... -e SMTP_USERNAME=... -e SMTP_FROM=... \
+  -e BACKUP_DIR=/app/data/backups \
+  -e BACKUP_INTERVAL_SECONDS=3600 \
+  -e BACKUP_RETAIN=7 \
+  -e BACKUP_DRILL_INTERVAL_SECONDS=86400 \
+  event-go:$(git rev-parse --short HEAD)
+```
+
+> 说明：挂载目录必须**只含密钥文件**（无其他可注入内容），且**不以环境变量指向密钥正文**——只把 `*_FILE` 指向挂载路径。密钥文件去尾部 CRLF 与 fail-closed 由应用内 `getSecret`/`Validate()` 处理（见 [G6.9 切片验收](../goal.md#g69-当前密钥安全存储切片验收)）。
+
+**备选：环境变量直接注入（向后兼容，仅适用无 Secret 挂载的单机/开发场景）**
+
 ```sh
 docker run -d --name event-go \
   -p 8080:8080 \
@@ -59,8 +100,9 @@ docker run -d --name event-go \
   event-go:$(git rev-parse --short HEAD)
 ```
 
-- staging/production 必须满足 `config.Validate()` 的 fail-closed 校验：非默认 ≥32 字节 `JWT_SECRET`、明确 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL`、完整 SMTP 配置、ADMIN_TOKEN 非空；否则拒绝启动。
+- staging/production 必须满足 `config.Validate()` 的 fail-closed 校验：非默认 ≥32 字节 `JWT_SECRET`、明确 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL`、完整 SMTP 配置、`ADMIN_TOKEN` 非空；任一密钥的 `<KEY>_FILE` 指向文件不可读时同样拒绝启动；否则拒绝启动。
 - 备份目录需可写且与数据库同卷，确保快照与主库在同一文件系统，便于原子复制。
+- 部署记录需登记：Commit、镜像 Tag（`$(git rev-parse --short HEAD)`）、Schema 版本、`APP_ENV`、Secret 注入方式（`*_FILE` 挂载路径或环境变量）与时间，作为「发布制品、Commit、测试报告与部署记录互相追溯」的证据（G6 完成门槛）。
 
 ### 1.3 启动后验证
 

@@ -458,7 +458,7 @@ G5.4 已通过远端候选门禁并关闭 G5-R04/G5-R06。platform 管理路由�
 
 ### 部署与供应链
 
-- [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理（密钥文件挂载与 fail-closed 已由 G6.9 切片实现并闭合，见 [G6.9](#g69-当前密钥安全存储切片验收) 与 [v6.2 测试报告](releases/v6.2.0/test-report.md)——staging/production 真实隔离环境、部署编排与 Secret 注入仍待真实基础设施交付与完成门槛）。
+- [ ] **G6-R01** staging、production 环境隔离，配置和密钥由安全存储管理（密钥文件挂载与 fail-closed 已由 G6.9 切片实现并闭合，见 [G6.9](#g69-当前密钥安全存储切片验收) 与 [v6.2 测试报告](releases/v6.2.0/test-report.md)——Secret 注入的部署编排方案已落入 [运维手册](runbooks/operations.md) 第 1 节（`<KEY>_FILE` 文件挂载）；staging/production 真实隔离环境、部署编排与 Secret 注入的实际执行仍待真实基础设施交付与完成门槛）。
 - [x] **G6-R02** CI/CD 生成不可变制品，记录版本、Commit SHA、依赖和构建环境；Commit `8e226fb` / Run `32530864989`（backend `96922429920`、docker `96922429737` success；frontend `96922429980` 的 Browser E2E 为一次性 flake，本地复跑 6 例全部通过）。通过 `internal/buildinfo`（ldflags 注入 Version/Commit/BuildTime，`runtime/debug.ReadBuildInfo` 读 Go 版本/模块/依赖）、`GET /version` 端点、Dockerfile/CI ldflags 注入与 `build-provenance` artifact 上传实现；docker job 断言容器 `/version` 的 Commit 与 `GITHUB_SHA` 一致，使发布制品、Commit 与触发 workflow 精确绑定。「发布制品、Tag、Commit、测试报告与部署记录互相追溯」的完成门槛仍以真实 staging 部署归档为准（见 G6-R01 与完成门槛）。
 - [x] **G6-R03** Docker 非 root 运行，固定基础镜像版本，提供 Healthcheck 和 smoke test。
 - [ ] **G6-R04** HTTPS、域名、CORS、限流、安全头、依赖和 Secret 扫描（限流已由 G6.3 切片实现并闭合，依赖与 Secret 扫描已由 G6.6 切片实现并闭合，HTTPS/域名仍待补）。

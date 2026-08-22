@@ -679,6 +679,7 @@ G6 生产上线准备的「环境隔离与安全存储」切片，支撑 M2「�
 - `getSecret` 的三类密钥（`ADMIN_TOKEN`/`JWT_SECRET`/`SMTP_PASSWORD`）统一读取路径，使 Docker/K8s Secret 可以文件方式挂载并由应用读取，密钥正文不进入环境变量/镜像层；`Validate()` 在任何密钥文件读取失败时拒绝启动，实现 fail-closed。
 - 读取顺序与安全语义：环境变量 `<KEY>` 仍最优先，满足显式注入与向后兼容；`<KEY>_FILE` 提供文件挂载通道；两者均未提供时才回退默认值（development 的 `DefaultJWTSecret`）。
 - 本切片只交付「密钥可由安全存储文件挂载读取 + fail-closed」的代码侧能力。G6-R01 的 staging/production 真实隔离环境、部署编排、安全存储 Secret 实际注入、HTTPS/域名与部署归档仍归真实基础设施交付、G6-R04 的 HTTPS/域名与 G6 完成门槛，不能据此宣称 G6-R01 或 G6/M2 整体完成。
+- **部署编排与 Secret 注入方案已就绪**：详见 [运维手册](../runbooks/operations.md) 第 1 节——推荐以 `<KEY>_FILE` 只读挂载 Secret 文件（Docker `--read-only` 绑定挂载 / K8s `secret` 卷），密钥正文不进入环境变量或镜像层；部署时登记 Commit、镜像 Tag（`$(git rev-parse --short HEAD)`）、Schema 版本、Secret 注入方式与时间，作为「发布制品、Commit、测试报告与部署记录互相追溯」的凭证。该方案就绪，待真实 staging 环境执行。
 
 ## Go/No-Go
 
