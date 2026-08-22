@@ -39,6 +39,9 @@
 - [ADR-007](docs/adr/007-organization-self-service-and-invitation-delivery.md) 固化自助运营和邀请投递边界。
 - Schema v14 不可变组织审计日志、`OrganizationAudit` 中间件与审计列表 API，记录 actor、tenant、action、resource、request_id、HTTP 状态与结果。
 - 组织者联系方式与参与者 PII 的角色最小授权与脱敏展示；`owner transfer` 所有权转移 API 与 `ORGANIZATION_OWNER_TRANSFER_DENIED` 错误码。
+- panic 恢复中间件（`RecoveryMiddleware`）捕获下游 panic 返回 500 `INTERNAL_ERROR`（fail-closed，不向客户端泄漏调用栈），请求按 `request_id` 追踪并携带调用栈，单请求 panic 不拖垮进程。
+- panic 告警 webhook：`ALERT_WEBHOOK_URL` 配置为有效 HTTPS 地址时投递 `PanicRecord`，未配置时退化为结构化日志追踪；`config.Validate()` 拒绝非 HTTPS/无效告警地址。
+- readiness 依赖探测完善：`/readyz` 同时探测数据库连接与 Schema 迁移版本（`current`/`pending_migration`/`unknown`），依赖异常返回 503 `SERVICE_UNAVAILABLE` 并保留可操作 `Data`（`db`/`schema`/`schema_version`）；`Store.SchemaVersion()` 读取 `schema_migrations` 当前版本。
 
 ### Changed
 

@@ -269,7 +269,16 @@ GET    /api/v1/events/{id}/tickets[?page=&page_size=]   门票列表（分页）
 GET    /api/v1/events/{id}/tickets/{ticketId}           门票详情
 PUT    /api/v1/events/{id}/tickets/{ticketId}           编辑门票 🔐
 DELETE /api/v1/events/{id}/tickets/{ticketId}           删除门票 🔐
-GET    /health                                        健康检查
+```
+
+**探针与可观测性**（非 API 业务路由，不受限流误伤）：
+
+```
+GET    /health                                        健康检查（兼容）
+GET    /healthz                                       存活探针（仅进程可达，不探测依赖）
+GET    /readyz                                        就绪探针（依赖就绪返回 200；数据库断开或 Schema 非 current 返回 503 + SERVICE_UNAVAILABLE，保留可操作 Data：db/schema/schema_version）
+GET    /metrics                                       Prometheus 运行时指标（请求/方法/状态/延迟、in-flight、构建 provenance）
+GET    /version                                       构建 provenance（版本、Commit、构建时间、Go 版本、依赖）
 ```
 
 **认证架构**：
@@ -697,6 +706,8 @@ event_go/
 | `SMTP_HOST` / `SMTP_PORT` | 空 / `587` | SMTP 服务地址与端口 |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | 空 | SMTP 认证信息 |
 | `SMTP_FROM` | 空 | 密码重置、恢复邮箱验证和组织邀请邮件发件人 |
+| `ALERT_WEBHOOK_URL` | 空 | panic 恢复告警 webhook；必须为有效 HTTPS URL，未配置时退化为结构化日志追踪 |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` | 空 | per-minute 固定窗口限流；staging/production 必须为正数（fail-closed），非正数在 development 表示不限制 |
 
 staging 和 production 会执行 fail-closed 配置校验：必须设置 `ADMIN_TOKEN`、至少 32 字节且非默认的 `JWT_SECRET`、明确的 `CORS_ORIGIN`、HTTPS `PUBLIC_BASE_URL` 和完整合法的 SMTP 配置；非法 Token TTL、组织邀请 TTL、通知提醒窗口或扫描间隔会拒绝启动。development 未配置 SMTP 时只把密码重置、邮箱验证和组织邀请链接写入服务日志，不发送邮件；普通业务通知不依赖 SMTP。
 
